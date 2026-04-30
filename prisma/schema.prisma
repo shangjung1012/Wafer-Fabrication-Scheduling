@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../lib/generated/prisma"
@@ -10,4 +8,108 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// =========================
+// Enums
+// =========================
+
+enum UserRole {
+  SUPERADMIN
+  ADMIN
+  SALES
+}
+
+enum FactoryStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OrderStatus {
+  PENDING
+  SCHEDULED
+  IN_PRODUCTION
+  COMPLETED
+  CANCELLED
+}
+
+// =========================
+// Models
+// =========================
+
+model User {
+  id       String   @id @default(cuid())
+  name     String
+  password String?
+  role     UserRole
+  group    String?
+
+  // Relations
+  orders           Order[]           @relation("OrderApplicant")
+  modifiedOrders   Order[]           @relation("OrderModifier")
+  managedFactories Factory[]         @relation("FactoryAdmin")
+  permissions      OrderPermission[]
+  requests         OrderRequest[]    @relation("RequestApplicant")
+
+  @@map("user")
+}
+
+model Factory {
+  id             String        @id @default(cuid())
+  productionType String
+  adminId        String?
+  status         FactoryStatus @default(ACTIVE)
+
+  admin  User?   @relation("FactoryAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+  orders Order[]
+
+  @@map("factory")
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  status           OrderStatus @default(PENDING)
+  dueDate          DateTime
+  productionDate   DateTime?
+  quantity         Int
+  applicantId      String
+  name             String
+  type             String
+  factoryId        String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  lastModifiedById String?
+
+  applicant      User              @relation("OrderApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
+  lastModifiedBy User?             @relation("OrderModifier", fields: [lastModifiedById], references: [id], onDelete: SetNull)
+  factory        Factory?          @relation(fields: [factoryId], references: [id], onDelete: SetNull)
+  permissions    OrderPermission[]
+  requests       OrderRequest[]
+
+  @@map("order")
+}
+
+model OrderPermission {
+  id      String @id @default(cuid())
+  userId  String
+  orderId String
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orderId])
+  @@map("order_permission")
+}
+
+model OrderRequest {
+  id          String @id @default(cuid())
+  applicantId String
+  orderId     String
+  message     String
+  payload     Json?
+
+  applicant User  @relation("RequestApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
+  order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_request")
 }
