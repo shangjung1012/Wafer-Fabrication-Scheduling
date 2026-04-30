@@ -1,5 +1,29 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Setup Database (PostgreSQL)
+
+This project uses PostgreSQL as its database. You can easily start it locally using Docker.
+
+1. Copy the example environment variables file:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Start the PostgreSQL database in the background:
+   ```bash
+   docker compose up -d
+   ```
+
+3. Run database migrations to push the schema:
+   ```bash
+   pnpm db:migrate
+   ```
+
+4. Generate the Prisma client:
+   ```bash
+   pnpm db:generate
+   ```
+
 ## Getting Started
 
 First, run the development server:
