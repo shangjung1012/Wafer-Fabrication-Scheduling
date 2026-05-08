@@ -4,8 +4,8 @@ info:
   description: 提供訂單管理、排程調整、權限控制及視覺化功能之 API 介面規格。對應於專案的 Functional Requirements。
   version: 1.0.0
 servers:
-  - url: /api/v1
-    description: 主要 API 伺服器
+  - url: /api
+    description: 主要 API 伺服器（Next.js App Router）
 security:
   - bearerAuth: []
 paths:
@@ -353,50 +353,150 @@ paths:
 
   # ==========================================================
   # Users & Permissions API (FR-06: 管理員進行權限管理)
+  # SUPERADMIN only — scoped to own production type (group)
   # ==========================================================
   /users:
     get:
-      summary: 取得使用者清單 (RBAC 管理)
+      summary: 取得使用者清單
+      description: |
+        列出與目前 SUPERADMIN 相同 production type 的所有使用者。
+        可選填 `role` query parameter 篩選角色。
       tags:
         - Permissions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UserRole'
+          description: 依角色篩選（SUPERADMIN / ADMIN / SALES）
       responses:
         '200':
           description: 使用者清單
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/User'
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
-  /users/{id}/permissions:
-    put:
-      summary: 設定使用者角色與管理範圍
-      description: 包含指派工廠 (FactoryAdmin) 或綁定特定訂單權限 (OrderPermission)。
+    post:
+      summary: 建立使用者
+      description: |
+        建立一個新使用者，並指定 role 與 group。
+        只能在與自身相同的 production type 下建立。
       tags:
         - Permissions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserInput'
+      responses:
+        '201':
+          description: 建立成功，回傳新使用者 ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /users/{id}:
+    patch:
+      summary: 修改使用者資料
+      description: |
+        更新使用者的 name、role 或 group。
+        至少需提供一個欄位。目標使用者必須屬於相同 production type。
+      tags:
+        - Permissions
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+          description: 使用者 ID
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                role:
-                  $ref: '#/components/schemas/UserRole'
-                managedFactoryIds:
-                  type: array
-                  items:
-                    type: string
+              $ref: '#/components/schemas/UpdateUserInput'
       responses:
         '200':
-          description: 權限更新成功
+          description: 更新成功，回傳使用者 ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: 刪除使用者
+      description: |
+        刪除指定使用者。不可刪除自己。
+        目標使用者必須屬於相同 production type。
+      tags:
+        - Permissions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 使用者 ID
+      responses:
+        '200':
+          description: 刪除成功，回傳使用者 ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ==========================================================
   # Visualization API (FR-07: 衝突或訂單變更視覺化)
@@ -605,3 +705,86 @@ components:
           items:
             type: string
             description: 衝突警告訊息
+
+    CreateUserInput:
+      type: object
+      required: [name, role]
+      properties:
+        name:
+          type: string
+          example: Alice Wang
+        role:
+          $ref: '#/components/schemas/UserRole'
+        group:
+          type: string
+          description: Production type (A / B / C). 若未填，預設繼承 SUPERADMIN 的 group。
+          example: A
+
+    UpdateUserInput:
+      type: object
+      description: 至少需提供一個欄位。
+      properties:
+        name:
+          type: string
+          example: Bob Chen
+        role:
+          $ref: '#/components/schemas/UserRole'
+        group:
+          type: string
+          nullable: true
+          description: Production type (A / B / C)
+          example: B
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: FORBIDDEN
+        message:
+          type: string
+          example: You do not have permission to perform this action.
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    Unauthorized:
+      description: 未提供 token 或 token 無效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: UNAUTHORIZED
+            message: Missing or invalid token
+
+    Forbidden:
+      description: 權限不足（role 或 scope 不符）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: FORBIDDEN
+            message: "Role 'SALES' is not allowed. Required: SUPERADMIN."
+
+    BadRequest:
+      description: 請求格式錯誤或缺少必填欄位
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: BAD_REQUEST
+            message: Invalid request body.
+
+    NotFound:
+      description: 資源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: NOT_FOUND
+            message: User not found.

@@ -1,97 +1,133 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 工廠訂單管理排程系統
 
-## Folder Structure & Division of Labor
+A Next.js + Prisma (PostgreSQL) wafer factory order scheduling system.
 
-This project uses a Feature-Sliced / Domain-Driven architecture to prepare for future microservice extraction. The modules are divided according to the team's functional assignments:
+## Folder Structure
 
 ```text
 wafer-fabrication-scheduling/
-├── docker-compose.yml      # 定義 PostgreSQL, Redis 等本地開發依賴的容器服務
-├── package.json            # 使用 pnpm 管理套件
-├── prisma/                 # Prisma Schema 定義與 Migration
-│   └── schema.prisma
-└── src/
-    ├── app/                # 1. Presentation Layer: Next.js App Router (UI & API)
-    │   ├── api/            # API Controllers (對應 Spec 的 API)
-    │   │   ├── auth/
-    │   │   ├── orders/
-    │   │   └── schedule/
-    │   ├── (dashboard)/    # 需登入的後台頁面 (UI/Views)
-    │   │   ├── orders/     # 業務/管理員檢視訂單介面
-    │   │   └── schedule/   # 排程與衝突視覺化甘特圖
-    │   ├── login/          # 登入註冊頁面
-    │   ├── layout.tsx
-    │   └── globals.css     # 包含 Tailwind 的基礎樣式
-    │
-    ├── modules/            # 2. Service Layer: 商業邏輯 (對應 Spec 的三大 Module)
-    │   ├── auth/           # 權限、JWT、MFA 邏輯
-    │   ├── orders/         # 訂單處理、插單申請邏輯
-    │   └── schedule/       # 排程演算法、衝突偵測邏輯
-    │
-    ├── infra/              # 3. Persistence & Infra Layer: 基礎設施與資料層
-    │   └── db/             # PostgreSQL 連線設定與 Prisma Client 實例
-    │       └── client.ts
-    │
-    ├── components/         # 全域共用的 UI 元件 (Buttons, Tables, Charts 等)
-    └── lib/                # 全域 Utility 函式 (格式化、共用常數等)
-     
+├── app/                    # Presentation layer: UI + API route handlers
+│   ├── api/                # API endpoints (Next.js App Router)
+│   │   ├── auth/
+│   │   ├── docs/spec/      # GET /api/docs/spec — serves OpenAPI YAML
+│   │   ├── orders/
+│   │   ├── schedule/
+│   │   └── users/          # User Management API (CRUD)
+│   └── docs/               # Swagger UI (http://localhost:3000/docs)
+├── modules/                # Business logic layer
+│   ├── auth/               # JWT auth, RBAC helpers
+│   └── users/              # User service (scope-filtered CRUD)
+├── infra/
+│   └── db/                 # DB access layer (repositories)
+├── lib/
+│   └── prisma.ts           # Prisma client singleton
+├── prisma/
+│   ├── schema.prisma
+│   ├── seed.ts             # Dev seed data
+│   └── migrations/
+├── api_spec.yml            # OpenAPI 3.0 spec (source of truth)
+└── .cursor/                # Team docs & rules for AI-assisted development
+    ├── docs/
+    └── rules/
 ```
 
-## Setup Database (PostgreSQL)
+## Local Setup
 
-This project uses PostgreSQL as its database. You can easily start it locally using Docker.
-
-1. Copy the example environment variables file:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Start the PostgreSQL database in the background:
-   ```bash
-   docker compose up -d
-   ```
-
-3. Run database migrations to push the schema:
-   ```bash
-   pnpm db:migrate
-   ```
-
-4. Generate the Prisma client:
-   ```bash
-   pnpm db:generate
-   ```
-
-## Getting Started
-
-First, run the development server:
+### 1. 環境變數
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env` 需包含：
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+DATABASE_URL="postgresql://wafer_user:wafer_password@localhost:5432/wafer_db?schema=public"
+JWT_SECRET="replace-with-a-strong-secret"
+DEV_STATIC_TOKEN="dev-superadmin-static-token"
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 2. 啟動資料庫
 
-## Learn More
+```bash
+docker compose up -d
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 3. 執行 Migration
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm db:migrate
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 4. 產生 Prisma client
 
-## Deploy on Vercel
+```bash
+pnpm db:generate
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 5. Seed 測試資料
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm db:seed
+```
+
+Seed 會建立以下測試資料（idempotent，可重複執行）：
+
+```
+Type A：SUPERADMIN(sa-A)、Factory A1/A2/A3、ADMIN(admin-A1/A2/A3)、SALES(sales-A)
+Type B：SUPERADMIN(sa-B)、Factory B1/B2/B3、ADMIN(admin-B1/B2/B3)、SALES(sales-B)
+Type C：SUPERADMIN(sa-C)、Factory C1/C2/C3、ADMIN(admin-C1/C2/C3)、SALES(sales-C)
+```
+
+### 6. 啟動開發伺服器
+
+```bash
+pnpm dev
+```
+
+---
+
+## Dev Token（開發期身份驗證）
+
+登入功能完成前，使用 `dev:<ROLE>:<userId>` 格式的 token 模擬不同角色。
+`<userId>` 必須與 DB 內的 user id 一致（即 seed 建立的 id）。
+
+| Token | 身份 |
+|---|---|
+| `dev:SUPERADMIN:sa-A` | SUPERADMIN, Type A |
+| `dev:SUPERADMIN:sa-B` | SUPERADMIN, Type B |
+| `dev:SUPERADMIN:sa-C` | SUPERADMIN, Type C |
+| `dev:ADMIN:admin-A1` | ADMIN, Factory A1 |
+| `dev:ADMIN:admin-B2` | ADMIN, Factory B2 |
+| `dev:SALES:sales-A` | SALES, Type A |
+
+使用方式：
+
+```
+Authorization: Bearer dev:SUPERADMIN:sa-A
+```
+
+---
+
+## API 文件
+
+開啟 **[http://localhost:3000/docs](http://localhost:3000/docs)**
+
+1. 點右上角 **Authorize**
+2. 輸入 dev token（例如 `dev:SUPERADMIN:sa-A`）
+3. 展開任一 endpoint → **Try it out** → **Execute**
+
+OpenAPI spec：[`api_spec.yml`](./api_spec.yml)
+
+---
+
+## Scripts
+
+| 指令 | 說明 |
+|---|---|
+| `pnpm dev` | 啟動 Next.js dev server |
+| `pnpm build` | 建置 production |
+| `pnpm db:migrate` | 執行 Prisma migration |
+| `pnpm db:generate` | 產生 Prisma client |
+| `pnpm db:seed` | Seed 測試資料進 DB |
+| `pnpm db:studio` | 開啟 Prisma Studio |
