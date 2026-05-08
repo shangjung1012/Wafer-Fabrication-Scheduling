@@ -1,0 +1,607 @@
+openapi: 3.0.3
+info:
+  title: 工廠訂單管理排程系統 API (Factory Order Management API)
+  description: 提供訂單管理、排程調整、權限控制及視覺化功能之 API 介面規格。對應於專案的 Functional Requirements。
+  version: 1.0.0
+servers:
+  - url: /api/v1
+    description: 主要 API 伺服器
+security:
+  - bearerAuth: []
+paths:
+  # ==========================================================
+  # Auth API (FR-01: 使用者註冊、登入)
+  # ==========================================================
+  /auth/register:
+    post:
+      summary: 使用者註冊
+      description: 支援業務 (Sales) 與管理員 (Admin) 註冊。
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, password, role]
+              properties:
+                name:
+                  type: string
+                  description: 姓名或員編
+                password:
+                  type: string
+                role:
+                  $ref: '#/components/schemas/UserRole'
+                group:
+                  type: string
+                  description: 所屬群組或工廠編號
+      responses:
+        '201':
+          description: 註冊成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /auth/login:
+    post:
+      summary: 使用者登入
+      description: 使用帳號/密碼進行登入，回傳 JWT Token。支援登入失敗鎖定機制。
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, password]
+              properties:
+                name:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: 登入成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  refreshToken:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+
+  # ==========================================================
+  # Orders API (FR-03, FR-04: 訂單檢視、匯入/修改/刪除)
+  # ==========================================================
+  /orders:
+    get:
+      summary: 取得訂單清單
+      description: 依權限查看訂單清單，提供篩選、搜尋。
+      tags:
+        - Orders
+      parameters:
+        - name: factoryId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/OrderStatus'
+        - name: keyword
+          in: query
+          schema:
+            type: string
+            description: 訂單名稱或類型搜尋
+      responses:
+        '200':
+          description: 訂單清單
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+    post:
+      summary: 建立訂單 (單筆)
+      tags:
+        - Orders
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateInput'
+      responses:
+        '201':
+          description: 建立成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+    delete:
+      summary: 批次刪除訂單 (軟刪除)
+      description: 批次刪除多筆訂單，並觸發重新排程評估。
+      tags:
+        - Orders
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: 刪除成功
+
+  /orders/import:
+    post:
+      summary: 批次匯入訂單 (CSV)
+      tags:
+        - Orders
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 匯入結果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  successCount:
+                    type: integer
+                  errorList:
+                    type: array
+                    items:
+                      type: string
+
+  /orders/{id}:
+    get:
+      summary: 取得單一訂單詳情
+      tags:
+        - Orders
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 訂單詳情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+    put:
+      summary: 更新單一訂單
+      tags:
+        - Orders
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderUpdateInput'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  # ==========================================================
+  # Order Requests API (FR-02: 業務提出插單/改單申請)
+  # ==========================================================
+  /requests:
+    get:
+      summary: 取得訂單申請清單
+      description: 業務可檢視自己提出的申請，管理員可檢視負責工廠內的申請。
+      tags:
+        - Requests
+      responses:
+        '200':
+          description: 申請清單
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderRequest'
+    post:
+      summary: 提出插單或改單申請
+      tags:
+        - Requests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId, message]
+              properties:
+                orderId:
+                  type: string
+                  description: 關聯的訂單 ID
+                message:
+                  type: string
+                  description: 申請理由或說明
+                payload:
+                  type: object
+                  description: 變更內容 (JSON)
+      responses:
+        '201':
+          description: 申請建立成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderRequest'
+
+  /requests/{id}:
+    put:
+      summary: 修改尚未核准的申請
+      tags:
+        - Requests
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                payload:
+                  type: object
+      responses:
+        '200':
+          description: 申請更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderRequest'
+
+  /requests/{id}/approve:
+    post:
+      summary: 核准申請 (僅管理員可用)
+      tags:
+        - Requests
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 已核准並套用變更
+
+  # ==========================================================
+  # Schedules API (FR-05: 管理員修改排程)
+  # ==========================================================
+  /schedules/preview:
+    post:
+      summary: 預覽排程變更 (甘特圖/衝突分析)
+      description: 在實際生效前，預覽手動調整順序的影響範圍與衝突提示。
+      tags:
+        - Schedules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleUpdateInput'
+      responses:
+        '200':
+          description: 預覽結果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulePreviewResult'
+
+  /schedules/apply:
+    post:
+      summary: 確認並生效排程變更
+      tags:
+        - Schedules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleUpdateInput'
+      responses:
+        '200':
+          description: 排程已生效更新，版本號推進
+
+  # ==========================================================
+  # Users & Permissions API (FR-06: 管理員進行權限管理)
+  # ==========================================================
+  /users:
+    get:
+      summary: 取得使用者清單 (RBAC 管理)
+      tags:
+        - Permissions
+      responses:
+        '200':
+          description: 使用者清單
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /users/{id}/permissions:
+    put:
+      summary: 設定使用者角色與管理範圍
+      description: 包含指派工廠 (FactoryAdmin) 或綁定特定訂單權限 (OrderPermission)。
+      tags:
+        - Permissions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  $ref: '#/components/schemas/UserRole'
+                managedFactoryIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: 權限更新成功
+
+  # ==========================================================
+  # Visualization API (FR-07: 衝突或訂單變更視覺化)
+  # ==========================================================
+  /visualization/timeline:
+    get:
+      summary: 取得衝突或訂單變更視覺化資料
+      description: 產生甘特圖、時間軸、變更 Diff 所需的渲染資料 (舊交期 vs 新交期、衝突區間)。
+      tags:
+        - Visualization
+      parameters:
+        - name: factoryId
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 視覺化與時間軸資料
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  timeline:
+                    type: array
+                    items:
+                      type: object
+                  conflicts:
+                    type: array
+                    items:
+                      type: object
+                  diffs:
+                    type: array
+                    items:
+                      type: object
+
+# ==========================================================
+# Components / Schemas
+# ==========================================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    UserRole:
+      type: string
+      enum: [SUPERADMIN, ADMIN, SALES]
+    
+    FactoryStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+    
+    OrderStatus:
+      type: string
+      enum: [PENDING, SCHEDULED, IN_PRODUCTION, COMPLETED, CANCELLED]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        group:
+          type: string
+
+    Factory:
+      type: object
+      properties:
+        id:
+          type: string
+        productionType:
+          type: string
+        adminId:
+          type: string
+        status:
+          $ref: '#/components/schemas/FactoryStatus'
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        dueDate:
+          type: string
+          format: date-time
+        productionDate:
+          type: string
+          format: date-time
+        quantity:
+          type: integer
+        applicantId:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        factoryId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastModifiedById:
+          type: string
+
+    OrderRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        applicantId:
+          type: string
+        orderId:
+          type: string
+        message:
+          type: string
+        payload:
+          type: object
+
+    OrderCreateInput:
+      type: object
+      required: [dueDate, quantity, name, type]
+      properties:
+        dueDate:
+          type: string
+          format: date-time
+        quantity:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+        factoryId:
+          type: string
+
+    OrderUpdateInput:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        dueDate:
+          type: string
+          format: date-time
+        productionDate:
+          type: string
+          format: date-time
+        quantity:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+        factoryId:
+          type: string
+
+    ScheduleUpdateInput:
+      type: object
+      properties:
+        updates:
+          type: array
+          description: 多筆訂單的新生產時間或順序更新
+          items:
+            type: object
+            required: [orderId, newProductionDate]
+            properties:
+              orderId:
+                type: string
+              newProductionDate:
+                type: string
+                format: date-time
+
+    SchedulePreviewResult:
+      type: object
+      properties:
+        newSchedule:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        affectedOrders:
+          type: array
+          items:
+            type: string
+            description: 受到影響的訂單 ID
+        conflictWarnings:
+          type: array
+          items:
+            type: string
+            description: 衝突警告訊息

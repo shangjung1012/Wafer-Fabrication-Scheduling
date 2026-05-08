@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "factory" ADD COLUMN     "curCapacity" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "maxCapacity" INTEGER NOT NULL DEFAULT 0;
