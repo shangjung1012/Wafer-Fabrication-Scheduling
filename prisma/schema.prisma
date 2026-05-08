@@ -26,7 +26,8 @@ enum FactoryStatus {
 }
 
 enum OrderStatus {
-  PENDING
+  PENDING        // Sales 剛建立，可修改，等待 Admin 審核
+  APPROVED       // Admin 已核准，鎖定修改，進入待排程池
   SCHEDULED
   IN_PRODUCTION
   COMPLETED
@@ -59,13 +60,29 @@ model Factory {
   productionType String
   adminId        String?
   status         FactoryStatus @default(ACTIVE)
-  maxCapacity    Int           @default(0)
-  curCapacity    Int           @default(0)
+  maxCapacity    Int           @default(10000) 
 
   admin  User?   @relation("FactoryAdmin", fields: [adminId], references: [id], onDelete: SetNull)
-  orders Order[]
+  
+  // Relations
+  dailyCapacities DailyCapacity[]  // 該工廠每一天的產能紀錄
+  assignments     OrderAssignment[] // 分配到該工廠的具體派工單
 
   @@map("factory")
+}
+
+// [新增] 每日產能表
+model DailyCapacity {
+  id             String   @id @default(cuid())
+  factoryId      String
+  date           DateTime // 紀錄具體是哪一天
+  maxAmount      Int      // 該天總產能 (預設帶入 Factory 的 maxCapacity)
+  curAmount      Int      // 該天剩餘產能 (排程時扣除)
+  
+  factory        Factory  @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  
+  @@unique([factoryId, date]) // 聯合唯一鍵，確保同一廠同一天只有一筆
+  @@map("daily_capacity")
 }
 
 model Order {
@@ -84,11 +101,27 @@ model Order {
 
   applicant      User              @relation("OrderApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
   lastModifiedBy User?             @relation("OrderModifier", fields: [lastModifiedById], references: [id], onDelete: SetNull)
-  factory        Factory?          @relation(fields: [factoryId], references: [id], onDelete: SetNull)
+  
+  // Relations
+  assignments      OrderAssignment[] // 記錄這筆訂單被拆分成哪些派工單
   permissions    OrderPermission[]
   requests       OrderRequest[]
 
   @@map("order")
+}
+
+// [新增] 訂單派工分配表 (支援拆單)
+model OrderAssignment {
+  id               String   @id @default(cuid())
+  orderId          String
+  factoryId        String
+  productionDate   DateTime // 具體被排在哪一天生產
+  assignedQuantity Int      // 分配到這間工廠這天的數量
+
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  factory          Factory  @relation(fields: [factoryId], references: [id], onDelete: Restrict)
+
+  @@map("order_assignment")
 }
 
 model OrderPermission {
