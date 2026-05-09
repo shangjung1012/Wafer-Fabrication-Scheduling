@@ -39,11 +39,15 @@ enum OrderStatus {
 // =========================
 
 model User {
-  id       String   @id @default(cuid())
-  name     String
-  password String?
-  role     UserRole
-  group    String?
+  id                String    @id @default(cuid())
+  accountId         String    @unique
+  name              String
+  password          String?
+  role              UserRole
+  group             String?
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  lastFailedLoginAt DateTime?
 
   // Relations
   orders           Order[]           @relation("OrderApplicant")
@@ -51,8 +55,26 @@ model User {
   managedFactories Factory[]         @relation("FactoryAdmin")
   permissions      OrderPermission[]
   requests         OrderRequest[]    @relation("RequestApplicant")
+  refreshTokens    RefreshToken[]
 
   @@map("user")
+}
+
+model RefreshToken {
+  id                String    @id @default(cuid())
+  tokenHash         String    @unique
+  userId            String
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  replacedByTokenId String?   @unique
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedByToken RefreshToken? @relation("RefreshTokenReplacement", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  replaces        RefreshToken? @relation("RefreshTokenReplacement")
+
+  @@index([userId])
+  @@map("refresh_token")
 }
 
 model Factory {

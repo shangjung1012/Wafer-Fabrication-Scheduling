@@ -19,7 +19,9 @@
 import "dotenv/config";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, UserRole, FactoryStatus } from "../lib/generated/prisma";
+import { PrismaClient } from "../lib/generated/prisma/client";
+import { UserRole, FactoryStatus } from "../lib/generated/prisma/enums";
+import { hashPassword } from "../modules/auth/password-service";
 
 // Prisma 7 uses the "client" engine which requires a driver adapter.
 // tsx runs this script directly and doesn't read prisma.config.ts,
@@ -34,6 +36,7 @@ const prisma = new PrismaClient({ adapter });
 
 type SeedUser = {
   id: string;
+  accountId: string;
   name: string;
   role: UserRole;
   group: string;
@@ -56,6 +59,7 @@ function buildUsers(): SeedUser[] {
     // SUPERADMIN per type
     users.push({
       id: `sa-${t}`,
+      accountId: `sa-${t}`,
       name: `SuperAdmin ${t}`,
       role: "SUPERADMIN",
       group: t,
@@ -65,6 +69,7 @@ function buildUsers(): SeedUser[] {
     for (let i = 1; i <= 3; i++) {
       users.push({
         id: `admin-${t}${i}`,
+        accountId: `admin-${t}${i}`,
         name: `Admin ${t}${i}`,
         role: "ADMIN",
         group: t,
@@ -74,6 +79,7 @@ function buildUsers(): SeedUser[] {
     // SALES per type
     users.push({
       id: `sales-${t}`,
+      accountId: `sales-${t}`,
       name: `Sales ${t}`,
       role: "SALES",
       group: t,
@@ -107,17 +113,22 @@ function buildFactories(): SeedFactory[] {
 
 async function seedUsers(users: SeedUser[]) {
   console.log(`  Upserting ${users.length} users…`);
+  const password = await hashPassword("Password123!");
   for (const u of users) {
     await prisma.user.upsert({
       where: { id: u.id },
       create: {
         id: u.id,
+        accountId: u.accountId,
         name: u.name,
+        password,
         role: u.role,
         group: u.group,
       },
       update: {
+        accountId: u.accountId,
         name: u.name,
+        password,
         role: u.role,
         group: u.group,
       },
@@ -136,7 +147,6 @@ async function seedFactories(factories: SeedFactory[]) {
         adminId: f.adminId,
         status: f.status,
         maxCapacity: f.maxCapacity,
-        curCapacity: 0,
       },
       update: {
         productionType: f.productionType,

@@ -43,7 +43,11 @@ cp .env.example .env
 
 ```env
 DATABASE_URL="postgresql://wafer_user:wafer_password@localhost:5432/wafer_db?schema=public"
-JWT_SECRET="replace-with-a-strong-secret"
+JWT_SECRET="replace-with-a-strong-secret-at-least-32-chars"
+JWT_ISSUER="wafer-auth"
+JWT_AUDIENCE="wafer-api"
+ACCESS_TOKEN_EXPIRES_IN="15m"
+REFRESH_TOKEN_EXPIRES_IN="7d"
 DEV_STATIC_TOKEN="dev-superadmin-static-token"
 ```
 
@@ -79,6 +83,8 @@ Type B：SUPERADMIN(sa-B)、Factory B1/B2/B3、ADMIN(admin-B1/B2/B3)、SALES(sal
 Type C：SUPERADMIN(sa-C)、Factory C1/C2/C3、ADMIN(admin-C1/C2/C3)、SALES(sales-C)
 ```
 
+Seed 帳號的 `accountId` 與 id 相同，開發用預設密碼皆為 `Password123!`。
+
 ### 6. 啟動開發伺服器
 
 ```bash
@@ -89,7 +95,7 @@ pnpm dev
 
 ## Dev Token（開發期身份驗證）
 
-登入功能完成前，使用 `dev:<ROLE>:<userId>` 格式的 token 模擬不同角色。
+開發環境仍可使用 `dev:<ROLE>:<userId>` 格式的 token 模擬不同角色。
 `<userId>` 必須與 DB 內的 user id 一致（即 seed 建立的 id）。
 
 | Token | 身份 |
@@ -106,6 +112,14 @@ pnpm dev
 ```
 Authorization: Bearer dev:SUPERADMIN:sa-A
 ```
+
+正式登入流程：
+
+1. `POST /api/auth/register` 建立 `ADMIN` 或 `SALES` 帳號。
+2. `POST /api/auth/login` 使用 `accountId` / `password` 登入，取得 `accessToken` 與 `refreshToken`。
+3. 呼叫受保護 API 時使用 `Authorization: Bearer <accessToken>`。
+4. `POST /api/auth/refresh` 以 refresh token rotation 換發新 token。
+5. `POST /api/auth/logout` 撤銷 refresh token。
 
 ---
 
