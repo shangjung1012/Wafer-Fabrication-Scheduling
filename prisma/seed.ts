@@ -19,7 +19,7 @@
 import "dotenv/config";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, UserRole, FactoryStatus } from "../lib/generated/prisma";
+import { PrismaClient, UserRole, FactoryStatus } from "../lib/generated/prisma/client";
 
 // Prisma 7 uses the "client" engine which requires a driver adapter.
 // tsx runs this script directly and doesn't read prisma.config.ts,
@@ -133,14 +133,13 @@ async function seedFactories(factories: SeedFactory[]) {
       create: {
         id: f.id,
         productionType: f.productionType,
-        adminId: f.adminId,
+        admin: { connect: { id: f.adminId } },
         status: f.status,
         maxCapacity: f.maxCapacity,
-        curCapacity: 0,
       },
       update: {
         productionType: f.productionType,
-        adminId: f.adminId,
+        admin: { connect: { id: f.adminId } },
         status: f.status,
         maxCapacity: f.maxCapacity,
       },

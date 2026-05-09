@@ -14,7 +14,10 @@ import { useEffect, useRef } from "react";
 
 declare global {
   interface Window {
-    SwaggerUIBundle: (config: Record<string, unknown>) => void;
+    SwaggerUIBundle: ((config: Record<string, unknown>) => void) & {
+      presets: Record<string, unknown>;
+      SwaggerUIStandalonePreset: unknown;
+    };
   }
 }
 
