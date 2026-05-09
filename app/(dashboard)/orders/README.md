@@ -1,6 +1,6 @@
 # Orders Test UI
 
-開在 `http://localhost:3000/orders`，用來直接測試 Ryan 實作的所有 API endpoint，不需要 Postman 或 curl。
+開在 `http://localhost:3000/orders`，用來直接測試所有 Orders & Requests API endpoint，不需要 Postman 或 curl。
 
 ---
 

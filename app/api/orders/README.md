@@ -1,6 +1,6 @@
 # /api/orders & /api/requests
 
-Ryan 負責的模組：訂單（Orders）與修改申請（Requests）的 10 支 API。
+訂單（Orders）與修改申請（Requests）的 10 支 API。
 
 ---
 
