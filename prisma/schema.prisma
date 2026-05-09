@@ -25,9 +25,18 @@ enum FactoryStatus {
   INACTIVE
 }
 
+// 母訂單
 enum OrderStatus {
   PENDING        // Sales 剛建立，可修改，等待 Admin 審核
   APPROVED       // Admin 已核准，鎖定修改，進入待排程池
+  SCHEDULED
+  IN_PRODUCTION  // 其中一張子訂單變成 IN_PRODUCTION，母訂單就也變成 IN_PRODUCTION
+  COMPLETED      // 所有子訂單變成 COMPLETED，母訂單變成 COMPLETED
+  CANCELLED
+}
+
+// 子訂單 (派工單)
+enum AssignmentStatus {
   SCHEDULED
   IN_PRODUCTION
   COMPLETED
@@ -76,8 +85,8 @@ model DailyCapacity {
   id             String   @id @default(cuid())
   factoryId      String
   date           DateTime // 紀錄具體是哪一天
-  maxAmount      Int      // 該天總產能 (預設帶入 Factory 的 maxCapacity)
-  curAmount      Int      // 該天剩餘產能 (排程時扣除)
+  maxCapacity      Int      // 該天總產能 (預設帶入 Factory 的 maxCapacity)
+  curCapacity      Int      // 該天剩餘產能 (排程時扣除)
   
   factory        Factory  @relation(fields: [factoryId], references: [id], onDelete: Cascade)
   
@@ -85,16 +94,15 @@ model DailyCapacity {
   @@map("daily_capacity")
 }
 
+// 刪除 productionDate, factoryId，交給OrderAssignment管理
 model Order {
   id               String      @id @default(cuid())
   status           OrderStatus @default(PENDING)
   dueDate          DateTime
-  productionDate   DateTime?
   quantity         Int
   applicantId      String
   name             String
   type             String
-  factoryId        String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   lastModifiedById String?
@@ -112,8 +120,9 @@ model Order {
 
 // [新增] 訂單派工分配表 (支援拆單)
 model OrderAssignment {
-  id               String   @id @default(cuid())
+  id               String             @id @default(cuid())
   orderId          String
+  status           AssignmentStatus   @default(SCHEDULED)  // 子訂單有自己的status，不會綁死整單操作
   factoryId        String
   productionDate   DateTime // 具體被排在哪一天生產
   assignedQuantity Int      // 分配到這間工廠這天的數量
