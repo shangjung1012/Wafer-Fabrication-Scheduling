@@ -1,7 +1,7 @@
 /**
  * app/api/orders/route.ts
  *
- * GET    /api/orders   — list orders (filtered by factoryId, status, keyword)
+ * GET    /api/orders   — list orders (filtered by status, keyword)
  * POST   /api/orders   — create a single order (SALES only)
  * DELETE /api/orders   — soft-delete orders in bulk (ADMIN only, sets status=CANCELLED)
  */
@@ -25,7 +25,6 @@ import { prisma } from "@/lib/prisma";
 // ---------------------------------------------------------------------------
 
 const ListOrdersQuerySchema = z.object({
-  factoryId: z.string().optional(),
   status: z.nativeEnum(OrderStatus).optional(),
   keyword: z.string().optional(),
 });
@@ -35,7 +34,6 @@ const CreateOrderBodySchema = z.object({
   type: z.string().min(1, "type is required"),
   dueDate: z.string().datetime({ message: "dueDate must be a valid ISO datetime string" }),
   quantity: z.number().int().positive("quantity must be a positive integer"),
-  factoryId: z.string().optional().nullable(),
 });
 
 const DeleteOrdersBodySchema = z.object({
@@ -59,8 +57,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const { factoryId, status, keyword } = parsed.data;
-    const orders = await listOrders(ctx, prisma, { factoryId, status, keyword });
+    const { status, keyword } = parsed.data;
+    const orders = await listOrders(ctx, prisma, { status, keyword });
     return NextResponse.json(orders);
   } catch (err) {
     if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);

@@ -18,12 +18,10 @@ export type OrderRow = {
   id: string;
   status: OrderStatus;
   dueDate: Date;
-  productionDate: Date | null;
   quantity: number;
   applicantId: string;
   name: string;
   type: string;
-  factoryId: string | null;
   createdAt: Date;
   updatedAt: Date;
   lastModifiedById: string | null;
@@ -35,23 +33,19 @@ export type CreateOrderInput = {
   name: string;
   type: string;
   applicantId: string;
-  factoryId?: string | null;
 };
 
 export type UpdateOrderInput = {
   status?: OrderStatus;
   dueDate?: Date;
-  productionDate?: Date | null;
   quantity?: number;
   name?: string;
   type?: string;
-  factoryId?: string | null;
   lastModifiedById?: string | null;
 };
 
 export type OrderFilters = {
   applicantId?: string;
-  factoryId?: string;
   status?: OrderStatus;
   keyword?: string;
   group?: string;
@@ -66,12 +60,10 @@ const orderSelect = {
   id: true,
   status: true,
   dueDate: true,
-  productionDate: true,
   quantity: true,
   applicantId: true,
   name: true,
   type: true,
-  factoryId: true,
   createdAt: true,
   updatedAt: true,
   lastModifiedById: true,
@@ -85,8 +77,7 @@ export async function findOrders(
   db: PrismaClient,
   filters: OrderFilters = {}
 ): Promise<OrderRow[]> {
-  const { applicantId, factoryId, status, keyword, group, permittedOrderIds } =
-    filters;
+  const { applicantId, status, keyword, group, permittedOrderIds } = filters;
 
   // Build the ownership / permission clause
   let ownershipClause: object | undefined;
@@ -114,7 +105,6 @@ export async function findOrders(
   return db.order.findMany({
     where: {
       ...(ownershipClause ?? {}),
-      ...(factoryId ? { factoryId } : {}),
       ...(status ? { status } : {}),
       ...(group ? { type: group } : {}),
       ...(keywordClause ?? {}),
@@ -160,7 +150,6 @@ export async function createOrder(
       name: input.name,
       type: input.type,
       applicantId: input.applicantId,
-      factoryId: input.factoryId ?? null,
     },
     select: orderSelect,
   });
@@ -179,13 +168,9 @@ export async function updateOrder(
     data: {
       ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.dueDate !== undefined ? { dueDate: input.dueDate } : {}),
-      ...(input.productionDate !== undefined
-        ? { productionDate: input.productionDate }
-        : {}),
       ...(input.quantity !== undefined ? { quantity: input.quantity } : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.type !== undefined ? { type: input.type } : {}),
-      ...(input.factoryId !== undefined ? { factoryId: input.factoryId } : {}),
       ...(input.lastModifiedById !== undefined
         ? { lastModifiedById: input.lastModifiedById }
         : {}),

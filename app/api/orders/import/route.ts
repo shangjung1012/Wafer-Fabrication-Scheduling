@@ -3,7 +3,7 @@
  *
  * POST /api/orders/import  — bulk import orders from a CSV file (ADMIN only)
  *
- * Expected CSV columns: name, type, dueDate, quantity, factoryId (optional)
+ * Expected CSV columns: name, type, dueDate, quantity
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -17,7 +17,7 @@ import {
   notFoundResponse,
   requireRole,
 } from "@/modules/auth/rbac";
-import { createOrderService } from "@/modules/order/order-service";
+import { createOrder } from "@/infra/db/order-repository";
 import { prisma } from "@/lib/prisma";
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       const row = rows[i];
       const rowNum = i + 2; // 1-based, +1 for header row
 
-      const { name, type, dueDate, quantity: quantityRaw, factoryId } = row;
+      const { name, type, dueDate, quantity: quantityRaw } = row;
 
       // Validate required fields
       if (!name || !name.trim()) {
@@ -89,12 +89,12 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        const order = await createOrderService(ctx, prisma, {
+        const order = await createOrder(prisma, {
           name: name.trim(),
           type: type.trim(),
           dueDate: parsedDueDate,
           quantity,
-          factoryId: factoryId?.trim() || null,
+          applicantId: ctx.user.id,
         });
         successes.push(order);
       } catch (rowErr) {

@@ -2,7 +2,8 @@
  * modules/order/request-service.ts
  *
  * Business logic for OrderRequest management.
- * Role-scoped: SALES sees own requests, ADMIN sees requests for their factory's orders.
+ * Role-scoped: SALES sees own requests, ADMIN/SUPERADMIN see requests for
+ * orders within their production type (group).
  */
 
 import type { PrismaClient } from "@/lib/generated/prisma";
@@ -23,22 +24,21 @@ import { findOrderById, updateOrder, OrderStatus } from "@/infra/db/order-reposi
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Returns the factory row for the authenticated ADMIN.
- * Throws ForbiddenError if the caller has no factory assigned.
- */
-async function getAdminFactory(
+/** Resolves the production group for ADMIN or SUPERADMIN callers. */
+async function getCallerGroup(
   ctx: RequestContext,
   db: PrismaClient
-): Promise<{ id: string }> {
-  const factory = await db.factory.findFirst({
-    where: { adminId: ctx.user.id },
-    select: { id: true },
+): Promise<string> {
+  const me = await db.user.findUnique({
+    where: { id: ctx.user.id },
+    select: { group: true },
   });
-  if (!factory) {
-    throw new ForbiddenError("Your account is not assigned to any factory.");
+  if (!me?.group) {
+    throw new ForbiddenError(
+      "Your account does not have a production type (group) assigned."
+    );
   }
-  return factory;
+  return me.group;
 }
 
 /** Canonical 404 for requests. */
@@ -62,11 +62,11 @@ export async function listRequests(
     return findRequests(db, { applicantId: ctx.user.id });
   }
 
-  // ADMIN
-  requireRole(ctx, ["ADMIN"]);
-  const factory = await getAdminFactory(ctx, db);
+  // ADMIN / SUPERADMIN: scope by production type group
+  requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
+  const group = await getCallerGroup(ctx, db);
   const orders = await db.order.findMany({
-    where: { factoryId: factory.id },
+    where: { type: group },
     select: { id: true },
   });
   const orderIds = orders.map((o) => o.id);
@@ -86,11 +86,11 @@ export async function getRequest(
     return request;
   }
 
-  // ADMIN: verify order belongs to admin's factory
-  requireRole(ctx, ["ADMIN"]);
-  const factory = await getAdminFactory(ctx, db);
+  // ADMIN / SUPERADMIN: verify order is in their group
+  requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
+  const group = await getCallerGroup(ctx, db);
   const order = await findOrderById(db, request.orderId);
-  if (!order || order.factoryId !== factory.id) requestNotFound();
+  if (!order || order.type !== group) requestNotFound();
   return request;
 }
 
@@ -107,7 +107,6 @@ export async function createRequestService(
 ): Promise<RequestRow> {
   requireRole(ctx, ["SALES"]);
 
-  // Verify linked order exists
   const order = await findOrderById(db, input.orderId);
   if (!order) {
     throw Object.assign(new Error("Order not found."), {
@@ -172,8 +171,8 @@ export async function approveRequest(
   const request = await findRequestById(db, id);
   if (!request) requestNotFound();
 
-  // Verify the linked order is in admin's factory (or unassigned)
-  const factory = await getAdminFactory(ctx, db);
+  // Verify the linked order is in admin's group
+  const group = await getCallerGroup(ctx, db);
   const order = await findOrderById(db, request.orderId);
   if (!order) {
     throw Object.assign(new Error("Order not found."), {
@@ -181,9 +180,9 @@ export async function approveRequest(
       code: "NOT_FOUND",
     });
   }
-  if (order.factoryId !== null && order.factoryId !== factory.id) {
+  if (order.type !== group) {
     throw new ForbiddenError(
-      "This request's order does not belong to your factory."
+      "This request's order is not in your production group."
     );
   }
 
@@ -191,7 +190,7 @@ export async function approveRequest(
   const payload = (request.payload ?? {}) as Record<string, unknown>;
   const safeFields: Record<string, unknown> = {};
 
-  for (const key of ["dueDate", "quantity", "name", "type", "factoryId"] as const) {
+  for (const key of ["dueDate", "quantity", "name", "type"] as const) {
     if (key in payload) {
       safeFields[key] = payload[key];
     }

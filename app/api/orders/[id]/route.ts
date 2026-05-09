@@ -26,11 +26,9 @@ import { prisma } from "@/lib/prisma";
 const UpdateOrderBodySchema = z.object({
   status: z.nativeEnum(OrderStatus).optional(),
   dueDate: z.string().datetime().optional(),
-  productionDate: z.string().datetime().nullable().optional(),
   quantity: z.number().int().positive().optional(),
   name: z.string().min(1).optional(),
   type: z.string().min(1).optional(),
-  factoryId: z.string().nullable().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -91,16 +89,10 @@ export async function PUT(
       return badRequestResponse("At least one field is required.");
     }
 
-    // Parse date strings to Date objects
-    const parsedInput: Record<string, unknown> = { ...data };
-    if (typeof data.dueDate === "string") {
-      parsedInput.dueDate = new Date(data.dueDate);
-    }
-    if (typeof data.productionDate === "string") {
-      parsedInput.productionDate = new Date(data.productionDate);
-    }
-
-    const order = await updateOrderService(ctx, prisma, id, parsedInput);
+    const order = await updateOrderService(ctx, prisma, id, {
+      ...data,
+      dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+    });
     return NextResponse.json(order);
   } catch (err) {
     if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
