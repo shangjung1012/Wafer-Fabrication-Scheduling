@@ -24,7 +24,7 @@ import { prisma } from "@/lib/prisma";
 const UpdateRequestBodySchema = z.object({
   message: z.string().min(1).optional(),
   payload: z.record(z.string(), z.unknown()).nullable().optional(),
-});
+}).strict();
 
 // ---------------------------------------------------------------------------
 // PUT /api/requests/[id]

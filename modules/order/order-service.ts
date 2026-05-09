@@ -148,6 +148,9 @@ export async function updateOrderService(
   if (!order) orderNotFound();
 
   if (ctx.user.role === "SALES") {
+    if (input.status !== undefined) {
+      throw new ForbiddenError("You cannot change order status directly.");
+    }
     if (order.applicantId !== ctx.user.id) {
       throw new ForbiddenError("You can only edit your own orders.");
     }
@@ -156,7 +159,6 @@ export async function updateOrderService(
         "You can only edit orders that are still pending."
       );
     }
-    // SALES may only change: dueDate, quantity, name, type
     const salesInput: UpdateOrderInput = {
       dueDate: input.dueDate,
       quantity: input.quantity,

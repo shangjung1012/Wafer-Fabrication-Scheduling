@@ -29,7 +29,7 @@ const UpdateOrderBodySchema = z.object({
   quantity: z.number().int().positive().optional(),
   name: z.string().min(1).optional(),
   type: z.string().min(1).optional(),
-});
+}).strict();
 
 // ---------------------------------------------------------------------------
 // GET /api/orders/[id]
