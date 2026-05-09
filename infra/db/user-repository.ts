@@ -5,7 +5,7 @@
  * Business logic (role checks, scope filtering) belongs in modules/users/.
  */
 
-import type { PrismaClient, UserRole } from "@/lib/generated/prisma";
+import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
 
 // ---------------------------------------------------------------------------
 // Types

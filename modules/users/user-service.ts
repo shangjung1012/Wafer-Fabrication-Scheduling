@@ -5,7 +5,7 @@
  * All operations are restricted to SUPERADMIN, scoped to their production type (group).
  */
 
-import type { PrismaClient, UserRole } from "@/lib/generated/prisma";
+import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
 import type { RequestContext } from "@/modules/auth/request-context";
 import { requireRole, ForbiddenError } from "@/modules/auth/rbac";
 import {
