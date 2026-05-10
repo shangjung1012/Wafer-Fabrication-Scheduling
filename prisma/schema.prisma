@@ -58,7 +58,6 @@ model User {
   orders           Order[]           @relation("OrderApplicant")
   modifiedOrders   Order[]           @relation("OrderModifier")
   managedFactories Factory[]         @relation("FactoryAdmin")
-  permissions      OrderPermission[]
   requests         OrderRequest[]    @relation("RequestApplicant")
 
   @@map("user")
@@ -112,7 +111,6 @@ model Order {
   
   // Relations
   assignments      OrderAssignment[] // 記錄這筆訂單被拆分成哪些派工單
-  permissions    OrderPermission[]
   requests       OrderRequest[]
 
   @@map("order")
@@ -131,18 +129,6 @@ model OrderAssignment {
   factory          Factory  @relation(fields: [factoryId], references: [id], onDelete: Restrict)
 
   @@map("order_assignment")
-}
-
-model OrderPermission {
-  id      String @id @default(cuid())
-  userId  String
-  orderId String
-
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, orderId])
-  @@map("order_permission")
 }
 
 model OrderRequest {
