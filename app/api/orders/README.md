@@ -77,13 +77,13 @@ PENDING → APPROVED → SCHEDULED → IN_PRODUCTION → COMPLETED
 
 | 操作 | SALES | ADMIN | SUPERADMIN |
 |---|---|---|---|
-| 列出訂單 | ✓ 只看自己 + 被授權的 | ✓ 同 group 的訂單 | ✓ 同 group 的訂單 |
-| 取得單筆訂單 | ✓ 自己 + 被授權的 | ✓ 同 group | ✓ 同 group |
+| 列出訂單 | ✓ 只看自己建立的 | ✓ 同 group 的訂單 | ✓ 同 group 的訂單 |
+| 取得單筆訂單 | ✓ 只看自己建立的 | ✓ 同 group | ✓ 同 group |
 | 建立訂單 | ✓ | — | — |
 | 修改訂單 | ✓ 自己的 PENDING，不能改 status | ✓ 同 group，可改 status | — |
 | 刪除訂單 | — | ✓ | — |
 | 匯入 CSV | — | ✓ | ✓ |
-| 建立申請 | ✓ 自己 + 被授權的訂單 | — | — |
+| 建立申請 | ✓ 自己建立的訂單 | — | — |
 | 修改申請 | ✓ 自己的申請 | — | — |
 | 核准申請 | — | ✓ | ✓ |
 
