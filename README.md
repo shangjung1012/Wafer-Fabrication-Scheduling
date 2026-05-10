@@ -48,7 +48,6 @@ JWT_ISSUER="wafer-auth"
 JWT_AUDIENCE="wafer-api"
 ACCESS_TOKEN_EXPIRES_IN="15m"
 REFRESH_TOKEN_EXPIRES_IN="7d"
-DEV_STATIC_TOKEN="dev-superadmin-static-token"
 ```
 
 ### 2. 啟動資料庫
@@ -93,27 +92,7 @@ pnpm dev
 
 ---
 
-## Dev Token（開發期身份驗證）
-
-開發環境仍可使用 `dev:<ROLE>:<userId>` 格式的 token 模擬不同角色。
-`<userId>` 必須與 DB 內的 user id 一致（即 seed 建立的 id）。
-
-| Token | 身份 |
-|---|---|
-| `dev:SUPERADMIN:sa-A` | SUPERADMIN, Type A |
-| `dev:SUPERADMIN:sa-B` | SUPERADMIN, Type B |
-| `dev:SUPERADMIN:sa-C` | SUPERADMIN, Type C |
-| `dev:ADMIN:admin-A1` | ADMIN, Factory A1 |
-| `dev:ADMIN:admin-B2` | ADMIN, Factory B2 |
-| `dev:SALES:sales-A` | SALES, Type A |
-
-使用方式：
-
-```
-Authorization: Bearer dev:SUPERADMIN:sa-A
-```
-
-正式登入流程：
+## 身份驗證
 
 1. `POST /api/auth/register` 建立 `ADMIN` 或 `SALES` 帳號。
 2. `POST /api/auth/login` 使用 `accountId` / `password` 登入，取得 `accessToken` 與 `refreshToken`。
@@ -127,9 +106,10 @@ Authorization: Bearer dev:SUPERADMIN:sa-A
 
 開啟 **[http://localhost:3000/docs](http://localhost:3000/docs)**
 
-1. 點右上角 **Authorize**
-2. 輸入 dev token（例如 `dev:SUPERADMIN:sa-A`）
-3. 展開任一 endpoint → **Try it out** → **Execute**
+1. 到 **[http://localhost:3000/login](http://localhost:3000/login)** 登入。
+2. 複製 login response/session 內的 `accessToken`。
+3. 在 docs 頁右上角 **Authorize** 輸入 `Bearer <accessToken>`。
+4. 展開任一 endpoint → **Try it out** → **Execute**。
 
 OpenAPI spec：[`api_spec.yml`](./api_spec.yml)
 

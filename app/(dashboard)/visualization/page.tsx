@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
 import type {
   TimelineResponse,
@@ -9,6 +10,10 @@ import type {
   DiffEntry,
   FactoryInfo,
 } from "@/modules/visualization/types";
+import {
+  logoutClientAuthSession,
+} from "@/modules/auth/client-session";
+import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 
 // ---------------------------------------------------------------------------
 // Date helpers
@@ -325,50 +330,6 @@ function GanttCell({
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// Extracts production type (A/B/C) from dev token userId segment
-// e.g. dev:SUPERADMIN:sa-A → "A",  dev:ADMIN:admin-B1 → "B"
-function deriveProductionType(token: string): string {
-  const userId = token.split(":")[2] ?? "";
-  const match  = userId.match(/[A-C]/i);
-  return match ? match[0].toUpperCase() : "";
-}
-
-// ---------------------------------------------------------------------------
-// Dev token management
-// ---------------------------------------------------------------------------
-
-const DEV_USERS = [
-  { label: "SUPERADMIN sa-A (Type A)", token: "dev:SUPERADMIN:sa-A" },
-  { label: "SUPERADMIN sa-B (Type B)", token: "dev:SUPERADMIN:sa-B" },
-  { label: "SUPERADMIN sa-C (Type C)", token: "dev:SUPERADMIN:sa-C" },
-  { label: "ADMIN admin-A1 (Factory A1)", token: "dev:ADMIN:admin-A1" },
-  { label: "ADMIN admin-A2 (Factory A2)", token: "dev:ADMIN:admin-A2" },
-  { label: "ADMIN admin-B1 (Factory B1)", token: "dev:ADMIN:admin-B1" },
-  { label: "ADMIN admin-B2 (Factory B2)", token: "dev:ADMIN:admin-B2" },
-  { label: "ADMIN admin-C1 (Factory C1)", token: "dev:ADMIN:admin-C1" },
-  { label: "ADMIN admin-C2 (Factory C2)", token: "dev:ADMIN:admin-C2" },
-];
-
-function useToken() {
-  const [token, setTokenState] = useState(DEV_USERS[0].token);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("viz_dev_token");
-    if (saved) setTokenState(saved);
-  }, []);
-
-  const setToken = (t: string) => {
-    localStorage.setItem("viz_dev_token", t);
-    setTokenState(t);
-  };
-
-  return { token, setToken };
-}
-
-// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -379,7 +340,10 @@ type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
 
 export default function SchedulePage() {
-  const { token, setToken } = useToken();
+  const router = useRouter();
+  const session = useClientAuthSession();
+  const token = session?.accessToken ?? "";
+  const productionType = session?.user.group ?? "";
   const [startDate, setStartDate] = useState(DEFAULT_START);
   const [endDate, setEndDate]     = useState(DEFAULT_END);
   const [data, setData]           = useState<TimelineResponse | null>(null);
@@ -391,8 +355,12 @@ export default function SchedulePage() {
 
   // Fetch timeline data
   useEffect(() => {
-    setLoading(true);
-    setFetchError(null);
+    if (session === null) {
+      router.replace("/login");
+      return;
+    }
+    if (session === undefined) return;
+
     const params = new URLSearchParams({ startDate, endDate });
     fetch(`/api/visualization/timeline?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -411,12 +379,11 @@ export default function SchedulePage() {
         setFetchError({ status: 0, message: "Network error" });
         setLoading(false);
       });
-  }, [token, startDate, endDate, refreshKey]);
+  }, [router, session, token, startDate, endDate, refreshKey]);
 
   // Run schedule handler
   const handleRunSchedule = async () => {
-    const type = deriveProductionType(token);
-    if (!type) return;
+    if (!productionType) return;
     setScheduleStatus("running");
     try {
       const res = await fetch("/api/schedule/run", {
@@ -425,12 +392,14 @@ export default function SchedulePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify({ type: productionType }),
       });
       if (res.status === 409) {
         setScheduleStatus("conflict");
       } else if (res.ok) {
         setScheduleStatus("success");
+        setLoading(true);
+        setFetchError(null);
         setRefreshKey((k) => k + 1);
       } else {
         setScheduleStatus("error");
@@ -439,6 +408,11 @@ export default function SchedulePage() {
       setScheduleStatus("error");
     }
     setTimeout(() => setScheduleStatus("idle"), 4000);
+  };
+
+  const handleLogout = async () => {
+    await logoutClientAuthSession(session?.refreshToken);
+    router.replace("/login");
   };
 
   // Build date columns
@@ -500,10 +474,25 @@ export default function SchedulePage() {
   }, [selectedCell, data]);
 
   // Summary counts
-  const totalConflicts     = data?.conflicts.length ?? 0;
   const capacityConflicts  = data?.conflicts.filter((c) => c.conflictType === "CAPACITY").length ?? 0;
   const dueDateConflicts   = data?.conflicts.filter((c) => c.conflictType === "DUE_DATE").length ?? 0;
   const rescheduledCount   = data?.diffs.length ?? 0;
+
+  if (session === undefined) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">
+        Loading session...
+      </div>
+    );
+  }
+
+  if (session === null) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">
+        Redirecting to login...
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans">
@@ -514,18 +503,21 @@ export default function SchedulePage() {
           <p className="text-xs text-gray-500">Factory gantt — click a cell to inspect orders</p>
         </div>
 
-        {/* Dev token selector */}
         <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
-          <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Acting as:</span>
-          <select
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            className="text-xs border-none bg-transparent focus:outline-none cursor-pointer"
+          <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Signed in as:</span>
+          <span className="text-xs font-semibold text-gray-800">{session.user.name}</span>
+          <span className="text-xs text-gray-500">({session.user.accountId})</span>
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+            {session.user.role}
+          </span>
+          {productionType && <span className="text-xs text-gray-500">Type {productionType}</span>}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="text-xs font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
           >
-            {DEV_USERS.map((u) => (
-              <option key={u.token} value={u.token}>{u.label}</option>
-            ))}
-          </select>
+            Logout
+          </button>
         </div>
 
         {/* Run Schedule */}
@@ -539,7 +531,7 @@ export default function SchedulePage() {
                 : "bg-green-600 text-white border-green-600 hover:bg-green-700"
             }`}
           >
-            {scheduleStatus === "running" ? "Running…" : `▶ Run Schedule (Type ${deriveProductionType(token)})`}
+            {scheduleStatus === "running" ? "Running…" : `▶ Run Schedule (Type ${productionType || "-"})`}
           </button>
           {scheduleStatus === "success"  && <span className="text-xs text-green-600 font-medium">Scheduled ✓</span>}
           {scheduleStatus === "conflict" && <span className="text-xs text-yellow-600 font-medium">Already running</span>}
@@ -551,14 +543,22 @@ export default function SchedulePage() {
           <input
             type="date"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(e) => {
+              setStartDate(e.target.value);
+              setLoading(true);
+              setFetchError(null);
+            }}
             className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
           <span className="text-gray-400 text-sm">→</span>
           <input
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => {
+              setEndDate(e.target.value);
+              setLoading(true);
+              setFetchError(null);
+            }}
             className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
         </div>

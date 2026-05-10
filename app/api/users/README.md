@@ -21,10 +21,10 @@ Next.js 把 HTTP request 交給這個 route handler。第一件事是呼叫 `req
 
 ### 2. `modules/auth/require-auth.ts`（身份驗證）
 
-從 `Authorization: Bearer <token>` header 取出 token，在 dev 環境下解析 `dev:SUPERADMIN:sa-A` 格式，回傳一個 `RequestContext`：
+從 `Authorization: Bearer <accessToken>` header 取出 JWT，驗證後回傳一個 `RequestContext`：
 
 ```ts
-{ user: { id: "sa-A", role: "SUPERADMIN" }, requestId: "..." }
+{ user: { id: "sa-A", role: "SUPERADMIN", accountId: "sa-A" }, requestId: "..." }
 ```
 
 這個 context 往後傳給所有下層函式，任何地方都不會再去碰 request header。
