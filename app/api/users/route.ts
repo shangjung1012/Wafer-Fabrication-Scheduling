@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
-import { ForbiddenError, forbiddenResponse, unauthorizedResponse, badRequestResponse } from "@/modules/auth/rbac";
+import { ForbiddenError, NotFoundError, forbiddenResponse, unauthorizedResponse, badRequestResponse, notFoundResponse } from "@/modules/auth/rbac";
 import { listUsers, createUserService } from "@/modules/users/user-service";
 import { prisma } from "@/lib/prisma";
 
@@ -76,13 +76,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
-    const appErr = err as { status?: number; code?: string; message?: string };
-    if (appErr.status === 404) {
-      return new Response(
-        JSON.stringify({ code: appErr.code ?? "NOT_FOUND", message: appErr.message }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
-      );
-    }
+    if (err instanceof NotFoundError) return notFoundResponse(err.message);
     throw err;
   }
 }

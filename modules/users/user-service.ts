@@ -7,7 +7,7 @@
 
 import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
 import type { RequestContext } from "@/modules/auth/request-context";
-import { requireRole, ForbiddenError } from "@/modules/auth/rbac";
+import { requireRole, ForbiddenError, NotFoundError } from "@/modules/auth/rbac";
 import {
   findUsers,
   findUserById,
@@ -105,7 +105,7 @@ export async function updateUserService(
   // Verify target user exists and is in the same type
   const target = await findUserById(db, targetId);
   if (!target) {
-    return Promise.reject(Object.assign(new Error("User not found."), { status: 404, code: "NOT_FOUND" }));
+    throw new NotFoundError("User not found.");
   }
   if (target.group !== adminGroup) {
     throw new ForbiddenError(
@@ -122,7 +122,7 @@ export async function updateUserService(
 
   const result = await updateUser(db, targetId, input satisfies UpdateUserInput);
   if (!result) {
-    return Promise.reject(Object.assign(new Error("User not found."), { status: 404, code: "NOT_FOUND" }));
+    throw new NotFoundError("User not found.");
   }
   return result;
 }
@@ -143,7 +143,7 @@ export async function deleteUserService(
   // Verify target exists and is in scope
   const target = await findUserById(db, targetId);
   if (!target) {
-    return Promise.reject(Object.assign(new Error("User not found."), { status: 404, code: "NOT_FOUND" }));
+    throw new NotFoundError("User not found.");
   }
   if (target.group !== adminGroup) {
     throw new ForbiddenError(
@@ -153,7 +153,7 @@ export async function deleteUserService(
 
   const result = await deleteUser(db, targetId);
   if (!result) {
-    return Promise.reject(Object.assign(new Error("User not found."), { status: 404, code: "NOT_FOUND" }));
+    throw new NotFoundError("User not found.");
   }
   return result;
 }
