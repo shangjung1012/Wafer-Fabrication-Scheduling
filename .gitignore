@@ -23,7 +23,6 @@
 # misc
 .DS_Store
 *.pem
-CLAUDE.md
 
 # claude code local config and session cache
 .claude/
