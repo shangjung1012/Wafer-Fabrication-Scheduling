@@ -105,4 +105,44 @@ console.log(
   `➕ Total Dynamic Capacity Records Created: ${strategyResult.newCapacities.length}`,
 );
 
+console.log("\n🔍 Running Invariant Checks...");
+
+// Check 1: Capacity Limit
+for (const cap of strategyResult.updatedCapacities) {
+  if (cap.curCapacity < 0) {
+    throw new Error(
+      `Invariant failed: Updated capacity record ${cap.id} has negative curCapacity (${cap.curCapacity})`,
+    );
+  }
+}
+for (const cap of strategyResult.newCapacities) {
+  if (cap.curCapacity < 0) {
+    throw new Error(
+      `Invariant failed: Dynamically created capacity record for factory ${cap.factoryId} on ${cap.date} has negative curCapacity (${cap.curCapacity})`,
+    );
+  }
+}
+
+// Check 2: Quantity Conservation
+for (const order of strategyResult.processedOrders) {
+  if (order.status === OrderStatus.SCHEDULED) {
+    const assignmentsForOrder = strategyResult.newAssignments.filter(
+      (a) => a.orderId === order.id,
+    );
+    const assignedSum = assignmentsForOrder.reduce(
+      (sum, a) => sum + a.assignedQuantity,
+      0,
+    );
+
+    // In our benchmark, orders start with no prior assignments, so total quantity should equal the new assigned sum
+    if (assignedSum !== order.quantity) {
+      throw new Error(
+        `Invariant failed: Order ${order.id} has quantity ${order.quantity} but was assigned ${assignedSum}`,
+      );
+    }
+  }
+}
+
+console.log("✅ All invariant checks passed successfully.");
+
 console.log("\n🎉 Benchmark Finished.");

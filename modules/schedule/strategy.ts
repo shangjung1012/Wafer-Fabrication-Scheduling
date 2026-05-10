@@ -104,11 +104,12 @@ export function greedyBestFitStrategy(
     let remainingQty = order.quantity - scheduledOrProducedQuantity;
     const startingRemainingQty = remainingQty;
 
-    // Snapshot capacities before trial
-    const capacitySnapshot = new Map<string, CapacityDraft>();
-    for (const [k, v] of capacityMap.entries()) {
-      capacitySnapshot.set(k, { ...v, date: new Date(v.date) });
-    }
+    // Mutation Ledger for rollback
+    const rollbackLedger: {
+      key: string;
+      amountDeducted: number;
+      wasCreated: boolean;
+    }[] = [];
 
     const virtualAssignments: OrderAssignmentDraft[] = [];
 
@@ -136,6 +137,11 @@ export function greedyBestFitStrategy(
               curCapacity: factory.maxCapacity,
             };
             capacityMap.set(mapKey, cap);
+            rollbackLedger.push({
+              key: mapKey,
+              amountDeducted: 0,
+              wasCreated: true,
+            });
           }
           return cap;
         });
@@ -157,6 +163,12 @@ export function greedyBestFitStrategy(
 
           // Deduct from mapped capacity
           cap.curCapacity -= allocated;
+          const mapKey = `${cap.factoryId}_${dateKey}`;
+          rollbackLedger.push({
+            key: mapKey,
+            amountDeducted: allocated,
+            wasCreated: false,
+          });
 
           virtualAssignments.push({
             orderId: order.id,
@@ -191,8 +203,18 @@ export function greedyBestFitStrategy(
       }
       result.processedOrders.push({ ...order, status: finalStatus });
     } else {
-      // Failure: Restore capacity map snapshot, drop virtual assignments
-      capacityMap = capacitySnapshot;
+      // Failure: Rollback using the ledger, drop virtual assignments
+      for (let i = rollbackLedger.length - 1; i >= 0; i--) {
+        const entry = rollbackLedger[i];
+        if (entry.wasCreated) {
+          capacityMap.delete(entry.key);
+        } else {
+          const restoredCap = capacityMap.get(entry.key);
+          if (restoredCap) {
+            restoredCap.curCapacity += entry.amountDeducted;
+          }
+        }
+      }
 
       let finalStatus = order.status;
       if (
