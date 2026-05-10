@@ -9,6 +9,7 @@
 import type { PrismaClient } from "@/lib/generated/prisma";
 import type { RequestContext } from "@/modules/auth/request-context";
 import { requireRole, ForbiddenError } from "@/modules/auth/rbac";
+import { resolveActorScope, getScopeGroup } from "@/modules/auth/scope";
 import {
   findRequests,
   findRequestById,
@@ -23,23 +24,6 @@ import { findOrderById, updateOrder, OrderStatus } from "@/infra/db/order-reposi
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Resolves the production group for ADMIN or SUPERADMIN callers. */
-async function getCallerGroup(
-  ctx: RequestContext,
-  db: PrismaClient
-): Promise<string> {
-  const me = await db.user.findUnique({
-    where: { id: ctx.user.id },
-    select: { group: true },
-  });
-  if (!me?.group) {
-    throw new ForbiddenError(
-      "Your account does not have a production type (group) assigned."
-    );
-  }
-  return me.group;
-}
 
 /** Canonical 404 for requests. */
 function requestNotFound(): never {
@@ -64,9 +48,9 @@ export async function listRequests(
 
   // ADMIN / SUPERADMIN: scope by production type group
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
-  const group = await getCallerGroup(ctx, db);
+  const scope = await resolveActorScope(ctx, db);
   const orders = await db.order.findMany({
-    where: { type: group },
+    where: { type: getScopeGroup(scope) },
     select: { id: true },
   });
   const orderIds = orders.map((o) => o.id);
@@ -88,9 +72,9 @@ export async function getRequest(
 
   // ADMIN / SUPERADMIN: verify order is in their group
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
-  const group = await getCallerGroup(ctx, db);
+  const scope = await resolveActorScope(ctx, db);
   const order = await findOrderById(db, request.orderId);
-  if (!order || order.type !== group) requestNotFound();
+  if (!order || order.type !== getScopeGroup(scope)) requestNotFound();
   return request;
 }
 
@@ -166,7 +150,7 @@ export async function approveRequest(
   if (!request) requestNotFound();
 
   // Verify the linked order is in admin's group
-  const group = await getCallerGroup(ctx, db);
+  const scope = await resolveActorScope(ctx, db);
   const order = await findOrderById(db, request.orderId);
   if (!order) {
     throw Object.assign(new Error("Order not found."), {
@@ -174,10 +158,8 @@ export async function approveRequest(
       code: "NOT_FOUND",
     });
   }
-  if (order.type !== group) {
-    throw new ForbiddenError(
-      "This request's order is not in your production group."
-    );
+  if (order.type !== getScopeGroup(scope)) {
+    throw new ForbiddenError("This request's order is not in your production group.");
   }
 
   // Apply safe fields from request payload to the order

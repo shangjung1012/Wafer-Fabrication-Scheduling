@@ -27,6 +27,7 @@ export type AdminScope = {
   userId: string;
   factoryId: string;
   productionType: string;
+  group: string;           // alias for productionType — use getScopeGroup() to avoid branching
 };
 
 export type SuperAdminScope = {
@@ -36,6 +37,14 @@ export type SuperAdminScope = {
 };
 
 export type ActorScope = SalesScope | AdminScope | SuperAdminScope;
+
+/**
+ * Extracts the production type (A | B | C) from any ActorScope.
+ * Avoids role-branching in service code — use this instead of scope.group / scope.productionType.
+ */
+export function getScopeGroup(scope: ActorScope): string {
+  return scope.group;
+}
 
 // ---------------------------------------------------------------------------
 // resolveActorScope
@@ -80,6 +89,7 @@ export async function resolveActorScope(
         userId: ctx.user.id,
         factoryId: factory.id,
         productionType: factory.productionType,
+        group: factory.productionType,
       };
     }
 
