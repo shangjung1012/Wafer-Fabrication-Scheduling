@@ -101,10 +101,10 @@ Next.js 把請求交給 route handler。做三件事：
 
 ### 2. `modules/auth/require-auth.ts`（身份驗證）
 
-從 `Authorization: Bearer dev:ROLE:userId` 解析出：
+從 `Authorization: Bearer <accessToken>` 驗證 JWT 後解析出：
 
 ```ts
-{ user: { id: "sales-A", role: "SALES" }, requestId: "..." }
+{ user: { id: "sales-A", role: "SALES", accountId: "sales-A" }, requestId: "..." }
 ```
 
 ### 3. `modules/order/order-service.ts`（業務邏輯 + 授權）

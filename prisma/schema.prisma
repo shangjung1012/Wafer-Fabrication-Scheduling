@@ -48,32 +48,53 @@ enum AssignmentStatus {
 // =========================
 
 model User {
-  id       String   @id @default(cuid())
-  name     String
-  password String?
-  role     UserRole
-  group    String?
+  id                String    @id @default(cuid())
+  accountId         String    @unique
+  name              String
+  password          String?
+  role              UserRole
+  group             String?
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  lastFailedLoginAt DateTime?
 
   // Relations
   orders           Order[]           @relation("OrderApplicant")
   modifiedOrders   Order[]           @relation("OrderModifier")
-  managedFactories Factory[]         @relation("FactoryAdmin")
+  managedFactories Factory[]         @relation("FactoryAdmins")
   requests         OrderRequest[]    @relation("RequestApplicant")
+  refreshTokens    RefreshToken[]
 
   @@map("user")
+}
+
+model RefreshToken {
+  id                String    @id @default(cuid())
+  tokenHash         String    @unique
+  userId            String
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  replacedByTokenId String?   @unique
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedByToken RefreshToken? @relation("RefreshTokenReplacement", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  replaces        RefreshToken? @relation("RefreshTokenReplacement")
+
+  @@index([userId])
+  @@map("refresh_token")
 }
 
 model Factory {
   id             String        @id @default(cuid())
   productionType String
-  adminId        String?
   status         FactoryStatus @default(ACTIVE)
-  maxCapacity    Int           @default(10000) 
+  maxCapacity    Int           @default(10000)
 
-  admin  User?   @relation("FactoryAdmin", fields: [adminId], references: [id], onDelete: SetNull)
-  
+  admins User[] @relation("FactoryAdmins") // N-to-N: 多個 admin 可管理同一間工廠
+
   // Relations
-  dailyCapacities DailyCapacity[]  // 該工廠每一天的產能紀錄
+  dailyCapacities DailyCapacity[]   // 該工廠每一天的產能紀錄
   assignments     OrderAssignment[] // 分配到該工廠的具體派工單
 
   @@map("factory")

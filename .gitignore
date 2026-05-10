@@ -24,9 +24,10 @@
 .DS_Store
 *.pem
 
-# claude code local config and session cache
-.claude/
+# claude code and cursor local config and session cache
+CLAUDE.md
 .cursor/
+.claude/
 
 # IDE
 .vscode/

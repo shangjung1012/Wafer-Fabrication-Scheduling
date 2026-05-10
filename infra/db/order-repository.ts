@@ -80,7 +80,6 @@ export async function findOrders(
 
   const ownershipClause = applicantId ? { applicantId } : undefined;
 
-  // Build keyword search clause (name OR type)
   const keywordClause =
     keyword
       ? {
@@ -166,4 +165,38 @@ export async function deleteOrders(
     data: { status: OrderStatus.CANCELLED },
   });
   return { count: result.count };
+}
+
+export async function bulkUpdateOrderStatus(
+  db: PrismaClient,
+  updates: { id: string; status: OrderStatus }[]
+): Promise<void> {
+  for (const { id, status } of updates) {
+    await db.order.update({ where: { id }, data: { status } });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Schedule engine queries
+// ---------------------------------------------------------------------------
+
+export async function findOrdersForScheduling(
+  db: PrismaClient,
+  type: string,
+) {
+  return db.order.findMany({
+    where: {
+      type,
+      status: {
+        in: [
+          OrderStatus.APPROVED,
+          OrderStatus.SCHEDULED,
+          OrderStatus.IN_PRODUCTION,
+        ],
+      },
+    },
+    include: {
+      assignments: true,
+    },
+  });
 }
