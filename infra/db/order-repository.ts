@@ -49,7 +49,6 @@ export type OrderFilters = {
   status?: OrderStatus;
   keyword?: string;
   group?: string;
-  permittedOrderIds?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -77,21 +76,10 @@ export async function findOrders(
   db: PrismaClient,
   filters: OrderFilters = {}
 ): Promise<OrderRow[]> {
-  const { applicantId, status, keyword, group, permittedOrderIds } = filters;
+  const { applicantId, status, keyword, group } = filters;
 
-  // Build the ownership / permission clause
-  let ownershipClause: object | undefined;
-  if (applicantId && permittedOrderIds && permittedOrderIds.length > 0) {
-    ownershipClause = {
-      OR: [{ applicantId }, { id: { in: permittedOrderIds } }],
-    };
-  } else if (applicantId) {
-    ownershipClause = { applicantId };
-  } else if (permittedOrderIds && permittedOrderIds.length > 0) {
-    ownershipClause = { id: { in: permittedOrderIds } };
-  }
+  const ownershipClause = applicantId ? { applicantId } : undefined;
 
-  // Build keyword search clause (name OR type)
   const keywordClause =
     keyword
       ? {
@@ -122,17 +110,6 @@ export async function findOrderById(
     where: { id },
     select: orderSelect,
   });
-}
-
-export async function findPermittedOrderIds(
-  db: PrismaClient,
-  userId: string
-): Promise<string[]> {
-  const permissions = await db.orderPermission.findMany({
-    where: { userId },
-    select: { orderId: true },
-  });
-  return permissions.map((p) => p.orderId);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,4 +165,38 @@ export async function deleteOrders(
     data: { status: OrderStatus.CANCELLED },
   });
   return { count: result.count };
+}
+
+export async function bulkUpdateOrderStatus(
+  db: PrismaClient,
+  updates: { id: string; status: OrderStatus }[]
+): Promise<void> {
+  for (const { id, status } of updates) {
+    await db.order.update({ where: { id }, data: { status } });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Schedule engine queries
+// ---------------------------------------------------------------------------
+
+export async function findOrdersForScheduling(
+  db: PrismaClient,
+  type: string,
+) {
+  return db.order.findMany({
+    where: {
+      type,
+      status: {
+        in: [
+          OrderStatus.APPROVED,
+          OrderStatus.SCHEDULED,
+          OrderStatus.IN_PRODUCTION,
+        ],
+      },
+    },
+    include: {
+      assignments: true,
+    },
+  });
 }

@@ -1,44 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 
-// ---------------------------------------------------------------------------
-// Token management
-// ---------------------------------------------------------------------------
+import {
+  logoutClientAuthSession,
+  type ClientAuthSession,
+} from "@/modules/auth/client-session";
+import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 
-const DEV_USERS = [
-  { label: "SUPERADMIN sa-A", token: "dev:SUPERADMIN:sa-A" },
-  { label: "SUPERADMIN sa-B", token: "dev:SUPERADMIN:sa-B" },
-  { label: "ADMIN admin-A1",  token: "dev:ADMIN:admin-A1" },
-  { label: "ADMIN admin-A2",  token: "dev:ADMIN:admin-A2" },
-  { label: "ADMIN admin-A3",  token: "dev:ADMIN:admin-A3" },
-  { label: "SALES sales-A",   token: "dev:SALES:sales-A" },
-  { label: "SALES sales-B",   token: "dev:SALES:sales-B" },
-];
-
-type Role = "SUPERADMIN" | "ADMIN" | "SALES";
-
-function parseRole(token: string): Role {
-  const part = token.split(":")[1] ?? "";
-  if (part === "SUPERADMIN" || part === "ADMIN" || part === "SALES") return part;
-  return "SALES";
-}
-
-function useToken() {
-  const [token, setTokenState] = useState(DEV_USERS[0].token);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("dev_token");
-    if (saved) setTokenState(saved);
-  }, []);
-
-  const setToken = (t: string) => {
-    localStorage.setItem("dev_token", t);
-    setTokenState(t);
-  };
-
-  return { token, setToken };
-}
+type Role = ClientAuthSession["user"]["role"];
 
 function apiFetch(token: string, path: string, options: RequestInit = {}) {
   return fetch(path, {
@@ -84,6 +55,77 @@ function Result({ data }: { data: unknown }) {
     }}>
       {JSON.stringify(data, null, 2)}
     </pre>
+  );
+}
+
+type OrderRow = {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  dueDate: string;
+  quantity: number;
+  applicantId: string;
+  lastModifiedById: string | null;
+};
+
+const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
+  PENDING:       { bg: "#fef9c3", color: "#854d0e" },
+  APPROVED:      { bg: "#dbeafe", color: "#1e40af" },
+  SCHEDULED:     { bg: "#e0f2fe", color: "#075985" },
+  IN_PRODUCTION: { bg: "#dcfce7", color: "#166534" },
+  COMPLETED:     { bg: "#f3f4f6", color: "#374151" },
+  CANCELLED:     { bg: "#fee2e2", color: "#991b1b" },
+};
+
+function OrderTable({ data }: { data: unknown }) {
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  const orders = data as OrderRow[];
+
+  return (
+    <div style={{ marginTop: 12, overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <thead>
+          <tr style={{ background: "#f9fafb", borderBottom: "2px solid #e5e7eb" }}>
+            {["Name", "Type", "Status", "Due Date", "Qty", "Applicant", "Last Modified By"].map((h) => (
+              <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151", whiteSpace: "nowrap" }}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((o, i) => {
+            const sc = STATUS_COLOR[o.status] ?? { bg: "#f3f4f6", color: "#374151" };
+            return (
+              <tr key={o.id} style={{ borderBottom: "1px solid #f3f4f6", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
+                <td style={{ padding: "6px 10px", fontWeight: 500, color: "#111827" }}>{o.name}</td>
+                <td style={{ padding: "6px 10px", color: "#6b7280" }}>{o.type}</td>
+                <td style={{ padding: "6px 10px" }}>
+                  <span style={{ background: sc.bg, color: sc.color, padding: "2px 7px", borderRadius: 99, fontWeight: 600, fontSize: 11 }}>
+                    {o.status}
+                  </span>
+                </td>
+                <td style={{ padding: "6px 10px", color: "#374151", whiteSpace: "nowrap" }}>
+                  {o.dueDate.slice(0, 10)}
+                </td>
+                <td style={{ padding: "6px 10px", color: "#374151", textAlign: "right" }}>
+                  {o.quantity.toLocaleString()}
+                </td>
+                <td style={{ padding: "6px 10px", fontFamily: "monospace", color: "#1d4ed8" }}>
+                  {o.applicantId}
+                </td>
+                <td style={{ padding: "6px 10px", fontFamily: "monospace", color: o.lastModifiedById ? "#7c3aed" : "#9ca3af" }}>
+                  {o.lastModifiedById ?? "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p style={{ marginTop: 6, fontSize: 11, color: "#9ca3af" }}>{orders.length} order(s)</p>
+    </div>
   );
 }
 
@@ -138,13 +180,19 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 // ---------------------------------------------------------------------------
 
 export default function OrdersPage() {
-  const { token, setToken } = useToken();
-  const role = parseRole(token);
+  const router = useRouter();
+  const session = useClientAuthSession();
+  const token = session?.accessToken ?? "";
+  const role: Role = session?.user.role ?? "SALES";
 
   const isSales = role === "SALES";
   const isAdmin = role === "ADMIN";
   const isSuperAdmin = role === "SUPERADMIN";
   const isAdminOrSuper = isAdmin || isSuperAdmin;
+
+  useEffect(() => {
+    if (session === null) router.replace("/login");
+  }, [router, session]);
 
   // ---- List Orders ----
   const [listResult, setListResult] = useState<unknown>(null);
@@ -301,6 +349,11 @@ export default function OrdersPage() {
     setApproveStatus(`${res.status}`);
   }, [token, approveReqId]);
 
+  const handleLogout = useCallback(async () => {
+    await logoutClientAuthSession(session?.refreshToken);
+    router.replace("/login");
+  }, [router, session?.refreshToken]);
+
   // ---------------------------------------------------------------------------
   // Role badge colour
   // ---------------------------------------------------------------------------
@@ -315,27 +368,52 @@ export default function OrdersPage() {
   // Render
   // ---------------------------------------------------------------------------
 
+  if (session === undefined) {
+    return (
+      <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 800, margin: "0 auto", padding: 24 }}>
+        Loading session...
+      </div>
+    );
+  }
+
+  if (session === null) {
+    return (
+      <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 800, margin: "0 auto", padding: 24 }}>
+        Redirecting to login...
+      </div>
+    );
+  }
+
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 800, margin: "0 auto", padding: 24 }}>
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>WOMS — API Test UI</h1>
 
-      {/* Token selector */}
       <div style={{
         marginBottom: 24, padding: 12, background: "#f0f4ff", borderRadius: 8,
         display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
       }}>
-        <label style={{ fontSize: 13, fontWeight: 600 }}>Acting as:</label>
-        <select
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          style={{ padding: "4px 8px", fontSize: 13, borderRadius: 4, border: "1px solid #ccc" }}
-        >
-          {DEV_USERS.map((u) => (
-            <option key={u.token} value={u.token}>{u.label}</option>
-          ))}
-        </select>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Signed in as:</span>
+        <strong style={{ fontSize: 13 }}>{session.user.name}</strong>
+        <span style={{ fontSize: 12, color: "#555" }}>({session.user.accountId})</span>
         <span style={roleBadgeStyle}>{role}</span>
-        <span style={{ fontSize: 11, color: "#666", fontFamily: "monospace" }}>{token}</span>
+        {session.user.group && (
+          <span style={{ fontSize: 12, color: "#555" }}>Group {session.user.group}</span>
+        )}
+        <button
+          type="button"
+          onClick={handleLogout}
+          style={{
+            marginLeft: "auto",
+            padding: "5px 10px",
+            fontSize: 13,
+            borderRadius: 4,
+            border: "1px solid #cbd5e1",
+            background: "#fff",
+            cursor: "pointer",
+          }}
+        >
+          Logout
+        </button>
       </div>
 
       {/* Role capability summary */}
@@ -355,7 +433,7 @@ export default function OrdersPage() {
         <Input label="Keyword (optional)" value={listKeyword} onChange={(e) => setListKeyword(e.target.value)} placeholder="search name/type" />
         <Btn onClick={doListOrders}>Send</Btn>
         {listStatus && <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>HTTP {listStatus}</span>}
-        <Result data={listResult} />
+        <OrderTable data={listResult} />
       </Section>
 
       {/* 2. Get Order — all roles */}
