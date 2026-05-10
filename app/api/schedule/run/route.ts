@@ -13,14 +13,22 @@ const RunScheduleSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const ctx = await requireAuth(request);
+    // 1. Check for Cron execution first
+    const authHeader = request.headers.get("Authorization");
+    const isCron =
+      authHeader && authHeader === `Bearer ${process.env.CRON_SECRET}`;
 
-    // RBAC: Only SUPERADMIN and ADMIN can trigger the scheduling engine
-    if (ctx.user.role !== "SUPERADMIN" && ctx.user.role !== "ADMIN") {
-      return NextResponse.json(
-        { code: "FORBIDDEN", message: "Insufficient permissions" },
-        { status: 403 },
-      );
+    // 2. If not a valid cron, fallback to standard user Auth + RBAC
+    if (!isCron) {
+      const ctx = await requireAuth(request);
+
+      // RBAC: Only SUPERADMIN and ADMIN can trigger the scheduling engine
+      if (ctx.user.role !== "SUPERADMIN" && ctx.user.role !== "ADMIN") {
+        return NextResponse.json(
+          { code: "FORBIDDEN", message: "Insufficient permissions" },
+          { status: 403 },
+        );
+      }
     }
 
     const body = await request.json().catch(() => ({}));

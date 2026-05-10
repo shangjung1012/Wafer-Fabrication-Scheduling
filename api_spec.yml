@@ -33,17 +33,17 @@ paths:
                 password:
                   type: string
                 role:
-                  $ref: "#/components/schemas/UserRole"
+                  $ref: '#/components/schemas/UserRole'
                 group:
                   type: string
                   description: 所屬群組或工廠編號
       responses:
-        "201":
+        '201':
           description: 註冊成功
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: '#/components/schemas/User'
 
   /auth/login:
     post:
@@ -65,7 +65,7 @@ paths:
                 password:
                   type: string
       responses:
-        "200":
+        '200':
           description: 登入成功
           content:
             application/json:
@@ -77,7 +77,7 @@ paths:
                   refreshToken:
                     type: string
                   user:
-                    $ref: "#/components/schemas/User"
+                    $ref: '#/components/schemas/User'
 
   # ==========================================================
   # Orders API (FR-03, FR-04: 訂單檢視、匯入/修改/刪除)
@@ -96,21 +96,21 @@ paths:
         - name: status
           in: query
           schema:
-            $ref: "#/components/schemas/OrderStatus"
+            $ref: '#/components/schemas/OrderStatus'
         - name: keyword
           in: query
           schema:
             type: string
             description: 訂單名稱或類型搜尋
       responses:
-        "200":
+        '200':
           description: 訂單清單
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Order"
+                  $ref: '#/components/schemas/Order'
     post:
       summary: 建立訂單 (單筆)
       tags:
@@ -120,14 +120,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OrderCreateInput"
+              $ref: '#/components/schemas/OrderCreateInput'
       responses:
-        "201":
+        '201':
           description: 建立成功
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Order"
+                $ref: '#/components/schemas/Order'
     delete:
       summary: 批次刪除訂單 (軟刪除)
       description: 批次刪除多筆訂單，並觸發重新排程評估。
@@ -146,7 +146,7 @@ paths:
                   items:
                     type: string
       responses:
-        "200":
+        '200':
           description: 刪除成功
 
   /orders/import:
@@ -165,7 +165,7 @@ paths:
                   type: string
                   format: binary
       responses:
-        "200":
+        '200':
           description: 匯入結果
           content:
             application/json:
@@ -191,12 +191,12 @@ paths:
           schema:
             type: string
       responses:
-        "200":
+        '200':
           description: 訂單詳情
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Order"
+                $ref: '#/components/schemas/Order'
     put:
       summary: 更新單一訂單
       tags:
@@ -212,14 +212,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OrderUpdateInput"
+              $ref: '#/components/schemas/OrderUpdateInput'
       responses:
-        "200":
+        '200':
           description: 更新成功
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Order"
+                $ref: '#/components/schemas/Order'
 
   # ==========================================================
   # Order Requests API (FR-02: 業務提出插單/改單申請)
@@ -231,14 +231,14 @@ paths:
       tags:
         - Requests
       responses:
-        "200":
+        '200':
           description: 申請清單
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/OrderRequest"
+                  $ref: '#/components/schemas/OrderRequest'
     post:
       summary: 提出插單或改單申請
       tags:
@@ -261,12 +261,12 @@ paths:
                   type: object
                   description: 變更內容 (JSON)
       responses:
-        "201":
+        '201':
           description: 申請建立成功
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderRequest"
+                $ref: '#/components/schemas/OrderRequest'
 
   /requests/{id}:
     put:
@@ -291,12 +291,12 @@ paths:
                 payload:
                   type: object
       responses:
-        "200":
+        '200':
           description: 申請更新成功
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderRequest"
+                $ref: '#/components/schemas/OrderRequest'
 
   /requests/{id}/approve:
     post:
@@ -310,7 +310,7 @@ paths:
           schema:
             type: string
       responses:
-        "200":
+        '200':
           description: 已核准並套用變更
 
   # ==========================================================
@@ -332,17 +332,17 @@ paths:
               properties:
                 type:
                   type: string
-                  description: 要執行排程的產品類型 (例如 "Type A")
+                  description: 要執行排程的產品類型 (例如 'Type A')
       responses:
-        "200":
+        '200':
           description: 排程執行成功
-        "400":
+        '400':
           description: 請求參數錯誤
-        "401":
+        '401':
           description: 未授權
-        "403":
+        '403':
           description: 權限不足 (需為 SUPERADMIN 或 ADMIN)
-        "409":
+        '409':
           description: 該類型的排程正在執行中 (Locked)
 
   /schedule/preview:
@@ -356,14 +356,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ScheduleUpdateInput"
+              $ref: '#/components/schemas/ScheduleUpdateInput'
       responses:
-        "200":
+        '200':
           description: 預覽結果
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SchedulePreviewResult"
+                $ref: '#/components/schemas/SchedulePreviewResult'
 
   /schedule/apply:
     post:
@@ -375,9 +375,9 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ScheduleUpdateInput"
+              $ref: '#/components/schemas/ScheduleUpdateInput'
       responses:
-        "200":
+        '200':
           description: 排程已生效更新，版本號推進
 
   # ==========================================================
@@ -399,10 +399,10 @@ paths:
           in: query
           required: false
           schema:
-            $ref: "#/components/schemas/UserRole"
+            $ref: '#/components/schemas/UserRole'
           description: 依角色篩選（SUPERADMIN / ADMIN / SALES）
       responses:
-        "200":
+        '200':
           description: 使用者清單
           content:
             application/json:
@@ -412,13 +412,13 @@ paths:
                   items:
                     type: array
                     items:
-                      $ref: "#/components/schemas/User"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                      $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
     post:
       summary: 建立使用者
@@ -434,9 +434,9 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateUserInput"
+              $ref: '#/components/schemas/CreateUserInput'
       responses:
-        "201":
+        '201':
           description: 建立成功，回傳新使用者 ID
           content:
             application/json:
@@ -445,12 +445,12 @@ paths:
                 properties:
                   id:
                     type: string
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /users/{id}:
     patch:
@@ -474,9 +474,9 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateUserInput"
+              $ref: '#/components/schemas/UpdateUserInput'
       responses:
-        "200":
+        '200':
           description: 更新成功，回傳使用者 ID
           content:
             application/json:
@@ -485,14 +485,14 @@ paths:
                 properties:
                   id:
                     type: string
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
     delete:
       summary: 刪除使用者
@@ -511,7 +511,7 @@ paths:
             type: string
           description: 使用者 ID
       responses:
-        "200":
+        '200':
           description: 刪除成功，回傳使用者 ID
           content:
             application/json:
@@ -520,12 +520,12 @@ paths:
                 properties:
                   id:
                     type: string
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ==========================================================
   # Visualization API (FR-07: 衝突或訂單變更視覺化)
@@ -552,7 +552,7 @@ paths:
             type: string
             format: date
       responses:
-        "200":
+        '200':
           description: 視覺化與時間軸資料
           content:
             application/json:
@@ -603,7 +603,7 @@ components:
         name:
           type: string
         role:
-          $ref: "#/components/schemas/UserRole"
+          $ref: '#/components/schemas/UserRole'
         group:
           type: string
 
@@ -617,7 +617,7 @@ components:
         adminId:
           type: string
         status:
-          $ref: "#/components/schemas/FactoryStatus"
+          $ref: '#/components/schemas/FactoryStatus'
 
     Order:
       type: object
@@ -625,7 +625,7 @@ components:
         id:
           type: string
         status:
-          $ref: "#/components/schemas/OrderStatus"
+          $ref: '#/components/schemas/OrderStatus'
         dueDate:
           type: string
           format: date-time
@@ -685,7 +685,7 @@ components:
       type: object
       properties:
         status:
-          $ref: "#/components/schemas/OrderStatus"
+          $ref: '#/components/schemas/OrderStatus'
         dueDate:
           type: string
           format: date-time
@@ -723,7 +723,7 @@ components:
         newSchedule:
           type: array
           items:
-            $ref: "#/components/schemas/Order"
+            $ref: '#/components/schemas/Order'
         affectedOrders:
           type: array
           items:
@@ -743,7 +743,7 @@ components:
           type: string
           example: Alice Wang
         role:
-          $ref: "#/components/schemas/UserRole"
+          $ref: '#/components/schemas/UserRole'
         group:
           type: string
           description: Production type (A / B / C). 若未填，預設繼承 SUPERADMIN 的 group。
@@ -757,7 +757,7 @@ components:
           type: string
           example: Bob Chen
         role:
-          $ref: "#/components/schemas/UserRole"
+          $ref: '#/components/schemas/UserRole'
         group:
           type: string
           nullable: true
@@ -783,7 +783,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorResponse"
+            $ref: '#/components/schemas/ErrorResponse'
           example:
             code: UNAUTHORIZED
             message: Missing or invalid token
@@ -793,7 +793,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorResponse"
+            $ref: '#/components/schemas/ErrorResponse'
           example:
             code: FORBIDDEN
             message: "Role 'SALES' is not allowed. Required: SUPERADMIN."
@@ -803,7 +803,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorResponse"
+            $ref: '#/components/schemas/ErrorResponse'
           example:
             code: BAD_REQUEST
             message: Invalid request body.
@@ -813,7 +813,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorResponse"
+            $ref: '#/components/schemas/ErrorResponse'
           example:
             code: NOT_FOUND
             message: User not found.
