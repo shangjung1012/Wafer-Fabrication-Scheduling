@@ -325,6 +325,18 @@ function GanttCell({
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// Extracts production type (A/B/C) from dev token userId segment
+// e.g. dev:SUPERADMIN:sa-A → "A",  dev:ADMIN:admin-B1 → "B"
+function deriveProductionType(token: string): string {
+  const userId = token.split(":")[2] ?? "";
+  const match  = userId.match(/[A-C]/i);
+  return match ? match[0].toUpperCase() : "";
+}
+
+// ---------------------------------------------------------------------------
 // Dev token management
 // ---------------------------------------------------------------------------
 
@@ -333,8 +345,11 @@ const DEV_USERS = [
   { label: "SUPERADMIN sa-B (Type B)", token: "dev:SUPERADMIN:sa-B" },
   { label: "SUPERADMIN sa-C (Type C)", token: "dev:SUPERADMIN:sa-C" },
   { label: "ADMIN admin-A1 (Factory A1)", token: "dev:ADMIN:admin-A1" },
+  { label: "ADMIN admin-A2 (Factory A2)", token: "dev:ADMIN:admin-A2" },
   { label: "ADMIN admin-B1 (Factory B1)", token: "dev:ADMIN:admin-B1" },
+  { label: "ADMIN admin-B2 (Factory B2)", token: "dev:ADMIN:admin-B2" },
   { label: "ADMIN admin-C1 (Factory C1)", token: "dev:ADMIN:admin-C1" },
+  { label: "ADMIN admin-C2 (Factory C2)", token: "dev:ADMIN:admin-C2" },
 ];
 
 function useToken() {
@@ -361,6 +376,7 @@ const DEFAULT_START = "2026-05-10";
 const DEFAULT_END   = "2026-05-23";
 
 type FetchError = { status: number; message: string };
+type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
 
 export default function SchedulePage() {
   const { token, setToken } = useToken();
@@ -370,8 +386,10 @@ export default function SchedulePage() {
   const [loading, setLoading]     = useState(true);
   const [fetchError, setFetchError] = useState<FetchError | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ factoryId: string; date: string } | null>(null);
+  const [refreshKey, setRefreshKey]     = useState(0);
+  const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>("idle");
 
-  // Fetch data
+  // Fetch timeline data
   useEffect(() => {
     setLoading(true);
     setFetchError(null);
@@ -393,7 +411,35 @@ export default function SchedulePage() {
         setFetchError({ status: 0, message: "Network error" });
         setLoading(false);
       });
-  }, [token, startDate, endDate]);
+  }, [token, startDate, endDate, refreshKey]);
+
+  // Run schedule handler
+  const handleRunSchedule = async () => {
+    const type = deriveProductionType(token);
+    if (!type) return;
+    setScheduleStatus("running");
+    try {
+      const res = await fetch("/api/schedule/run", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ type }),
+      });
+      if (res.status === 409) {
+        setScheduleStatus("conflict");
+      } else if (res.ok) {
+        setScheduleStatus("success");
+        setRefreshKey((k) => k + 1);
+      } else {
+        setScheduleStatus("error");
+      }
+    } catch {
+      setScheduleStatus("error");
+    }
+    setTimeout(() => setScheduleStatus("idle"), 4000);
+  };
 
   // Build date columns
   const dates = useMemo(() => {
@@ -480,6 +526,24 @@ export default function SchedulePage() {
               <option key={u.token} value={u.token}>{u.label}</option>
             ))}
           </select>
+        </div>
+
+        {/* Run Schedule */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRunSchedule}
+            disabled={scheduleStatus === "running"}
+            className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
+              scheduleStatus === "running"
+                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                : "bg-green-600 text-white border-green-600 hover:bg-green-700"
+            }`}
+          >
+            {scheduleStatus === "running" ? "Running…" : `▶ Run Schedule (Type ${deriveProductionType(token)})`}
+          </button>
+          {scheduleStatus === "success"  && <span className="text-xs text-green-600 font-medium">Scheduled ✓</span>}
+          {scheduleStatus === "conflict" && <span className="text-xs text-yellow-600 font-medium">Already running</span>}
+          {scheduleStatus === "error"    && <span className="text-xs text-red-600 font-medium">Failed</span>}
         </div>
 
         {/* Date range */}

@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const lockKey = `schedule:lock:${type}`;
 
     // Acquire Redis Lock (Fail-fast, 5-minute expiry)
-    const lockAcquired = await redis.set(lockKey, "locked", "NX", "EX", 300);
+    const lockAcquired = await redis.set(lockKey, "locked", "EX", 300, "NX");
     if (!lockAcquired) {
       return NextResponse.json(
         {
