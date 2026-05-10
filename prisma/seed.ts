@@ -25,6 +25,7 @@ import {
   OrderStatus,
   AssignmentStatus,
 } from "../lib/generated/prisma/client";
+import { hashPassword } from "../modules/auth/password-service";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -44,6 +45,7 @@ function d(dateStr: string): Date {
 
 type SeedUser = {
   id: string;
+  accountId: string;
   name: string;
   role: UserRole;
   group: string;
@@ -92,11 +94,32 @@ const PRODUCTION_TYPES = ["A", "B", "C"] as const;
 function buildUsers(): SeedUser[] {
   const users: SeedUser[] = [];
   for (const t of PRODUCTION_TYPES) {
-    users.push({ id: `sa-${t}`,    name: `SuperAdmin ${t}`, role: "SUPERADMIN", group: t });
+    users.push({
+      id: `sa-${t}`,
+      accountId: `sa-${t}`,
+      name: `SuperAdmin ${t}`,
+      role: "SUPERADMIN",
+      group: t,
+    });
+
+    // ADMIN per factory (3 factories per type)
     for (let i = 1; i <= 3; i++) {
-      users.push({ id: `admin-${t}${i}`, name: `Admin ${t}${i}`, role: "ADMIN", group: t });
+      users.push({
+        id: `admin-${t}${i}`,
+        accountId: `admin-${t}${i}`,
+        name: `Admin ${t}${i}`,
+        role: "ADMIN",
+        group: t,
+      });
     }
-    users.push({ id: `sales-${t}`, name: `Sales ${t}`,      role: "SALES",      group: t });
+
+    users.push({
+      id: `sales-${t}`,
+      accountId: `sales-${t}`,
+      name: `Sales ${t}`,
+      role: "SALES",
+      group: t,
+    });
   }
   return users;
 }
@@ -263,11 +286,25 @@ function buildDailyCapacities(assignments: SeedAssignment[]): SeedDailyCapacity[
 
 async function seedUsers(users: SeedUser[]) {
   console.log(`  Upserting ${users.length} users…`);
+  const password = await hashPassword("Password123!");
   for (const u of users) {
     await prisma.user.upsert({
       where: { id: u.id },
-      create: { id: u.id, name: u.name, role: u.role, group: u.group },
-      update: { name: u.name, role: u.role, group: u.group },
+      create: {
+        id: u.id,
+        accountId: u.accountId,
+        name: u.name,
+        password,
+        role: u.role,
+        group: u.group,
+      },
+      update: {
+        accountId: u.accountId,
+        name: u.name,
+        password,
+        role: u.role,
+        group: u.group,
+      },
     });
   }
 }

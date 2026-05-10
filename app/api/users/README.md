@@ -5,7 +5,7 @@
 | Method | Path | 說明 | 權限 |
 |---|---|---|---|
 | GET | `/api/users` | 列出使用者（`?role=` filter） | SUPERADMIN |
-| POST | `/api/users` | 建立使用者 | SUPERADMIN |
+| POST | `/api/users` | 建立使用者（需 `accountId`，可選 `password`） | SUPERADMIN |
 | PATCH | `/api/users/:id` | 修改 name / role / group | SUPERADMIN |
 | DELETE | `/api/users/:id` | 刪除使用者 | SUPERADMIN |
 
@@ -42,7 +42,7 @@ Next.js 把 HTTP request 交給這個 route handler。第一件事是呼叫 `req
 service 確認授權和 scope 之後，呼叫 `findUsers(db, { group: "A" })`，實際執行 Prisma query：
 
 ```ts
-prisma.user.findMany({ where: { group: "A" }, select: { id, name, role, group } })
+prisma.user.findMany({ where: { group: "A" }, select: { id, accountId, name, role, group } })
 ```
 
 回傳原始 DB 資料給 service。

@@ -10,6 +10,7 @@ import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
 import type { RequestContext } from "@/modules/auth/request-context";
 import { requireRole, ForbiddenError, NotFoundError } from "@/modules/auth/rbac";
 import { resolveActorScope, getScopeGroup } from "@/modules/auth/scope";
+import { hashPassword } from "@/modules/auth/password-service";
 import {
   findUsers,
   findUserById,
@@ -48,9 +49,11 @@ export async function listUsers(
 }
 
 export type CreateUserServiceInput = {
+  accountId: string;
   name: string;
   role: UserRole;
   group?: string | null;
+  password?: string | null;
 };
 
 export async function createUserService(
@@ -76,16 +79,20 @@ export async function createUserService(
   }
 
   return createUser(db, {
+    accountId: input.accountId,
     name: input.name,
     role: input.role,
     group: targetGroup,
+    password: input.password ? await hashPassword(input.password) : null,
   } satisfies CreateUserInput);
 }
 
 export type UpdateUserServiceInput = {
+  accountId?: string;
   name?: string;
   role?: UserRole;
   group?: string | null;
+  password?: string | null;
 };
 
 export async function updateUserService(
@@ -123,7 +130,10 @@ export async function updateUserService(
     );
   }
 
-  const result = await updateUser(db, targetId, input satisfies UpdateUserInput);
+  const result = await updateUser(db, targetId, {
+    ...input,
+    password: input.password ? await hashPassword(input.password) : input.password,
+  } satisfies UpdateUserInput);
   if (!result) {
     throw new NotFoundError("User not found.");
   }

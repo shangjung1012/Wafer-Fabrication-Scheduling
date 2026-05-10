@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { RequestContext } from "@/modules/auth/request-context";
 import type { UserRole } from "@/modules/auth/request-context";
+import { verifyAccessToken } from "@/modules/auth/token-service";
 
 function parseBearerToken(request: Request): string | null {
   const raw = request.headers.get("authorization") ?? request.headers.get("Authorization");
@@ -81,7 +82,7 @@ export class UnauthorizedError extends Error {
  * Behavior:
  * - In development, accepts `dev:<ROLE>:<userId>` tokens for any role,
  *   or the legacy DEV_STATIC_TOKEN (resolves to SUPERADMIN).
- * - Otherwise, throws UnauthorizedError until real JWT verification is implemented.
+ * - Otherwise, verifies signed JWT access tokens and returns their identity payload.
  */
 export async function requireAuth(request: Request): Promise<RequestContext> {
   const requestId = getRequestId(request);
@@ -90,8 +91,21 @@ export async function requireAuth(request: Request): Promise<RequestContext> {
   const devCtx = devTokenContext(token, requestId);
   if (devCtx) return devCtx;
 
-  // TODO: Implement HS256 JWT verification using JWT_SECRET.
-  // Keep this function as the single entry point so all route handlers are consistent.
-  throw new UnauthorizedError();
-}
+  if (!token) {
+    throw new UnauthorizedError();
+  }
 
+  try {
+    const payload = await verifyAccessToken(token);
+    return {
+      requestId,
+      user: {
+        id: payload.sub,
+        role: payload.role,
+        accountId: payload.accountId,
+      },
+    };
+  } catch {
+    throw new UnauthorizedError();
+  }
+}

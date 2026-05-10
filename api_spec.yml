@@ -25,18 +25,22 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, password, role]
+              required: [accountId, name, password, role, group]
               properties:
+                accountId:
+                  type: string
+                  description: 員編或登入帳號（唯一）
                 name:
                   type: string
-                  description: 姓名或員編
+                  description: 顯示名稱
                 password:
                   type: string
                 role:
                   $ref: '#/components/schemas/UserRole'
+                  description: 僅允許 ADMIN / SALES 自助註冊
                 group:
                   type: string
-                  description: 所屬群組或工廠編號
+                  description: production type，例如 A / B / C
       responses:
         '201':
           description: 註冊成功
@@ -44,11 +48,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /auth/login:
     post:
       summary: 使用者登入
-      description: 使用帳號/密碼進行登入，回傳 JWT Token。支援登入失敗鎖定機制。
+      description: 使用 accountId/password 進行登入，回傳 JWT access token 與 DB-backed refresh token。支援登入失敗鎖定機制。
       tags:
         - Auth
       security: []
@@ -58,9 +66,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, password]
+              required: [accountId, password]
               properties:
-                name:
+                accountId:
                   type: string
                 password:
                   type: string
@@ -78,6 +86,72 @@ paths:
                     type: string
                   user:
                     $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '423':
+          $ref: '#/components/responses/Locked'
+
+  /auth/refresh:
+    post:
+      summary: 更新 Access Token
+      description: 使用 refresh token 換發新的 access token 與 refresh token；舊 refresh token 會撤銷。
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  refreshToken:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      summary: 使用者登出
+      description: 撤銷指定 refresh token。
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
 
   # ==========================================================
   # Orders API (FR-03, FR-04: 訂單檢視、匯入/修改/刪除)
@@ -604,6 +678,8 @@ components:
       properties:
         id:
           type: string
+        accountId:
+          type: string
         name:
           type: string
         role:
@@ -748,8 +824,12 @@ components:
 
     CreateUserInput:
       type: object
-      required: [name, role]
+      required: [accountId, name, role]
       properties:
+        accountId:
+          type: string
+          description: 員編或登入帳號（唯一）
+          example: admin-A4
         name:
           type: string
           example: Alice Wang
@@ -759,11 +839,18 @@ components:
           type: string
           description: Production type (A / B / C). 若未填，預設繼承 SUPERADMIN 的 group。
           example: A
+        password:
+          type: string
+          description: 可選；未提供時使用者不可用密碼登入，直到後續設定密碼。
 
     UpdateUserInput:
       type: object
       description: 至少需提供一個欄位。
       properties:
+        accountId:
+          type: string
+          description: 員編或登入帳號（唯一）
+          example: admin-A4
         name:
           type: string
           example: Bob Chen
@@ -774,6 +861,10 @@ components:
           nullable: true
           description: Production type (A / B / C)
           example: B
+        password:
+          type: string
+          nullable: true
+          description: 可選；提供時會以 Argon2id 重新雜湊儲存。
 
     ErrorResponse:
       type: object
@@ -808,6 +899,26 @@ components:
           example:
             code: FORBIDDEN
             message: "Role 'SALES' is not allowed. Required: SUPERADMIN."
+
+    Conflict:
+      description: 資源衝突，例如 accountId 已存在或角色不允許自助註冊
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: AUTH_CONFLICT
+            message: Account ID is already registered.
+
+    Locked:
+      description: 帳號因登入失敗次數過多而暫時鎖定
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: ACCOUNT_LOCKED
+            message: Account is temporarily locked. Try again later.
 
     BadRequest:
       description: 請求格式錯誤或缺少必填欄位
