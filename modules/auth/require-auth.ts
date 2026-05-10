@@ -82,7 +82,7 @@ export class UnauthorizedError extends Error {
  * Behavior:
  * - In development, accepts `dev:<ROLE>:<userId>` tokens for any role,
  *   or the legacy DEV_STATIC_TOKEN (resolves to SUPERADMIN).
- * - Otherwise, throws UnauthorizedError until real JWT verification is implemented.
+ * - Otherwise, verifies signed JWT access tokens and returns their identity payload.
  */
 export async function requireAuth(request: Request): Promise<RequestContext> {
   const requestId = getRequestId(request);

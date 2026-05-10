@@ -9,7 +9,6 @@ import {
   refresh,
   register,
 } from "@/modules/auth/auth-service";
-import { hashPassword } from "@/modules/auth/password-service";
 import { hashRefreshToken, verifyAccessToken } from "@/modules/auth/token-service";
 
 function createDb() {
