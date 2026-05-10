@@ -235,10 +235,11 @@ export default function LoginPage() {
               />
             </label>
 
-            <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
-              Password
+            <div style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+              <label htmlFor="login-password">Password</label>
               <span style={{ display: "flex", gap: 8, marginTop: 6 }}>
                 <input
+                  id="login-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   type={showPassword ? "text" : "password"}
@@ -276,7 +277,7 @@ export default function LoginPage() {
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </span>
-            </label>
+            </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button
