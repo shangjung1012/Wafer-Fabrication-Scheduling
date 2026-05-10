@@ -87,6 +87,77 @@ function Result({ data }: { data: unknown }) {
   );
 }
 
+type OrderRow = {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  dueDate: string;
+  quantity: number;
+  applicantId: string;
+  lastModifiedById: string | null;
+};
+
+const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
+  PENDING:       { bg: "#fef9c3", color: "#854d0e" },
+  APPROVED:      { bg: "#dbeafe", color: "#1e40af" },
+  SCHEDULED:     { bg: "#e0f2fe", color: "#075985" },
+  IN_PRODUCTION: { bg: "#dcfce7", color: "#166534" },
+  COMPLETED:     { bg: "#f3f4f6", color: "#374151" },
+  CANCELLED:     { bg: "#fee2e2", color: "#991b1b" },
+};
+
+function OrderTable({ data }: { data: unknown }) {
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  const orders = data as OrderRow[];
+
+  return (
+    <div style={{ marginTop: 12, overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <thead>
+          <tr style={{ background: "#f9fafb", borderBottom: "2px solid #e5e7eb" }}>
+            {["Name", "Type", "Status", "Due Date", "Qty", "Applicant", "Last Modified By"].map((h) => (
+              <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151", whiteSpace: "nowrap" }}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((o, i) => {
+            const sc = STATUS_COLOR[o.status] ?? { bg: "#f3f4f6", color: "#374151" };
+            return (
+              <tr key={o.id} style={{ borderBottom: "1px solid #f3f4f6", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
+                <td style={{ padding: "6px 10px", fontWeight: 500, color: "#111827" }}>{o.name}</td>
+                <td style={{ padding: "6px 10px", color: "#6b7280" }}>{o.type}</td>
+                <td style={{ padding: "6px 10px" }}>
+                  <span style={{ background: sc.bg, color: sc.color, padding: "2px 7px", borderRadius: 99, fontWeight: 600, fontSize: 11 }}>
+                    {o.status}
+                  </span>
+                </td>
+                <td style={{ padding: "6px 10px", color: "#374151", whiteSpace: "nowrap" }}>
+                  {o.dueDate.slice(0, 10)}
+                </td>
+                <td style={{ padding: "6px 10px", color: "#374151", textAlign: "right" }}>
+                  {o.quantity.toLocaleString()}
+                </td>
+                <td style={{ padding: "6px 10px", fontFamily: "monospace", color: "#1d4ed8" }}>
+                  {o.applicantId}
+                </td>
+                <td style={{ padding: "6px 10px", fontFamily: "monospace", color: o.lastModifiedById ? "#7c3aed" : "#9ca3af" }}>
+                  {o.lastModifiedById ?? "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p style={{ marginTop: 6, fontSize: 11, color: "#9ca3af" }}>{orders.length} order(s)</p>
+    </div>
+  );
+}
+
 function Input({ label, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   return (
     <label style={{ display: "block", marginBottom: 6, fontSize: 13 }}>
@@ -355,7 +426,7 @@ export default function OrdersPage() {
         <Input label="Keyword (optional)" value={listKeyword} onChange={(e) => setListKeyword(e.target.value)} placeholder="search name/type" />
         <Btn onClick={doListOrders}>Send</Btn>
         {listStatus && <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>HTTP {listStatus}</span>}
-        <Result data={listResult} />
+        <OrderTable data={listResult} />
       </Section>
 
       {/* 2. Get Order — all roles */}
