@@ -52,7 +52,7 @@ type SeedUser = {
 type SeedFactory = {
   id: string;
   productionType: string;
-  adminId: string;
+  adminIds: string[];
   status: FactoryStatus;
   maxCapacity: number;
 };
@@ -108,7 +108,7 @@ function buildFactories(): SeedFactory[] {
       factories.push({
         id: `factory-${t}${i}`,
         productionType: t,
-        adminId: `admin-${t}${i}`,
+        adminIds: [`admin-${t}${i}`],
         status: "ACTIVE",
         maxCapacity: 1000,
       });
@@ -148,6 +148,11 @@ function buildOrders(): SeedOrder[] {
     { id: "ord-seed-011", name: "C-Wafer-02", type: "C", quantity: 600, dueDate: d("2026-05-18"), applicantId: "sales-C", status: "SCHEDULED"    },
     // ord-seed-012: split across C1 + C3
     { id: "ord-seed-012", name: "C-Wafer-03", type: "C", quantity: 900, dueDate: d("2026-05-23"), applicantId: "sales-C", status: "SCHEDULED"    },
+
+    // --- APPROVED (no assignments — ready for schedule engine) ---
+    { id: "ord-seed-013", name: "Wafer-Pending-A", type: "A", quantity: 500, dueDate: d("2026-06-10"), applicantId: "sales-A", status: "APPROVED" },
+    { id: "ord-seed-014", name: "B-Pending-01",    type: "B", quantity: 400, dueDate: d("2026-06-08"), applicantId: "sales-B", status: "APPROVED" },
+    { id: "ord-seed-015", name: "C-Pending-01",    type: "C", quantity: 700, dueDate: d("2026-06-12"), applicantId: "sales-C", status: "APPROVED" },
   ];
 }
 
@@ -275,13 +280,13 @@ async function seedFactories(factories: SeedFactory[]) {
       create: {
         id: f.id,
         productionType: f.productionType,
-        admin: { connect: { id: f.adminId } },
+        admins: { connect: f.adminIds.map((id) => ({ id })) },
         status: f.status,
         maxCapacity: f.maxCapacity,
       },
       update: {
         productionType: f.productionType,
-        admin: { connect: { id: f.adminId } },
+        admins: { set: f.adminIds.map((id) => ({ id })) },
         status: f.status,
         maxCapacity: f.maxCapacity,
       },
@@ -385,6 +390,11 @@ async function main() {
   console.log("  DUE_DATE  ord-seed-004 Wafer-Delta  production 5/13 > dueDate 5/12");
   console.log("  CAPACITY  factory-B1  2026-05-15  (400+350+300 = 1050 > 1000)");
   console.log("  DUE_DATE  ord-seed-007 B-Lot-02    production 5/15 > dueDate 5/14");
+  console.log("");
+  console.log("APPROVED orders (ready for schedule engine):");
+  console.log("  ord-seed-013  Wafer-Pending-A  type A  qty 500  due 2026-06-10");
+  console.log("  ord-seed-014  B-Pending-01     type B  qty 400  due 2026-06-08");
+  console.log("  ord-seed-015  C-Pending-01     type C  qty 700  due 2026-06-12");
   console.log("");
   console.log("Dev token examples:");
   console.log("  SUPERADMIN type A : dev:SUPERADMIN:sa-A");

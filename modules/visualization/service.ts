@@ -29,18 +29,8 @@ export async function getTimeline(
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
 
-  let scopedFilters: Parameters<typeof findFactoriesForVisualization>[1];
-
-  if (scope.role === "ADMIN") {
-    // ADMIN manages exactly one factory — enforce it
-    if (filters.factoryId && filters.factoryId !== scope.factoryId) {
-      throw new ForbiddenError("You can only view your own factory.");
-    }
-    scopedFilters = { ...filters, factoryId: scope.factoryId };
-  } else {
-    // SUPERADMIN sees all factories in their production type
-    scopedFilters = { ...filters, productionType: getScopeGroup(scope) };
-  }
+  // Both ADMIN and SUPERADMIN see all factories in their production type
+  const scopedFilters = { ...filters, productionType: getScopeGroup(scope) };
 
   const [factoryRows, assignmentRows, capacityRows] = await Promise.all([
     findFactoriesForVisualization(db, scopedFilters),

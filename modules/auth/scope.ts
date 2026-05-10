@@ -25,7 +25,7 @@ export type SalesScope = {
 export type AdminScope = {
   role: "ADMIN";
   userId: string;
-  factoryId: string;
+  factoryIds: string[];    // N-to-N: admin can manage multiple factories
   productionType: string;
   group: string;           // alias for productionType — use getScopeGroup() to avoid branching
 };
@@ -54,7 +54,7 @@ export function getScopeGroup(scope: ActorScope): string {
  * Resolves the caller's data-access scope by looking up their DB record.
  *
  * - SALES      → { userId, group }
- * - ADMIN      → { userId, factoryId, productionType }  (via Factory.adminId)
+ * - ADMIN      → { userId, factoryIds, productionType }  (via _FactoryAdmins N-to-N)
  * - SUPERADMIN → { userId, group }
  *
  * Throws ForbiddenError if the account is missing required scope data
@@ -77,19 +77,20 @@ export async function resolveActorScope(
     }
 
     case "ADMIN": {
-      const factory = await db.factory.findFirst({
-        where: { adminId: ctx.user.id },
+      const factories = await db.factory.findMany({
+        where: { admins: { some: { id: ctx.user.id } } },
         select: { id: true, productionType: true },
       });
-      if (!factory) {
+      if (factories.length === 0) {
         throw new ForbiddenError("Your account is not assigned to any factory.");
       }
+      const productionType = factories[0].productionType;
       return {
         role: "ADMIN",
         userId: ctx.user.id,
-        factoryId: factory.id,
-        productionType: factory.productionType,
-        group: factory.productionType,
+        factoryIds: factories.map((f) => f.id),
+        productionType,
+        group: productionType,
       };
     }
 

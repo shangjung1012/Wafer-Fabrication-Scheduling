@@ -1,8 +1,8 @@
 /**
  * app/api/users/route.ts
  *
- * GET  /api/users   — list users (SUPERADMIN only, scoped to own type)
- * POST /api/users   — create user (SUPERADMIN only, scoped to own type)
+ * GET  /api/users   — list users (ADMIN: SALES only | SUPERADMIN: all roles, scoped to own type)
+ * POST /api/users   — create user (ADMIN: SALES only | SUPERADMIN: any role, scoped to own type)
  */
 
 import { NextRequest, NextResponse } from "next/server";
