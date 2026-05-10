@@ -1,7 +1,8 @@
-import { PrismaClient, FactoryStatus } from "@/lib/generated/prisma/client";
+import type { PrismaClient } from "@/lib/generated/prisma";
+import { FactoryStatus } from "@/lib/generated/prisma";
 
 export async function findFactoriesWithCapacities(
-  db: PrismaClient | any,
+  db: PrismaClient,
   type: string,
 ) {
   return db.factory.findMany({

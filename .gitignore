@@ -24,9 +24,16 @@
 .DS_Store
 *.pem
 
-# local assistant/editor config
+# claude code and cursor local config and session cache
+CLAUDE.md
 .cursor/
 .claude/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # debug
 npm-debug.log*

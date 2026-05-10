@@ -142,9 +142,9 @@ describe("POST /api/schedule/run", () => {
     expect(redisSetMock).toHaveBeenCalledWith(
       "schedule:lock:Type A",
       "locked",
-      "NX",
       "EX",
       300,
+      "NX",
     );
     // Should not call runSchedule if locked
     expect(scheduleEngine.runSchedule).not.toHaveBeenCalled();
@@ -164,9 +164,9 @@ describe("POST /api/schedule/run", () => {
     expect(redisSetMock).toHaveBeenCalledWith(
       "schedule:lock:Type A",
       "locked",
-      "NX",
       "EX",
       300,
+      "NX",
     );
 
     // Engine called

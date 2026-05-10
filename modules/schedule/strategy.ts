@@ -25,10 +25,14 @@ export interface CapacityDraft {
   curCapacity: number;
 }
 
+export type ExistingCapacityDraft = CapacityDraft & {
+  id: string;
+};
+
 export interface StrategyResult {
   processedOrders: any[];
   newAssignments: OrderAssignmentDraft[];
-  updatedCapacities: CapacityDraft[];
+  updatedCapacities: ExistingCapacityDraft[];
   newCapacities: CapacityDraft[];
 }
 
@@ -232,7 +236,7 @@ export function greedyBestFitStrategy(
     if (cap.id) {
       const originalCap = capacities.find((c) => c.id === cap.id);
       if (originalCap && originalCap.curCapacity !== cap.curCapacity) {
-        result.updatedCapacities.push({ ...cap });
+        result.updatedCapacities.push({ ...cap, id: cap.id });
       }
     } else {
       // Dynamically created capacity that survived rollbacks

@@ -216,4 +216,4 @@ Seed 預建的資料（stable id，可重複執行）：
 - **`DailyCapacity` 按需生成**：不預建所有未來日期；排程模組在需要某天時才 upsert。
 - **`Factory.maxCapacity` 是預設值**：每天的 `DailyCapacity.maxAmount` 以此為初始值，但可個別覆寫（例如特殊假日降產）。
 - **`OrderAssignment` 支援拆單**：同一筆 `Order` 可跨工廠、跨日期分批生產；`assignedQuantity` 總和應等於 `Order.quantity`（由 application layer 保證）。
-- **`generator client` 輸出到 `lib/generated/prisma`**：import 時用 `@/lib/generated/prisma`（alias `@` 對應根目錄）。
+- **`generator client` 輸出到 `lib/generated/prisma`**：PrismaClient import 使用 `@/lib/generated/prisma/client`，enum import 使用 `@/lib/generated/prisma/enums`。

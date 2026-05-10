@@ -22,12 +22,15 @@ describe("Schedule Engine - Database Integration", () => {
 
   beforeEach(async () => {
     try {
-      // Clean up relevant tables before each test to ensure a clean state
-      await prisma.orderAssignment.deleteMany();
-      await prisma.dailyCapacity.deleteMany();
-      await prisma.order.deleteMany();
-      await prisma.factory.deleteMany();
-      await prisma.user.deleteMany();
+      // Clean up only data created by this suite (scoped by productionType / name)
+      // to avoid wiping shared seed data used by other test suites.
+      await prisma.orderAssignment.deleteMany({ where: { factory: { productionType: "IntegrationType" } } });
+      await prisma.dailyCapacity.deleteMany({   where: { factory: { productionType: "IntegrationType" } } });
+      await prisma.order.deleteMany({           where: { type: "IntegrationType" } });
+      await prisma.factory.deleteMany({         where: { productionType: "IntegrationType" } });
+      await prisma.user.deleteMany({
+        where: { accountId: { in: ["test-applicant-1", "test-applicant-2"] } },
+      });
     } catch (e) {
       // Ignore if DB isn't running
     }
@@ -42,6 +45,7 @@ describe("Schedule Engine - Database Integration", () => {
       // 1. Seed initial data
       const applicant = await prisma.user.create({
         data: {
+          accountId: "test-applicant-1",
           name: "Test Applicant",
           role: UserRole.SALES,
         },
@@ -115,7 +119,11 @@ describe("Schedule Engine - Database Integration", () => {
   it("should re-allocate and delete old assignments when rescheduling a SCHEDULED order", async () => {
     try {
       const applicant = await prisma.user.create({
-        data: { name: "Test Applicant", role: UserRole.SALES },
+        data: {
+          accountId: "test-applicant-2",
+          name: "Test Applicant",
+          role: UserRole.SALES,
+        },
       });
 
       const factoryA = await prisma.factory.create({
