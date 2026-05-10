@@ -314,14 +314,43 @@ paths:
           description: 已核准並套用變更
 
   # ==========================================================
-  # Schedules API (FR-05: 管理員修改排程)
+  # Schedule API (FR-05: 管理員修改排程)
   # ==========================================================
-  /schedules/preview:
+  /schedule/run:
+    post:
+      summary: 執行排程引擎
+      description: 手動或透過 Cron Job 觸發排程引擎。此操作具有分散式鎖定保護以避免併發衝突。
+      tags:
+        - Schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                  description: 要執行排程的產品類型 (例如 'Type A')
+      responses:
+        '200':
+          description: 排程執行成功
+        '400':
+          description: 請求參數錯誤
+        '401':
+          description: 未授權
+        '403':
+          description: 權限不足 (需為 SUPERADMIN 或 ADMIN)
+        '409':
+          description: 該類型的排程正在執行中 (Locked)
+
+  /schedule/preview:
     post:
       summary: 預覽排程變更 (甘特圖/衝突分析)
       description: 在實際生效前，預覽手動調整順序的影響範圍與衝突提示。
       tags:
-        - Schedules
+        - Schedule
       requestBody:
         required: true
         content:
@@ -336,11 +365,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/SchedulePreviewResult'
 
-  /schedules/apply:
+  /schedule/apply:
     post:
       summary: 確認並生效排程變更
       tags:
-        - Schedules
+        - Schedule
       requestBody:
         required: true
         content:
@@ -557,11 +586,11 @@ components:
     UserRole:
       type: string
       enum: [SUPERADMIN, ADMIN, SALES]
-    
+
     FactoryStatus:
       type: string
       enum: [ACTIVE, INACTIVE]
-    
+
     OrderStatus:
       type: string
       enum: [PENDING, APPROVED, SCHEDULED, IN_PRODUCTION, COMPLETED, CANCELLED]
