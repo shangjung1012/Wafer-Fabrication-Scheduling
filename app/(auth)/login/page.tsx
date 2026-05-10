@@ -255,13 +255,22 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   title={showPassword ? "Hide password" : "Show password"}
                   style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flex: "0 0 42px",
                     width: 42,
+                    height: 42,
+                    padding: 0,
                     border: "1px solid #cbd5e1",
                     borderRadius: 6,
                     background: "#fff",
+                    color: "#0f172a",
                     cursor: "pointer",
+                    lineHeight: 1,
                   }}
                 >
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
