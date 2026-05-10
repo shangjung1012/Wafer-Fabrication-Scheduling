@@ -1,44 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 
-// ---------------------------------------------------------------------------
-// Token management
-// ---------------------------------------------------------------------------
+import {
+  logoutClientAuthSession,
+  type ClientAuthSession,
+} from "@/modules/auth/client-session";
+import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 
-const DEV_USERS = [
-  { label: "SUPERADMIN sa-A", token: "dev:SUPERADMIN:sa-A" },
-  { label: "SUPERADMIN sa-B", token: "dev:SUPERADMIN:sa-B" },
-  { label: "ADMIN admin-A1",  token: "dev:ADMIN:admin-A1" },
-  { label: "ADMIN admin-A2",  token: "dev:ADMIN:admin-A2" },
-  { label: "ADMIN admin-A3",  token: "dev:ADMIN:admin-A3" },
-  { label: "SALES sales-A",   token: "dev:SALES:sales-A" },
-  { label: "SALES sales-B",   token: "dev:SALES:sales-B" },
-];
-
-type Role = "SUPERADMIN" | "ADMIN" | "SALES";
-
-function parseRole(token: string): Role {
-  const part = token.split(":")[1] ?? "";
-  if (part === "SUPERADMIN" || part === "ADMIN" || part === "SALES") return part;
-  return "SALES";
-}
-
-function useToken() {
-  const [token, setTokenState] = useState(DEV_USERS[0].token);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("dev_token");
-    if (saved) setTokenState(saved);
-  }, []);
-
-  const setToken = (t: string) => {
-    localStorage.setItem("dev_token", t);
-    setTokenState(t);
-  };
-
-  return { token, setToken };
-}
+type Role = ClientAuthSession["user"]["role"];
 
 function apiFetch(token: string, path: string, options: RequestInit = {}) {
   return fetch(path, {
@@ -209,13 +180,19 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 // ---------------------------------------------------------------------------
 
 export default function OrdersPage() {
-  const { token, setToken } = useToken();
-  const role = parseRole(token);
+  const router = useRouter();
+  const session = useClientAuthSession();
+  const token = session?.accessToken ?? "";
+  const role: Role = session?.user.role ?? "SALES";
 
   const isSales = role === "SALES";
   const isAdmin = role === "ADMIN";
   const isSuperAdmin = role === "SUPERADMIN";
   const isAdminOrSuper = isAdmin || isSuperAdmin;
+
+  useEffect(() => {
+    if (session === null) router.replace("/login");
+  }, [router, session]);
 
   // ---- List Orders ----
   const [listResult, setListResult] = useState<unknown>(null);
@@ -372,6 +349,11 @@ export default function OrdersPage() {
     setApproveStatus(`${res.status}`);
   }, [token, approveReqId]);
 
+  const handleLogout = useCallback(async () => {
+    await logoutClientAuthSession(session?.refreshToken);
+    router.replace("/login");
+  }, [router, session?.refreshToken]);
+
   // ---------------------------------------------------------------------------
   // Role badge colour
   // ---------------------------------------------------------------------------
@@ -386,27 +368,52 @@ export default function OrdersPage() {
   // Render
   // ---------------------------------------------------------------------------
 
+  if (session === undefined) {
+    return (
+      <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 800, margin: "0 auto", padding: 24 }}>
+        Loading session...
+      </div>
+    );
+  }
+
+  if (session === null) {
+    return (
+      <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 800, margin: "0 auto", padding: 24 }}>
+        Redirecting to login...
+      </div>
+    );
+  }
+
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 800, margin: "0 auto", padding: 24 }}>
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>WOMS — API Test UI</h1>
 
-      {/* Token selector */}
       <div style={{
         marginBottom: 24, padding: 12, background: "#f0f4ff", borderRadius: 8,
         display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
       }}>
-        <label style={{ fontSize: 13, fontWeight: 600 }}>Acting as:</label>
-        <select
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          style={{ padding: "4px 8px", fontSize: 13, borderRadius: 4, border: "1px solid #ccc" }}
-        >
-          {DEV_USERS.map((u) => (
-            <option key={u.token} value={u.token}>{u.label}</option>
-          ))}
-        </select>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Signed in as:</span>
+        <strong style={{ fontSize: 13 }}>{session.user.name}</strong>
+        <span style={{ fontSize: 12, color: "#555" }}>({session.user.accountId})</span>
         <span style={roleBadgeStyle}>{role}</span>
-        <span style={{ fontSize: 11, color: "#666", fontFamily: "monospace" }}>{token}</span>
+        {session.user.group && (
+          <span style={{ fontSize: 12, color: "#555" }}>Group {session.user.group}</span>
+        )}
+        <button
+          type="button"
+          onClick={handleLogout}
+          style={{
+            marginLeft: "auto",
+            padding: "5px 10px",
+            fontSize: 13,
+            borderRadius: 4,
+            border: "1px solid #cbd5e1",
+            background: "#fff",
+            cursor: "pointer",
+          }}
+        >
+          Logout
+        </button>
       </div>
 
       {/* Role capability summary */}
