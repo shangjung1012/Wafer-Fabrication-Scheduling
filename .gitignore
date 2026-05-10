@@ -23,7 +23,15 @@
 # misc
 .DS_Store
 *.pem
-CLAUDE.md
+
+# claude code local config and session cache
+.claude/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # debug
 npm-debug.log*
