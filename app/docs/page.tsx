@@ -13,8 +13,13 @@
 import { useEffect, useRef } from "react";
 
 declare global {
+  type SwaggerUIBundleWithPresets = ((config: Record<string, unknown>) => void) & {
+    presets?: Record<string, unknown>;
+    SwaggerUIStandalonePreset?: unknown;
+  };
+
   interface Window {
-    SwaggerUIBundle: (config: Record<string, unknown>) => void;
+    SwaggerUIBundle: SwaggerUIBundleWithPresets;
   }
 }
 
@@ -46,7 +51,6 @@ export default function DocsPage() {
         ].filter(Boolean),
         layout: "BaseLayout",
         deepLinking: true,
-        // Pre-fill the dev token field so testers can authenticate immediately
         requestInterceptor: (req: { headers: Record<string, string> }) => req,
         // Show schemas expanded
         defaultModelsExpandDepth: 2,
@@ -93,22 +97,9 @@ export default function DocsPage() {
           OpenAPI 3.0
         </span>
 
-        {/* Dev auth tip */}
-        {process.env.NODE_ENV === "development" && (
-          <span
-            style={{
-              marginLeft: "auto",
-              fontSize: "12px",
-              color: "#fbbf24",
-              fontFamily: "monospace",
-            }}
-          >
-            🔑 dev token: dev:SUPERADMIN:sa-A
-          </span>
-        )}
       </div>
 
-      {/* Dev auth note */}
+      {/* Auth note */}
       {process.env.NODE_ENV === "development" && (
         <div
           style={{
@@ -121,7 +112,9 @@ export default function DocsPage() {
             fontFamily: "system-ui, sans-serif",
           }}
         >
-          <strong>Dev mode：</strong> 點右上角「Authorize」，輸入{" "}
+          <strong>Dev mode：</strong> 先到{" "}
+          <a href="/login" style={{ color: "#0369a1", fontWeight: 700 }}>/login</a>{" "}
+          登入取得 access token，再點右上角「Authorize」輸入{" "}
           <code
             style={{
               background: "#fef9c3",
@@ -130,11 +123,9 @@ export default function DocsPage() {
               fontFamily: "monospace",
             }}
           >
-            dev:SUPERADMIN:sa-A
-          </code>{" "}
-          即可在此頁直接發 API 請求。其他角色：
-          <code style={{ marginLeft: 8, fontFamily: "monospace" }}>dev:ADMIN:admin-A1</code>
-          <code style={{ marginLeft: 8, fontFamily: "monospace" }}>dev:SALES:sales-A</code>
+            Bearer &lt;accessToken&gt;
+          </code>
+          ，即可在此頁直接發 API 請求。
         </div>
       )}
 

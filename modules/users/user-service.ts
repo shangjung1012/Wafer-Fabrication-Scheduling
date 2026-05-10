@@ -2,12 +2,15 @@
  * modules/users/user-service.ts
  *
  * Business logic for User management.
- * All operations are restricted to SUPERADMIN, scoped to their production type (group).
+ * - SUPERADMIN: full CRUD over ADMIN + SALES users in their group (root)
+ * - ADMIN: CRUD over SALES users in their group only; cannot create/promote to ADMIN
  */
 
 import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
 import type { RequestContext } from "@/modules/auth/request-context";
-import { requireRole, ForbiddenError } from "@/modules/auth/rbac";
+import { requireRole, ForbiddenError, NotFoundError } from "@/modules/auth/rbac";
+import { resolveActorScope, getScopeGroup } from "@/modules/auth/scope";
+import { hashPassword } from "@/modules/auth/password-service";
 import {
   findUsers,
   findUserById,
@@ -18,25 +21,6 @@ import {
   type CreateUserInput,
   type UpdateUserInput,
 } from "@/infra/db/user-repository";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Returns the production type (group) for the authenticated SUPERADMIN.
- * Throws if missing — every SUPERADMIN must have a group set.
- */
-async function getAdminGroup(ctx: RequestContext, db: PrismaClient): Promise<string> {
-  const me = await db.user.findUnique({
-    where: { id: ctx.user.id },
-    select: { group: true },
-  });
-  if (!me?.group) {
-    throw new ForbiddenError("Your account does not have a production type (group) assigned.");
-  }
-  return me.group;
-}
 
 // ---------------------------------------------------------------------------
 // Service methods
@@ -51,17 +35,25 @@ export async function listUsers(
   db: PrismaClient,
   input: ListUsersInput = {}
 ): Promise<UserRow[]> {
-  requireRole(ctx, ["SUPERADMIN"]);
-  const group = await getAdminGroup(ctx, db);
+  requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
+  const scope = await resolveActorScope(ctx, db);
+  const group = getScopeGroup(scope);
 
-  // Scope: only users within the same production type
+  if (scope.role === "ADMIN") {
+    // ADMIN can only list SALES users in their group
+    return findUsers(db, { role: "SALES", group });
+  }
+
+  // SUPERADMIN: list by optional role filter, scoped to their group
   return findUsers(db, { role: input.role, group });
 }
 
 export type CreateUserServiceInput = {
+  accountId: string;
   name: string;
   role: UserRole;
   group?: string | null;
+  password?: string | null;
 };
 
 export async function createUserService(
@@ -69,10 +61,16 @@ export async function createUserService(
   db: PrismaClient,
   input: CreateUserServiceInput
 ): Promise<{ id: string }> {
-  requireRole(ctx, ["SUPERADMIN"]);
-  const adminGroup = await getAdminGroup(ctx, db);
+  requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
+  const scope = await resolveActorScope(ctx, db);
+  const adminGroup = getScopeGroup(scope);
 
-  // SUPERADMIN can only create users in their own type
+  if (scope.role === "ADMIN") {
+    if (input.role !== "SALES") {
+      throw new ForbiddenError("Admins can only create SALES users.");
+    }
+  }
+
   const targetGroup = input.group ?? adminGroup;
   if (targetGroup !== adminGroup) {
     throw new ForbiddenError(
@@ -81,16 +79,20 @@ export async function createUserService(
   }
 
   return createUser(db, {
+    accountId: input.accountId,
     name: input.name,
     role: input.role,
     group: targetGroup,
+    password: input.password ? await hashPassword(input.password) : null,
   } satisfies CreateUserInput);
 }
 
 export type UpdateUserServiceInput = {
+  accountId?: string;
   name?: string;
   role?: UserRole;
   group?: string | null;
+  password?: string | null;
 };
 
 export async function updateUserService(
@@ -99,13 +101,13 @@ export async function updateUserService(
   targetId: string,
   input: UpdateUserServiceInput
 ): Promise<{ id: string }> {
-  requireRole(ctx, ["SUPERADMIN"]);
-  const adminGroup = await getAdminGroup(ctx, db);
+  requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
+  const scope = await resolveActorScope(ctx, db);
+  const adminGroup = getScopeGroup(scope);
 
-  // Verify target user exists and is in the same type
   const target = await findUserById(db, targetId);
   if (!target) {
-    return Promise.reject(Object.assign(new Error("User not found."), { status: 404, code: "NOT_FOUND" }));
+    throw new NotFoundError("User not found.");
   }
   if (target.group !== adminGroup) {
     throw new ForbiddenError(
@@ -113,16 +115,27 @@ export async function updateUserService(
     );
   }
 
-  // Prevent changing group to a different type
+  if (scope.role === "ADMIN") {
+    if (target.role !== "SALES") {
+      throw new ForbiddenError("Admins can only update SALES users.");
+    }
+    if (input.role && input.role !== "SALES") {
+      throw new ForbiddenError("Admins cannot promote users to ADMIN or SUPERADMIN.");
+    }
+  }
+
   if (input.group !== undefined && input.group !== adminGroup) {
     throw new ForbiddenError(
       `Cannot move user to type '${input.group}'. You manage type '${adminGroup}'.`
     );
   }
 
-  const result = await updateUser(db, targetId, input satisfies UpdateUserInput);
+  const result = await updateUser(db, targetId, {
+    ...input,
+    password: input.password ? await hashPassword(input.password) : input.password,
+  } satisfies UpdateUserInput);
   if (!result) {
-    return Promise.reject(Object.assign(new Error("User not found."), { status: 404, code: "NOT_FOUND" }));
+    throw new NotFoundError("User not found.");
   }
   return result;
 }
@@ -132,18 +145,17 @@ export async function deleteUserService(
   db: PrismaClient,
   targetId: string
 ): Promise<{ id: string }> {
-  requireRole(ctx, ["SUPERADMIN"]);
-  const adminGroup = await getAdminGroup(ctx, db);
+  requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
+  const scope = await resolveActorScope(ctx, db);
+  const adminGroup = getScopeGroup(scope);
 
-  // Cannot delete yourself
   if (targetId === ctx.user.id) {
     throw new ForbiddenError("You cannot delete your own account.");
   }
 
-  // Verify target exists and is in scope
   const target = await findUserById(db, targetId);
   if (!target) {
-    return Promise.reject(Object.assign(new Error("User not found."), { status: 404, code: "NOT_FOUND" }));
+    throw new NotFoundError("User not found.");
   }
   if (target.group !== adminGroup) {
     throw new ForbiddenError(
@@ -151,9 +163,13 @@ export async function deleteUserService(
     );
   }
 
+  if (scope.role === "ADMIN" && target.role !== "SALES") {
+    throw new ForbiddenError("Admins can only delete SALES users.");
+  }
+
   const result = await deleteUser(db, targetId);
   if (!result) {
-    return Promise.reject(Object.assign(new Error("User not found."), { status: 404, code: "NOT_FOUND" }));
+    throw new NotFoundError("User not found.");
   }
   return result;
 }
