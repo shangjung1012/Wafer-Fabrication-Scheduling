@@ -26,6 +26,7 @@
 
 # claude code local config and session cache
 .claude/
+.cursor/
 
 # IDE
 .vscode/
