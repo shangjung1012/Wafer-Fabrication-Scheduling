@@ -12,9 +12,10 @@
 
 - 一律以 server-side user context（token + DB）判斷：
   - `User.role`（SUPERADMIN/ADMIN/SALES）
-  - `Factory.productionType` 與 `Order.type`
-  - `Order.factoryId`
-  - `OrderPermission`（若有）
+  - `User.group`（production type A/B/C）
+  - `Factory.adminId`（ADMIN 的工廠歸屬）
+  - `OrderAssignment.factoryId`（訂單與工廠的對應）
+- 實作模式見 `docs/auth_service_guide.md`
 - 禁止依賴 request body/query 傳入 role/scope（可作為 filter 但不可作為權限來源）
 
 ## Minimum gates by endpoint category

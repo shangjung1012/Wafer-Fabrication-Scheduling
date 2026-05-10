@@ -564,7 +564,11 @@ components:
     
     OrderStatus:
       type: string
-      enum: [PENDING, SCHEDULED, IN_PRODUCTION, COMPLETED, CANCELLED]
+      enum: [PENDING, APPROVED, SCHEDULED, IN_PRODUCTION, COMPLETED, CANCELLED]
+
+    AssignmentStatus:
+      type: string
+      enum: [SCHEDULED, IN_PRODUCTION, COMPLETED, CANCELLED]
 
     User:
       type: object
@@ -600,9 +604,6 @@ components:
         dueDate:
           type: string
           format: date-time
-        productionDate:
-          type: string
-          format: date-time
         quantity:
           type: integer
         applicantId:
@@ -611,8 +612,7 @@ components:
           type: string
         type:
           type: string
-        factoryId:
-          type: string
+          description: Production type (A | B | C), auto-assigned from the caller's scope
         createdAt:
           type: string
           format: date-time
@@ -621,6 +621,28 @@ components:
           format: date-time
         lastModifiedById:
           type: string
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderAssignment'
+
+    OrderAssignment:
+      type: object
+      description: A dispatched sub-order assigned to a specific factory on a specific date
+      properties:
+        id:
+          type: string
+        orderId:
+          type: string
+        factoryId:
+          type: string
+        status:
+          $ref: '#/components/schemas/AssignmentStatus'
+        productionDate:
+          type: string
+          format: date-time
+        assignedQuantity:
+          type: integer
 
     OrderRequest:
       type: object
@@ -638,39 +660,28 @@ components:
 
     OrderCreateInput:
       type: object
-      required: [dueDate, quantity, name, type]
+      required: [dueDate, quantity, name]
       properties:
+        name:
+          type: string
+        quantity:
+          type: integer
         dueDate:
           type: string
           format: date-time
-        quantity:
-          type: integer
-        name:
-          type: string
-        type:
-          type: string
-        factoryId:
-          type: string
 
     OrderUpdateInput:
       type: object
       properties:
-        status:
-          $ref: '#/components/schemas/OrderStatus'
+        name:
+          type: string
+        quantity:
+          type: integer
         dueDate:
           type: string
           format: date-time
-        productionDate:
-          type: string
-          format: date-time
-        quantity:
-          type: integer
-        name:
-          type: string
-        type:
-          type: string
-        factoryId:
-          type: string
+        status:
+          $ref: '#/components/schemas/OrderStatus'
 
     ScheduleUpdateInput:
       type: object

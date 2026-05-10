@@ -10,11 +10,16 @@
 
 ## DB access layering
 
-推薦：
-- `infra/db/*` 放 Prisma client 初始化與 repository helpers
-- `modules/*` 不直接 new PrismaClient；只透過 `infra` 取得 client 或 repository
+- `lib/prisma.ts` — Prisma client singleton（已建立，使用 Prisma 7 + `@prisma/adapter-pg`）
+- `infra/db/*` — repository functions，所有 DB 存取在這一層
+- `modules/*` — 不直接呼叫 PrismaClient；只 import repository functions
 
-> 目前 `infra/db/` 只有 `.keep`，後續若建立 client，建議固定為 `infra/db/client.ts`。
+```ts
+// 在 service 層 import client 的正確方式
+import { prisma } from "@/lib/prisma";
+// 在 route handler 層傳入 service
+await listOrders(ctx, prisma, input);
+```
 
 ## Migration workflow (scripts in package.json)
 
@@ -25,9 +30,9 @@
 
 ## Data modeling guidelines
 
-- enum 以 Prisma enum 為準：`UserRole`, `OrderStatus`, `FactoryStatus`
+- enum 以 Prisma enum 為準：`UserRole`, `OrderStatus`, `AssignmentStatus`, `FactoryStatus`
 - 一律使用 `cuid()` 或 `uuid()` 產生 id（目前使用 `cuid()`）
-- 任何授權相關資料必須在 DB 有 trace（例如 `OrderPermission`、`Factory.adminId`）
+- 任何授權相關資料必須在 DB 有 trace（例如 `Factory.adminId`、`User.group`）
 
 ## Transactions
 

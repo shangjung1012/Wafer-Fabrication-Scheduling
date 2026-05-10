@@ -11,7 +11,7 @@
 - ADMIN 管理該工廠下的所有業務（SALES）
 - SALES 只能看到訂單狀態（以及被允許看到的訂單）
 
-> Prisma 目前的 RBAC 主要靠 `User.role`；scope 的資料可能分散在 `Factory.adminId`、`User.group?`、`Order.factoryId`、`OrderPermission`。
+> Prisma 目前的 RBAC 主要靠 `User.role`；scope 的資料分散在 `Factory.adminId`、`User.group`、`OrderAssignment.factoryId`。
 
 ## Roles (as of Prisma enum `UserRole`)
 
@@ -25,7 +25,7 @@
 
 - **type scope**: 使用者所屬 production type（A/B/C）
 - **factory scope**: 使用者可管理/檢視的 factory IDs
-- **order scope**: 使用者可檢視/操作的 order IDs（例：`OrderPermission`）
+- **order scope**: 使用者可檢視/操作的 order IDs（SALES：`Order.applicantId = user.id`）
 
 ### Scope sources (mapping to current schema)
 
@@ -35,7 +35,7 @@
 - `factory scope`:
   - ADMIN/SUPERADMIN：由 `Factory.adminId = user.id` 或「superadmin 持有該 type 的全部 factories」推導
 - `order scope`:
-  - SALES：由 `Order.applicantId = user.id` + `OrderPermission(userId, orderId)` 合併
+  - SALES：由 `Order.applicantId = user.id` 決定（只能看到自己建立的訂單）
 
 ## Authorization decision order
 
@@ -58,5 +58,5 @@
 | Assign order to factory | no | no | yes |
 | Manage users/permissions | no | no | yes (type) |
 
-> 這張表是「產品規格」；實作上可用更多 granular permissions（見 `OrderPermission`）。
+> 這張表是「產品規格」；授權實作見 `docs/auth_service_guide.md`。
 

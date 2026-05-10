@@ -43,10 +43,11 @@ flowchart TD
 
 以 Prisma schema 為準：
 - `User { role: SUPERADMIN | ADMIN | SALES, group?: string }`
-- `Factory { productionType: string, adminId?, status, maxCapacity, curCapacity }`
-- `Order { status, dueDate, productionDate?, quantity, type, factoryId?, applicantId, lastModifiedById? }`
-- `OrderRequest`（業務提出/修改申請）
-- `OrderPermission`（針對 order 的細粒度授權）
+- `Factory { productionType: string, adminId?, status, maxCapacity }`
+- `Order { status, dueDate, quantity, type, applicantId, lastModifiedById? }`
+- `OrderAssignment { orderId, factoryId, productionDate, assignedQuantity, status }`  — 派工單，支援拆單（一張 Order 可分配到多間工廠、多個日期）
+- `DailyCapacity { factoryId, date, maxCapacity, curCapacity }` — 每日產能追蹤；`@@unique([factoryId, date])`
+- `OrderRequest` — SALES 提出的修改申請
 
 參考：`prisma/schema.prisma`
 

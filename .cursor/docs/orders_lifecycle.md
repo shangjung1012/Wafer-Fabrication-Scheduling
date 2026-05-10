@@ -5,39 +5,46 @@
 ## Status enum (from Prisma / OpenAPI)
 
 `OrderStatus`：
-- `PENDING`
-- `SCHEDULED`
-- `IN_PRODUCTION`
-- `COMPLETED`
+- `PENDING` — SALES 剛建立，可修改，等待 ADMIN 審核
+- `APPROVED` — ADMIN 已核准，鎖定修改，進入待排程池
+- `SCHEDULED` — SUPERADMIN 已建立 OrderAssignment，派工完成
+- `IN_PRODUCTION` — 至少一張 OrderAssignment 進入生產
+- `COMPLETED` — 所有 OrderAssignment 完成
 - `CANCELLED`
 
 ## Recommended state transitions
 
 ```mermaid
 flowchart TD
-  PENDING --> SCHEDULED
-  SCHEDULED --> IN_PRODUCTION
-  IN_PRODUCTION --> COMPLETED
-  PENDING --> CANCELLED
-  SCHEDULED --> CANCELLED
-  IN_PRODUCTION --> CANCELLED
+  PENDING -->|ADMIN 核准| APPROVED
+  APPROVED -->|SUPERADMIN 分配工廠| SCHEDULED
+  SCHEDULED -->|生產開始| IN_PRODUCTION
+  IN_PRODUCTION -->|全部完成| COMPLETED
+  PENDING -->|取消| CANCELLED
+  APPROVED -->|取消| CANCELLED
+  SCHEDULED -->|取消| CANCELLED
+  IN_PRODUCTION -->|取消| CANCELLED
 ```
 
-限制（建議）：
+限制：
 - `COMPLETED` 不可回退
 - `CANCELLED` 不可回退
-- `productionDate` 只應在 `SCHEDULED` 之後才有值
+- `OrderAssignment`（productionDate、factoryId）只在 `SCHEDULED` 之後才存在
+
+## Who can trigger which transition
+
+| 轉換 | 操作者 |
+|---|---|
+| PENDING → APPROVED | ADMIN（factory scope）|
+| APPROVED → SCHEDULED | SUPERADMIN（建立 OrderAssignment）|
+| SCHEDULED → IN_PRODUCTION | ADMIN / SUPERADMIN |
+| * → CANCELLED | ADMIN / SUPERADMIN |
 
 ## Who can do what
 
-- **SALES**
-  - 檢視（受 scope 限制）
-  - 提交變更申請（`OrderRequest`），不直接改 order
-- **ADMIN**
-  - CRUD 該 factory 的 orders
-  - 調整排程（會影響 `productionDate/status`）
-- **SUPERADMIN**
-  - 具備 ADMIN 全權 + 跨工廠/同 type 的分配
+- **SALES** — 檢視自己建立的訂單；提交變更申請（`OrderRequest`），不直接改 order
+- **ADMIN** — 審核（PENDING → APPROVED）；管理已分配到其工廠的訂單與排程
+- **SUPERADMIN** — 分配訂單給工廠（APPROVED → SCHEDULED）；type 範圍內完整權限
 
 ## Audit fields
 
