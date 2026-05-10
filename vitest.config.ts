@@ -1,14 +1,8 @@
 import { defineConfig } from "vitest/config";
-import path from "path";
+import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      "@/lib/generated/prisma/client": path.resolve(__dirname, "./lib/generated/prisma/client"),
-      "@/lib/generated/prisma": path.resolve(__dirname, "./lib/generated/prisma/client"),
-      "@": path.resolve(__dirname, "./"),
-    },
-  },
+  plugins: [tsconfigPaths()],
   test: {
     environment: "node",
     globals: true,
