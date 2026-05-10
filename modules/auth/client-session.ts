@@ -15,8 +15,8 @@ export type ClientAuthSession = {
 const AUTH_ACCESS_TOKEN_KEY = "auth_access_token";
 const AUTH_REFRESH_TOKEN_KEY = "auth_refresh_token";
 const AUTH_USER_KEY = "auth_user";
-const ORDERS_TOKEN_KEY = "dev_token";
-const VISUALIZATION_TOKEN_KEY = "viz_dev_token";
+const LEGACY_ORDERS_TOKEN_KEY = "dev_token";
+const LEGACY_VISUALIZATION_TOKEN_KEY = "viz_dev_token";
 export const CLIENT_AUTH_SESSION_EVENT = "client-auth-session-change";
 
 function emitClientAuthSessionChange(): void {
@@ -46,8 +46,6 @@ export function persistClientAuthSession(session: ClientAuthSession): void {
   localStorage.setItem(AUTH_ACCESS_TOKEN_KEY, session.accessToken);
   localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, session.refreshToken);
   localStorage.setItem(AUTH_USER_KEY, JSON.stringify(session.user));
-  localStorage.setItem(ORDERS_TOKEN_KEY, session.accessToken);
-  localStorage.setItem(VISUALIZATION_TOKEN_KEY, session.accessToken);
   emitClientAuthSessionChange();
 }
 
@@ -56,8 +54,8 @@ export function clearClientAuthSession(): void {
   localStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
   localStorage.removeItem(AUTH_REFRESH_TOKEN_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
-  localStorage.removeItem(ORDERS_TOKEN_KEY);
-  localStorage.removeItem(VISUALIZATION_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_ORDERS_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_VISUALIZATION_TOKEN_KEY);
   emitClientAuthSessionChange();
 }
 

@@ -6,23 +6,17 @@
 
 ## 怎麼用
 
-### 1. 選角色
+### 1. 登入
 
-頁面最上方有一個下拉選單，選你要扮演的使用者：
+先到 `http://localhost:3000/login` 使用 seed 帳號登入，例如：
 
-| 選項 | 角色 | User ID |
+| Account ID | 角色 | 預設密碼 |
 |---|---|---|
-| SUPERADMIN sa-A | SUPERADMIN | sa-A |
-| SUPERADMIN sa-B | SUPERADMIN | sa-B |
-| ADMIN admin-A1 | ADMIN | admin-A1 |
-| ADMIN admin-A2 | ADMIN | admin-A2 |
-| ADMIN admin-A3 | ADMIN | admin-A3 |
-| SALES sales-A | SALES | sales-A |
-| SALES sales-B | SALES | sales-B |
+| `sa-A` | SUPERADMIN | `Password123!` |
+| `admin-A1` | ADMIN | `Password123!` |
+| `sales-A` | SALES | `Password123!` |
 
-選完後頁面會自動：
-- 切換所有 API call 的 `Authorization: Bearer dev:ROLE:userId` header
-- 隱藏這個角色沒有權限的操作區塊
+登入後再進 `/orders`。頁面會使用登入取得的 JWT access token 呼叫 API，並依目前帳號角色隱藏沒有權限的操作區塊。
 
 ### 2. 看哪些區塊出現
 
@@ -118,4 +112,4 @@ TestOrderB,A,2026-12-15,200
 
 ## Token 儲存
 
-選過的 token 會存在 `localStorage["dev_token"]`，重新整理頁面不會重置。
+登入 token 由 `/login` 寫入 `localStorage["auth_access_token"]`、`localStorage["auth_refresh_token"]` 與 `localStorage["auth_user"]`。登出時會清除目前 token 與舊版測試 token key。

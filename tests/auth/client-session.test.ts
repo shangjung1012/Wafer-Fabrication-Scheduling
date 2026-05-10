@@ -34,7 +34,7 @@ describe("client auth session", () => {
     installLocalStorage();
   });
 
-  it("persists and loads the login session for protected client pages", () => {
+  it("persists only the real login session for protected client pages", () => {
     persistClientAuthSession({
       accessToken: "access-token",
       refreshToken: "refresh-token",
@@ -52,11 +52,11 @@ describe("client auth session", () => {
       refreshToken: "refresh-token",
       user: { accountId: "sa-A", role: "SUPERADMIN", group: "A" },
     });
-    expect(localStorage.getItem("dev_token")).toBe("access-token");
-    expect(localStorage.getItem("viz_dev_token")).toBe("access-token");
+    expect(localStorage.getItem("dev_token")).toBeNull();
+    expect(localStorage.getItem("viz_dev_token")).toBeNull();
   });
 
-  it("clears all browser token keys on logout", () => {
+  it("clears active and legacy browser token keys on logout", () => {
     persistClientAuthSession({
       accessToken: "access-token",
       refreshToken: "refresh-token",
@@ -68,6 +68,8 @@ describe("client auth session", () => {
         group: "A",
       },
     });
+    localStorage.setItem("dev_token", "legacy-dev-token");
+    localStorage.setItem("viz_dev_token", "legacy-viz-token");
 
     clearClientAuthSession();
 

@@ -433,10 +433,10 @@ async function main() {
   console.log("  ord-seed-014  B-Pending-01     type B  qty 400  due 2026-06-08");
   console.log("  ord-seed-015  C-Pending-01     type C  qty 700  due 2026-06-12");
   console.log("");
-  console.log("Dev token examples:");
-  console.log("  SUPERADMIN type A : dev:SUPERADMIN:sa-A");
-  console.log("  ADMIN factory A1  : dev:ADMIN:admin-A1");
-  console.log("  SALES type A      : dev:SALES:sales-A");
+  console.log("Login examples:");
+  console.log("  accountId sa-A      password Password123!");
+  console.log("  accountId admin-A1  password Password123!");
+  console.log("  accountId sales-A   password Password123!");
 }
 
 main()
