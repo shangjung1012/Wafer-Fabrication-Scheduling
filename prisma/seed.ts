@@ -45,9 +45,8 @@ function d(dateStr: string): Date {
 
 type SeedUser = {
   id: string;
-  accountId: string;
+  username: string;
   email: string;
-  name: string;
   role: UserRole;
   group: string;
 };
@@ -97,9 +96,8 @@ function buildUsers(): SeedUser[] {
   for (const t of PRODUCTION_TYPES) {
     users.push({
       id: `sa-${t}`,
-      accountId: `sa-${t}`,
+      username: `sa-${t}`,
       email: `sa-${t.toLowerCase()}@mail.com`,
-      name: `SuperAdmin ${t}`,
       role: "SUPERADMIN",
       group: t,
     });
@@ -108,9 +106,8 @@ function buildUsers(): SeedUser[] {
     for (let i = 1; i <= 3; i++) {
       users.push({
         id: `admin-${t}${i}`,
-        accountId: `admin-${t}${i}`,
+        username: `admin-${t}${i}`,
         email: `admin-${t.toLowerCase()}${i}@mail.com`,
-        name: `Admin ${t}${i}`,
         role: "ADMIN",
         group: t,
       });
@@ -118,9 +115,8 @@ function buildUsers(): SeedUser[] {
 
     users.push({
       id: `sales-${t}`,
-      accountId: `sales-${t}`,
+      username: `sales-${t}`,
       email: `sales-${t.toLowerCase()}@mail.com`,
-      name: `Sales ${t}`,
       role: "SALES",
       group: t,
     });
@@ -565,17 +561,15 @@ async function seedUsers(users: SeedUser[]) {
       where: { id: u.id },
       create: {
         id: u.id,
-        accountId: u.accountId,
+        username: u.username,
         email: u.email,
-        name: u.name,
         password,
         role: u.role,
         group: u.group,
       },
       update: {
-        accountId: u.accountId,
+        username: u.username,
         email: u.email,
-        name: u.name,
         password,
         role: u.role,
         group: u.group,
@@ -723,9 +717,9 @@ async function main() {
   );
   console.log("");
   console.log("Login examples:");
-  console.log("  accountId sa-A      password Password123!");
-  console.log("  accountId admin-A1  password Password123!");
-  console.log("  accountId sales-A   password Password123!");
+  console.log("  username sa-A      password Password123!");
+  console.log("  username admin-A1  password Password123!");
+  console.log("  username sales-A   password Password123!");
 }
 
 main()

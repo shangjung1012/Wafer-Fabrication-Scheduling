@@ -7,21 +7,21 @@ import {
   issueRefreshToken,
   refreshTokenExpiresAt,
 } from "@/modules/auth/token-service";
+import { normalizeUsername } from "@/modules/auth/username";
 
 const LOGIN_LOCK_THRESHOLD = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
 export type SanitizedUser = {
   id: string;
-  accountId: string;
+  username: string;
   email: string;
-  name: string;
   role: UserRole;
   group: string | null;
 };
 
-type AuthUserRecord = Omit<SanitizedUser, "accountId"> & {
-  accountId: string | null;
+type AuthUserRecord = Omit<SanitizedUser, "username"> & {
+  username: string | null;
   password: string | null;
   failedLoginCount: number;
   lockedUntil: Date | null;
@@ -51,7 +51,7 @@ export class InvalidCredentialsError extends Error {
   readonly status = 401 as const;
   readonly code = "INVALID_CREDENTIALS" as const;
 
-  constructor(message = "Invalid account ID or password.") {
+  constructor(message = "Invalid username/email or password.") {
     super(message);
     this.name = "InvalidCredentialsError";
   }
@@ -89,14 +89,13 @@ export class SelfRegistrationDisabledError extends Error {
 
 export type RegisterInput = {
   email: string;
-  name: string;
   password: string;
   role: UserRole;
   group: string;
 };
 
 export type LoginInput = {
-  accountId: string;
+  username: string;
   password: string;
 };
 
@@ -117,9 +116,8 @@ export type AuthTokenResult = {
 function sanitizeUser(user: SanitizedUser): SanitizedUser {
   return {
     id: user.id,
-    accountId: user.accountId,
+    username: user.username,
     email: user.email,
-    name: user.name,
     role: user.role,
     group: user.group,
   };
@@ -149,7 +147,7 @@ async function issueAuthTokens(
     issueAccessToken({
       id: user.id,
       role: user.role,
-      accountId: user.accountId,
+      username: user.username,
     }),
     createStoredRefreshToken(db, user.id),
   ]);
@@ -208,13 +206,17 @@ export async function login(
   input: LoginInput,
   now = new Date(),
 ): Promise<AuthTokenResult> {
+  const identifier = input.username.trim();
+  const isEmailLogin = identifier.includes("@");
+  const username = normalizeUsername(identifier);
+  const email = identifier.toLowerCase();
+
   const user = (await db.user.findUnique({
-    where: { accountId: input.accountId },
+    where: isEmailLogin ? { email } : { username },
     select: {
       id: true,
-      accountId: true,
+      username: true,
       email: true,
-      name: true,
       password: true,
       role: true,
       group: true,
@@ -227,12 +229,11 @@ export async function login(
   const loginUser =
     user ??
     ((await db.user.findUnique({
-      where: { email: input.accountId },
+      where: { email },
       select: {
         id: true,
-        accountId: true,
+        username: true,
         email: true,
-        name: true,
         password: true,
         role: true,
         group: true,
@@ -242,7 +243,7 @@ export async function login(
       },
     })) as AuthUserRecord | null);
 
-  if (!loginUser?.password || !loginUser.accountId) {
+  if (!loginUser?.password || !loginUser.username) {
     throw new InvalidCredentialsError();
   }
 
@@ -261,7 +262,7 @@ export async function login(
 
   const sanitized = sanitizeUser({
     ...loginUser,
-    accountId: loginUser.accountId,
+    username: loginUser.username,
   });
   await db.user.update({
     where: { id: loginUser.id },
@@ -291,9 +292,8 @@ export async function refresh(
       user: {
         select: {
           id: true,
-          accountId: true,
+          username: true,
           email: true,
-          name: true,
           role: true,
           group: true,
         },
@@ -328,7 +328,7 @@ export async function refresh(
     accessToken: await issueAccessToken({
       id: existing.user.id,
       role: existing.user.role,
-      accountId: existing.user.accountId,
+      username: existing.user.username,
     }),
     refreshToken: nextRefreshToken,
     user: sanitizeUser(existing.user),

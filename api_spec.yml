@@ -30,7 +30,7 @@ paths:
   /auth/login:
     post:
       summary: 使用者登入
-      description: 使用 accountId 或 email 搭配 password 進行登入，回傳 JWT access token 與 DB-backed refresh token。支援登入失敗鎖定機制。
+      description: 使用 username 或 email 搭配 password 進行登入，回傳 JWT access token 與 DB-backed refresh token。支援登入失敗鎖定機制。
       tags:
         - Auth
       security: []
@@ -40,11 +40,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [accountId, password]
+              required: [username, password]
               properties:
-                accountId:
+                username:
                   type: string
-                  description: accountId 或 email
+                  description: username 或 email
                 password:
                   type: string
       responses:
@@ -154,7 +154,7 @@ paths:
   /auth/invitations/accept:
     post:
       summary: 接受邀請並設定密碼
-      description: 受邀者在 180 秒內設定 accountId 與 password，完成帳號啟用。
+      description: 受邀者在 180 秒內設定 username 與 password，完成帳號啟用。
       tags:
         - Auth
       security: []
@@ -583,7 +583,7 @@ paths:
     patch:
       summary: 修改使用者資料
       description: |
-        更新使用者的 name、role 或 group。
+        更新使用者的 username、email、role 或 group。
         至少需提供一個欄位。目標使用者必須屬於相同 production type。
       tags:
         - Permissions
@@ -731,14 +731,12 @@ components:
       properties:
         id:
           type: string
-        accountId:
+        username:
           type: string
           nullable: true
         email:
           type: string
           format: email
-        name:
-          type: string
         role:
           $ref: "#/components/schemas/UserRole"
         group:
@@ -881,15 +879,12 @@ components:
 
     CreateUserInput:
       type: object
-      required: [email, name, role, group]
+      required: [email, role, group]
       properties:
         email:
           type: string
           format: email
           example: admin-a4@mail.shangjung.com
-        name:
-          type: string
-          example: Alice Wang
         role:
           $ref: "#/components/schemas/UserRole"
         group:
@@ -905,8 +900,6 @@ components:
         email:
           type: string
           format: email
-        name:
-          type: string
         role:
           $ref: "#/components/schemas/UserRole"
         group:
@@ -923,8 +916,6 @@ components:
         email:
           type: string
           format: email
-        name:
-          type: string
         role:
           $ref: "#/components/schemas/UserRole"
         group:
@@ -936,11 +927,11 @@ components:
 
     AcceptInvitationInput:
       type: object
-      required: [token, accountId, password]
+      required: [token, username, password]
       properties:
         token:
           type: string
-        accountId:
+        username:
           type: string
           description: 受邀者自行設定的登入帳號（唯一）
         password:
@@ -950,13 +941,10 @@ components:
       type: object
       description: 至少需提供一個欄位。
       properties:
-        accountId:
+        username:
           type: string
           description: 員編或登入帳號（唯一）
           example: admin-A4
-        name:
-          type: string
-          example: Bob Chen
         role:
           $ref: "#/components/schemas/UserRole"
         group:
@@ -1004,14 +992,14 @@ components:
             message: "Role 'SALES' is not allowed. Required: SUPERADMIN."
 
     Conflict:
-      description: 資源衝突，例如 accountId 已存在或角色不允許自助註冊
+      description: 資源衝突，例如 username 已存在或角色不允許自助註冊
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
           example:
             code: AUTH_CONFLICT
-            message: Account ID is already registered.
+            message: Username is already registered.
 
     Locked:
       description: 帳號因登入失敗次數過多而暫時鎖定

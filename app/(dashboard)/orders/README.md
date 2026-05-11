@@ -10,7 +10,7 @@
 
 先到 `http://localhost:3000/login` 使用 seed 帳號登入，例如：
 
-| Account ID | 角色       | 預設密碼       |
+| Username   | 角色       | 預設密碼       |
 | ---------- | ---------- | -------------- |
 | `sa-A`     | SUPERADMIN | `Password123!` |
 | `admin-A1` | ADMIN      | `Password123!` |

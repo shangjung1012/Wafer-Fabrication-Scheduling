@@ -597,11 +597,9 @@ export default function SchedulePage() {
             Signed in as:
           </span>
           <span className="text-xs font-semibold text-gray-800">
-            {session.user.name}
+            {session.user.username}
           </span>
-          <span className="text-xs text-gray-500">
-            ({session.user.accountId})
-          </span>
+          <span className="text-xs text-gray-500">({session.user.email})</span>
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
             {session.user.role}
           </span>

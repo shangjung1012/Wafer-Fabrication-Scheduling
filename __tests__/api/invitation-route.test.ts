@@ -58,10 +58,10 @@ function authedNextRequest(
   });
 }
 
-async function login(accountId: string): Promise<string> {
+async function login(username: string): Promise<string> {
   const response = await loginPost(
     jsonRequest("http://localhost/api/auth/login", {
-      accountId,
+      username,
       password: PASSWORD,
     }),
   );
@@ -99,18 +99,16 @@ async function seedRouteInvitationUsers(): Promise<void> {
     data: [
       {
         id: "route-invite-sa",
-        accountId: "route-invite-sa",
+        username: "route-invite-sa",
         email: "route-invite-sa@mail.shangjung.com",
-        name: "Route Invite SuperAdmin",
         password,
         role: "SUPERADMIN",
         group: "A",
       },
       {
         id: "route-invite-admin",
-        accountId: "route-invite-admin",
+        username: "route-invite-admin",
         email: "route-invite-admin@mail.shangjung.com",
-        name: "Route Invite Admin",
         password,
         role: "ADMIN",
         group: "A",
@@ -149,7 +147,6 @@ describe("invitation API routes", () => {
     const inviteResponse = await usersPost(
       authedNextRequest("http://localhost/api/users", cookies, {
         email: "route-invite-sales@mail.shangjung.com",
-        name: "Route Invite Sales",
         role: "SALES",
         group: "A",
       }),
@@ -174,7 +171,7 @@ describe("invitation API routes", () => {
     const acceptResponse = await acceptInvitationPost(
       jsonRequest("http://localhost/api/auth/invitations/accept", {
         token,
-        accountId: "route-invite-sales",
+        username: "route-invite-sales",
         password: PASSWORD,
       }),
     );
@@ -184,7 +181,7 @@ describe("invitation API routes", () => {
 
     const salesLogin = await loginPost(
       jsonRequest("http://localhost/api/auth/login", {
-        accountId: "route-invite-sales@mail.shangjung.com",
+        username: "route-invite-sales@mail.shangjung.com",
         password: PASSWORD,
       }),
     );
@@ -196,7 +193,6 @@ describe("invitation API routes", () => {
     const response = await usersPost(
       authedNextRequest("http://localhost/api/users", cookies, {
         email: "route-invite-sales@mail.shangjung.com",
-        name: "Route Invite Sales",
         role: "SALES",
         group: "A",
       }),
@@ -213,7 +209,6 @@ describe("invitation API routes", () => {
     const inviteResponse = await usersPost(
       authedNextRequest("http://localhost/api/users", cookies, {
         email: "route-invite-sales@mail.shangjung.com",
-        name: "Route Invite Sales",
         role: "SALES",
         group: "A",
       }),

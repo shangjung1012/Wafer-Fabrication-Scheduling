@@ -8,11 +8,20 @@ import {
   acceptInvitation,
   InvitationError,
 } from "@/modules/auth/invitation-service";
+import {
+  isValidUsername,
+  normalizeUsername,
+  usernameValidationMessage,
+} from "@/modules/auth/username";
 import { prisma } from "@/lib/prisma";
 
 const AcceptInvitationBodySchema = z.object({
   token: z.string().min(1, "token is required"),
-  accountId: z.string().trim().min(1, "accountId is required").max(80),
+  username: z
+    .string()
+    .trim()
+    .transform(normalizeUsername)
+    .refine(isValidUsername, usernameValidationMessage()),
   password: z
     .string()
     .min(8, "password must be at least 8 characters")

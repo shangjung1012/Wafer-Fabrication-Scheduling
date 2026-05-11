@@ -19,7 +19,7 @@ describe("requireAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
     const request = new Request("http://localhost/api/users", {
       headers: {
@@ -33,7 +33,7 @@ describe("requireAuth", () => {
       user: {
         id: "user-1",
         role: "ADMIN",
-        accountId: "admin-A1",
+        username: "admin-A1",
       },
     });
   });
@@ -42,7 +42,7 @@ describe("requireAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
     const request = new Request("http://localhost:3000/api/users", {
       method: "POST",
@@ -56,7 +56,7 @@ describe("requireAuth", () => {
       user: {
         id: "user-1",
         role: "ADMIN",
-        accountId: "admin-A1",
+        username: "admin-A1",
       },
     });
   });
@@ -65,7 +65,7 @@ describe("requireAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
     const request = new Request("http://localhost:3000/api/users", {
       method: "POST",
@@ -85,7 +85,7 @@ describe("requireAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
     const request = new Request("http://localhost:3000/api/users", {
       method: "POST",
@@ -105,7 +105,7 @@ describe("requireAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
     const request = new Request("http://localhost:3000/api/users", {
       method: "POST",
@@ -124,7 +124,7 @@ describe("requireAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
     const request = new Request("http://localhost:3000/api/users", {
       method: "POST",

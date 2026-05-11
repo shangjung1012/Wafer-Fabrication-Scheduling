@@ -28,11 +28,11 @@ function createDb() {
     db: {
       user: {
         findUnique: vi.fn(
-          async ({ where }: { where: { id?: string; accountId?: string } }) =>
+          async ({ where }: { where: { id?: string; username?: string } }) =>
             users.find(
               (user) =>
                 user.id === where.id ||
-                user.accountId === where.accountId ||
+                user.username === where.username ||
                 user.email === (where as { email?: string }).email,
             ) ?? null,
         ),
@@ -153,9 +153,8 @@ describe("auth-service", () => {
   async function seedActiveUser(
     db: ReturnType<typeof createDb>["db"],
     input: {
-      accountId: string;
+      username: string;
       email: string;
-      name: string;
       role: "SUPERADMIN" | "ADMIN" | "SALES";
       group: string;
     },
@@ -174,7 +173,6 @@ describe("auth-service", () => {
     await expect(
       register(db as never, {
         email: "sa-a@mail.shangjung.com",
-        name: "Super Admin A",
         password: "Password123!",
         role: "SUPERADMIN",
         group: "A",
@@ -182,25 +180,24 @@ describe("auth-service", () => {
     ).rejects.toThrow(SelfRegistrationDisabledError);
   });
 
-  it("logs in by account ID or email, stores a hashed refresh token, and returns a verifiable access token", async () => {
+  it("logs in by username or email, stores a hashed refresh token, and returns a verifiable access token", async () => {
     const { db, refreshTokens } = createDb();
     await seedActiveUser(db, {
-      accountId: "admin-A1",
+      username: "admin-A1",
       email: "admin-a1@mail.shangjung.com",
-      name: "Admin A1",
       role: "ADMIN",
       group: "A",
     });
 
     const result = await login(db as never, {
-      accountId: "admin-A1",
+      username: "admin-A1",
       password: "Password123!",
     });
 
     await expect(verifyAccessToken(result.accessToken)).resolves.toMatchObject({
       sub: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
     expect(result.refreshToken).toBeTypeOf("string");
     expect(refreshTokens[0].tokenHash).toBe(
@@ -209,12 +206,12 @@ describe("auth-service", () => {
 
     await expect(
       login(db as never, {
-        accountId: "admin-a1@mail.shangjung.com",
+        username: "admin-a1@mail.shangjung.com",
         password: "Password123!",
       }),
     ).resolves.toMatchObject({
       user: {
-        accountId: "admin-A1",
+        username: "admin-A1",
         email: "admin-a1@mail.shangjung.com",
       },
     });
@@ -223,9 +220,8 @@ describe("auth-service", () => {
   it("locks an account for 15 minutes after 5 failed login attempts", async () => {
     const { db, users } = createDb();
     await seedActiveUser(db, {
-      accountId: "sales-A",
+      username: "sales-A",
       email: "sales-a@mail.shangjung.com",
-      name: "Sales A",
       role: "SALES",
       group: "A",
     });
@@ -233,7 +229,7 @@ describe("auth-service", () => {
     for (let i = 0; i < 4; i++) {
       await expect(
         login(db as never, {
-          accountId: "sales-A",
+          username: "sales-A",
           password: "wrong-password",
         }),
       ).rejects.toThrow(InvalidCredentialsError);
@@ -241,7 +237,7 @@ describe("auth-service", () => {
 
     await expect(
       login(db as never, {
-        accountId: "sales-A",
+        username: "sales-A",
         password: "wrong-password",
       }),
     ).rejects.toThrow(AccountLockedError);
@@ -253,14 +249,13 @@ describe("auth-service", () => {
   it("rotates refresh tokens and rejects reused or logged-out tokens", async () => {
     const { db } = createDb();
     await seedActiveUser(db, {
-      accountId: "admin-A1",
+      username: "admin-A1",
       email: "admin-a1@mail.shangjung.com",
-      name: "Admin A1",
       role: "ADMIN",
       group: "A",
     });
     const loginResult = await login(db as never, {
-      accountId: "admin-A1",
+      username: "admin-A1",
       password: "Password123!",
     });
 

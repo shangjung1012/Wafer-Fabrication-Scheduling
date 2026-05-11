@@ -82,7 +82,7 @@ Type B：SUPERADMIN(sa-B)、Factory B1/B2/B3、ADMIN(admin-B1/B2/B3)、SALES(sal
 Type C：SUPERADMIN(sa-C)、Factory C1/C2/C3、ADMIN(admin-C1/C2/C3)、SALES(sales-C)
 ```
 
-Seed 帳號的 `accountId` 與 id 相同，開發用預設密碼皆為 `Password123!`。
+Seed 帳號使用 `username` 登入，開發用預設密碼皆為 `Password123!`。
 
 ### 6. 啟動開發伺服器
 
@@ -94,8 +94,8 @@ pnpm dev
 
 ## 身份驗證
 
-1. `POST /api/auth/register` 建立 `ADMIN` 或 `SALES` 帳號。
-2. `POST /api/auth/login` 使用 `accountId` / `password` 登入，取得 `accessToken` 與 `refreshToken`。
+1. `POST /api/auth/register` 已停用公開註冊。
+2. `POST /api/auth/login` 使用 `username` 或 `email` / `password` 登入，取得 auth cookies。
 3. 呼叫受保護 API 時使用 `Authorization: Bearer <accessToken>`。
 4. `POST /api/auth/refresh` 以 refresh token rotation 換發新 token。
 5. `POST /api/auth/logout` 撤銷 refresh token。

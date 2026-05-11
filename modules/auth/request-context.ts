@@ -3,7 +3,7 @@ export type UserRole = "SUPERADMIN" | "ADMIN" | "SALES";
 export type AuthUser = {
   id: string;
   role: UserRole;
-  accountId?: string;
+  username?: string;
 };
 
 export type RequestContext = {

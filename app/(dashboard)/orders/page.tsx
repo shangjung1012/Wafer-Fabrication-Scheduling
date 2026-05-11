@@ -618,9 +618,9 @@ export default function OrdersPage() {
         }}
       >
         <span style={{ fontSize: 13, fontWeight: 600 }}>Signed in as:</span>
-        <strong style={{ fontSize: 13 }}>{session.user.name}</strong>
+        <strong style={{ fontSize: 13 }}>{session.user.username}</strong>
         <span style={{ fontSize: 12, color: "#334155" }}>
-          ({session.user.accountId})
+          ({session.user.email})
         </span>
         <span style={roleBadgeStyle}>{role}</span>
         {session.user.group && (

@@ -15,14 +15,14 @@ describe("token-service", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
 
     const payload = await verifyAccessToken(token);
 
     expect(payload.sub).toBe("user-1");
     expect(payload.role).toBe("ADMIN");
-    expect(payload.accountId).toBe("admin-A1");
+    expect(payload.username).toBe("admin-A1");
   });
 
   it("generates opaque refresh tokens and stable SHA-256 hashes", () => {

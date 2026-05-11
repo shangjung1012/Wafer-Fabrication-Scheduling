@@ -23,9 +23,8 @@ type Role = ClientAuthSession["user"]["role"];
 
 type UserRow = {
   id: string;
-  accountId: string | null;
+  username: string | null;
   email: string;
-  name: string;
   role: Role;
   group: string | null;
 };
@@ -37,14 +36,12 @@ type ApiResult = {
 
 type InviteForm = {
   email: string;
-  name: string;
   role: Role;
   group: string;
 };
 
 const initialForm: InviteForm = {
   email: "",
-  name: "",
   role: "SALES",
   group: "",
 };
@@ -283,10 +280,7 @@ export default function UsersPage() {
       <section style={sessionBarStyle}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Users size={16} />
-          <strong style={{ fontSize: 13 }}>{session.user.name}</strong>
-          <span style={{ color: "#475569", fontSize: 12 }}>
-            {session.user.accountId}
-          </span>
+          <strong style={{ fontSize: 13 }}>{session.user.username}</strong>
           <RoleBadge role={session.user.role} />
           {session.user.group && (
             <span style={{ color: "#475569", fontSize: 12 }}>
@@ -346,22 +340,6 @@ export default function UsersPage() {
             </label>
 
             <label style={fieldStyle}>
-              <span style={labelStyle}>Name</span>
-              <input
-                required
-                value={form.name}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-                placeholder="Display name"
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={fieldStyle}>
               <span style={labelStyle}>Role</span>
               <select
                 value={form.role}
@@ -416,8 +394,7 @@ export default function UsersPage() {
           <div>
             <h2 style={sectionTitleStyle}>Users</h2>
             <p style={sectionMetaStyle}>
-              Pending means the recipient has not set an account ID and
-              password.
+              Pending means the recipient has not set a username and password.
             </p>
           </div>
           <button
@@ -435,32 +412,23 @@ export default function UsersPage() {
           <table style={tableStyle}>
             <thead>
               <tr>
-                {[
-                  "Name",
-                  "Email",
-                  "Account",
-                  "Role",
-                  "Group",
-                  "Status",
-                  "",
-                ].map((heading) => (
-                  <th key={heading} style={thStyle}>
-                    {heading}
-                  </th>
-                ))}
+                {["Email", "Username", "Role", "Group", "Status", ""].map(
+                  (heading) => (
+                    <th key={heading} style={thStyle}>
+                      {heading}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
               {items.map((user) => {
-                const pending = !user.accountId;
+                const pending = !user.username;
                 const resendLoading = loading === `resend:${user.id}`;
                 return (
                   <tr key={user.id} style={trStyle}>
-                    <td style={tdStyle}>
-                      <strong>{user.name}</strong>
-                    </td>
                     <td style={tdStyle}>{user.email}</td>
-                    <td style={tdStyle}>{user.accountId ?? "-"}</td>
+                    <td style={tdStyle}>{user.username ?? "-"}</td>
                     <td style={tdStyle}>
                       <RoleBadge role={user.role} />
                     </td>
@@ -487,7 +455,7 @@ export default function UsersPage() {
               })}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ ...tdStyle, color: "#475569" }}>
+                  <td colSpan={6} style={{ ...tdStyle, color: "#475569" }}>
                     No users found.
                   </td>
                 </tr>
