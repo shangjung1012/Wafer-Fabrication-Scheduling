@@ -12,12 +12,35 @@ permissions:
   contents: read
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   NEXT_TELEMETRY_DISABLED: "1"
+  DATABASE_URL: postgresql://wafer_user:wafer_password@localhost:5432/wafer_db?schema=public
+  REDIS_URL: redis://localhost:6379
+  JWT_SECRET: test-secret-at-least-32-characters-long
+  JWT_ISSUER: wafer-auth
+  JWT_AUDIENCE: wafer-api
+  ACCESS_TOKEN_EXPIRES_IN: 15m
+  REFRESH_TOKEN_EXPIRES_IN: 7d
 
 jobs:
   verify:
     name: Lint, test, build
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: wafer_user
+          POSTGRES_PASSWORD: wafer_password
+          POSTGRES_DB: wafer_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wafer_user -d wafer_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout
@@ -39,6 +62,12 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm db:generate
+
+      - name: Apply database migrations
+        run: pnpm db:deploy
+
+      - name: Seed database
+        run: pnpm db:seed
 
       - name: Lint
         run: pnpm lint
