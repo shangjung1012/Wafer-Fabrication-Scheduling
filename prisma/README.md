@@ -205,11 +205,11 @@ pnpm db:seed
 
 Seed 預建的資料（stable id，可重複執行）：
 
-| id                | name            | role       | group  |
+| id                | username        | role       | group  |
 | ----------------- | --------------- | ---------- | ------ |
-| `seed-superadmin` | Seed SuperAdmin | SUPERADMIN | type:A |
-| `seed-admin-a1`   | Seed Admin A1   | ADMIN      | type:A |
-| `seed-sales-a1`   | Seed Sales A1   | SALES      | type:A |
+| `seed-superadmin` | seed-superadmin | SUPERADMIN | type:A |
+| `seed-admin-a1`   | seed-admin-A1   | ADMIN      | type:A |
+| `seed-sales-a1`   | seed-sales-A1   | SALES      | type:A |
 
 工廠：`seed-factory-a1`（adminId = seed-admin-a1）、`seed-factory-a2`、`seed-factory-a3`
 

@@ -4,10 +4,14 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
+import {
+  isValidUsername,
+  normalizeUsername,
+  usernameValidationMessage,
+} from "@/modules/auth/username";
 
 type InvitationPreview = {
   email: string;
-  name: string;
   role: string;
   group: string | null;
   expiresAt: string;
@@ -32,7 +36,7 @@ function SetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
   const [preview, setPreview] = useState<InvitationPreview | null>(null);
-  const [accountId, setAccountId] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -47,10 +51,13 @@ function SetPasswordContent() {
     [password, confirmPassword],
   );
   const passwordTooShort = password.length > 0 && password.length < 8;
+  const normalizedUsername = normalizeUsername(username);
+  const usernameInvalid =
+    username.trim().length > 0 && !isValidUsername(username);
   const canSubmit =
     loading === null &&
     !!preview &&
-    accountId.trim().length > 0 &&
+    isValidUsername(username) &&
     password.length >= 8 &&
     !passwordMismatch;
 
@@ -84,7 +91,6 @@ function SetPasswordContent() {
 
       const nextPreview = body as InvitationPreview;
       setPreview(nextPreview);
-      setAccountId(nextPreview.email);
       setLoading(null);
     }
 
@@ -109,7 +115,7 @@ function SetPasswordContent() {
       const response = await fetch("/api/auth/invitations/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, accountId, password }),
+        body: JSON.stringify({ token, username: normalizedUsername, password }),
       });
       const body = await parseJson(response);
       if (!response.ok) {
@@ -150,8 +156,6 @@ function SetPasswordContent() {
               fontSize: 13,
             }}
           >
-            <dt style={termStyle}>Name</dt>
-            <dd style={descStyle}>{preview.name}</dd>
             <dt style={termStyle}>Email</dt>
             <dd style={descStyle}>{preview.email}</dd>
             <dt style={termStyle}>Role</dt>
@@ -161,14 +165,24 @@ function SetPasswordContent() {
           </dl>
 
           <label style={labelStyle}>
-            Account ID
+            Username
             <input
-              value={accountId}
-              onChange={(event) => setAccountId(event.target.value)}
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
               autoComplete="username"
+              placeholder="sales-A"
               style={inputStyle}
             />
           </label>
+          <p
+            style={{
+              margin: "-4px 0 12px",
+              color: usernameInvalid ? "#b91c1c" : "#64748b",
+              fontSize: 13,
+            }}
+          >
+            {usernameValidationMessage()}
+          </p>
 
           <label style={labelStyle}>
             Password

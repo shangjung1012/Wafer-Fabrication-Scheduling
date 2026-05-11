@@ -10,13 +10,13 @@ const DEFAULT_REFRESH_TOKEN_TTL = "7d";
 export type AccessTokenUser = {
   id: string;
   role: UserRole;
-  accountId: string;
+  username: string;
 };
 
 export type VerifiedAccessTokenPayload = JWTPayload & {
   sub: string;
   role: UserRole;
-  accountId: string;
+  username: string;
 };
 
 function jwtSecret(): Uint8Array {
@@ -64,7 +64,7 @@ export function refreshTokenExpiresAt(now = new Date()): Date {
 export async function issueAccessToken(user: AccessTokenUser): Promise<string> {
   return new SignJWT({
     role: user.role,
-    accountId: user.accountId,
+    username: user.username,
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setIssuedAt()
@@ -89,7 +89,7 @@ export async function verifyAccessToken(
     (payload.role !== "SUPERADMIN" &&
       payload.role !== "ADMIN" &&
       payload.role !== "SALES") ||
-    typeof payload.accountId !== "string"
+    typeof payload.username !== "string"
   ) {
     throw new Error("Invalid access token payload.");
   }

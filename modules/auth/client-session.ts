@@ -1,8 +1,7 @@
 export type ClientAuthUser = {
   id: string;
-  accountId: string;
+  username: string;
   email: string;
-  name: string;
   role: "SUPERADMIN" | "ADMIN" | "SALES";
   group: string | null;
 };

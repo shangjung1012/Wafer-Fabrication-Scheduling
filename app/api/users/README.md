@@ -2,12 +2,12 @@
 
 ## Endpoints
 
-| Method | Path             | 說明                                          | 權限       |
-| ------ | ---------------- | --------------------------------------------- | ---------- |
-| GET    | `/api/users`     | 列出使用者（`?role=` filter）                 | SUPERADMIN |
-| POST   | `/api/users`     | 建立使用者（需 `accountId`，可選 `password`） | SUPERADMIN |
-| PATCH  | `/api/users/:id` | 修改 name / role / group                      | SUPERADMIN |
-| DELETE | `/api/users/:id` | 刪除使用者                                    | SUPERADMIN |
+| Method | Path             | 說明                                      | 權限       |
+| ------ | ---------------- | ----------------------------------------- | ---------- |
+| GET    | `/api/users`     | 列出使用者（`?role=` filter）             | SUPERADMIN |
+| POST   | `/api/users`     | 建立邀請（需 `email` / `role` / `group`） | SUPERADMIN |
+| PATCH  | `/api/users/:id` | 修改 username / email / role / group      | SUPERADMIN |
+| DELETE | `/api/users/:id` | 刪除使用者                                | SUPERADMIN |
 
 ---
 
@@ -24,7 +24,7 @@ Next.js 把 HTTP request 交給這個 route handler。第一件事是呼叫 `req
 從 `Authorization: Bearer <accessToken>` header 取出 JWT，驗證後回傳一個 `RequestContext`：
 
 ```ts
-{ user: { id: "sa-A", role: "SUPERADMIN", accountId: "sa-A" }, requestId: "..." }
+{ user: { id: "sa-A", role: "SUPERADMIN", username: "sa-A" }, requestId: "..." }
 ```
 
 這個 context 往後傳給所有下層函式，任何地方都不會再去碰 request header。
@@ -44,7 +44,7 @@ service 確認授權和 scope 之後，呼叫 `findUsers(db, { group: "A" })`，
 ```ts
 prisma.user.findMany({
   where: { group: "A" },
-  select: { id, accountId, name, role, group },
+  select: { id, username, email, role, group },
 });
 ```
 

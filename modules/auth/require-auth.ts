@@ -124,7 +124,7 @@ export async function requireAuth(request: Request): Promise<RequestContext> {
       user: {
         id: payload.sub,
         role: payload.role,
-        accountId: payload.accountId,
+        username: payload.username,
       },
     };
   } catch {

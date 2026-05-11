@@ -38,10 +38,12 @@ function Section({
   return (
     <div
       style={{
-        border: "1px solid #ddd",
+        border: "1px solid #dbe3ef",
         borderRadius: 8,
         padding: 16,
         marginBottom: 16,
+        background: "#ffffff",
+        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
       }}
     >
       <div
@@ -52,7 +54,11 @@ function Section({
           marginBottom: 12,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{title}</h2>
+        <h2
+          style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}
+        >
+          {title}
+        </h2>
         {badge && (
           <span
             style={{
@@ -88,12 +94,13 @@ function Result({ data }: { data: unknown }) {
   return (
     <pre
       style={{
-        background: "#f5f5f5",
-        border: "1px solid #ddd",
-        borderRadius: 4,
+        background: "#f8fafc",
+        border: "1px solid #dbe3ef",
+        borderRadius: 6,
         padding: 10,
         marginTop: 10,
         fontSize: 12,
+        color: "#1e293b",
         overflowX: "auto",
         maxHeight: 200,
       }}
@@ -135,7 +142,7 @@ function OrderTable({ data }: { data: unknown }) {
       >
         <thead>
           <tr
-            style={{ background: "#f9fafb", borderBottom: "2px solid #e5e7eb" }}
+            style={{ background: "#f8fafc", borderBottom: "2px solid #dbe3ef" }}
           >
             {[
               "Name",
@@ -152,7 +159,7 @@ function OrderTable({ data }: { data: unknown }) {
                   padding: "6px 10px",
                   textAlign: "left",
                   fontWeight: 600,
-                  color: "#374151",
+                  color: "#1e293b",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -165,7 +172,7 @@ function OrderTable({ data }: { data: unknown }) {
           {orders.map((o, i) => {
             const sc = STATUS_COLOR[o.status] ?? {
               bg: "#f3f4f6",
-              color: "#374151",
+              color: "#1e293b",
             };
             return (
               <tr
@@ -179,12 +186,12 @@ function OrderTable({ data }: { data: unknown }) {
                   style={{
                     padding: "6px 10px",
                     fontWeight: 500,
-                    color: "#111827",
+                    color: "#0f172a",
                   }}
                 >
                   {o.name}
                 </td>
-                <td style={{ padding: "6px 10px", color: "#6b7280" }}>
+                <td style={{ padding: "6px 10px", color: "#475569" }}>
                   {o.type}
                 </td>
                 <td style={{ padding: "6px 10px" }}>
@@ -204,7 +211,7 @@ function OrderTable({ data }: { data: unknown }) {
                 <td
                   style={{
                     padding: "6px 10px",
-                    color: "#374151",
+                    color: "#334155",
                     whiteSpace: "nowrap",
                   }}
                 >
@@ -213,7 +220,7 @@ function OrderTable({ data }: { data: unknown }) {
                 <td
                   style={{
                     padding: "6px 10px",
-                    color: "#374151",
+                    color: "#334155",
                     textAlign: "right",
                   }}
                 >
@@ -232,7 +239,7 @@ function OrderTable({ data }: { data: unknown }) {
                   style={{
                     padding: "6px 10px",
                     fontFamily: "monospace",
-                    color: o.lastModifiedById ? "#7c3aed" : "#9ca3af",
+                    color: o.lastModifiedById ? "#6d28d9" : "#64748b",
                   }}
                 >
                   {o.lastModifiedById ?? "—"}
@@ -242,7 +249,7 @@ function OrderTable({ data }: { data: unknown }) {
           })}
         </tbody>
       </table>
-      <p style={{ marginTop: 6, fontSize: 11, color: "#9ca3af" }}>
+      <p style={{ marginTop: 6, fontSize: 11, color: "#64748b" }}>
         {orders.length} order(s)
       </p>
     </div>
@@ -254,7 +261,15 @@ function Input({
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   return (
-    <label style={{ display: "block", marginBottom: 6, fontSize: 13 }}>
+    <label
+      style={{
+        display: "block",
+        marginBottom: 6,
+        fontSize: 13,
+        color: "#334155",
+        fontWeight: 650,
+      }}
+    >
       {label}
       <input
         {...props}
@@ -263,9 +278,11 @@ function Input({
           width: "100%",
           padding: "4px 8px",
           marginTop: 2,
-          border: "1px solid #ccc",
-          borderRadius: 4,
+          border: "1px solid #cbd5e1",
+          borderRadius: 6,
           fontSize: 13,
+          color: "#0f172a",
+          background: "#fff",
           boxSizing: "border-box",
         }}
       />
@@ -285,12 +302,13 @@ function Btn({
       onClick={onClick}
       style={{
         padding: "6px 14px",
-        background: "#1d4ed8",
+        background: "#2563eb",
         color: "#fff",
         border: "none",
-        borderRadius: 4,
+        borderRadius: 6,
         cursor: "pointer",
         fontSize: 13,
+        fontWeight: 700,
         marginTop: 8,
       }}
     >
@@ -304,9 +322,10 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
     <h2
       style={{
         fontSize: 16,
-        borderBottom: "2px solid #1d4ed8",
+        borderBottom: "2px solid #2563eb",
         paddingBottom: 4,
         margin: "24px 0 16px",
+        color: "#0f172a",
       }}
     >
       {children}
@@ -536,49 +555,32 @@ export default function OrdersPage() {
     fontWeight: 650,
   };
 
+  const pageShellStyle: React.CSSProperties = {
+    fontFamily: "system-ui, sans-serif",
+    maxWidth: 800,
+    minHeight: "100vh",
+    margin: "0 auto",
+    padding: 24,
+    color: "#0f172a",
+    background: "#f8fafc",
+    boxShadow: "0 0 0 100vmax #f8fafc",
+    clipPath: "inset(0 -100vmax)",
+  };
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
   if (session === undefined) {
-    return (
-      <div
-        style={{
-          fontFamily: "system-ui, sans-serif",
-          maxWidth: 800,
-          margin: "0 auto",
-          padding: 24,
-        }}
-      >
-        Loading session...
-      </div>
-    );
+    return <div style={pageShellStyle}>Loading session...</div>;
   }
 
   if (session === null) {
-    return (
-      <div
-        style={{
-          fontFamily: "system-ui, sans-serif",
-          maxWidth: 800,
-          margin: "0 auto",
-          padding: 24,
-        }}
-      >
-        Redirecting to login...
-      </div>
-    );
+    return <div style={pageShellStyle}>Redirecting to login...</div>;
   }
 
   return (
-    <div
-      style={{
-        fontFamily: "system-ui, sans-serif",
-        maxWidth: 800,
-        margin: "0 auto",
-        padding: 24,
-      }}
-    >
+    <div style={pageShellStyle}>
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
         WOMS — API Test UI
       </h1>
@@ -607,6 +609,7 @@ export default function OrdersPage() {
           marginBottom: 24,
           padding: 12,
           background: "#f0f4ff",
+          color: "#1e293b",
           borderRadius: 8,
           display: "flex",
           alignItems: "center",
@@ -615,13 +618,13 @@ export default function OrdersPage() {
         }}
       >
         <span style={{ fontSize: 13, fontWeight: 600 }}>Signed in as:</span>
-        <strong style={{ fontSize: 13 }}>{session.user.name}</strong>
-        <span style={{ fontSize: 12, color: "#555" }}>
-          ({session.user.accountId})
+        <strong style={{ fontSize: 13 }}>{session.user.username}</strong>
+        <span style={{ fontSize: 12, color: "#334155" }}>
+          ({session.user.email})
         </span>
         <span style={roleBadgeStyle}>{role}</span>
         {session.user.group && (
-          <span style={{ fontSize: 12, color: "#555" }}>
+          <span style={{ fontSize: 12, color: "#334155" }}>
             Group {session.user.group}
           </span>
         )}
@@ -650,6 +653,7 @@ export default function OrdersPage() {
           background: "#fffbeb",
           borderRadius: 8,
           border: "1px solid #fde68a",
+          color: "#713f12",
           fontSize: 13,
         }}
       >
@@ -688,7 +692,7 @@ export default function OrdersPage() {
         />
         <Btn onClick={doListOrders}>Send</Btn>
         {listStatus && (
-          <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>
+          <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
             HTTP {listStatus}
           </span>
         )}
@@ -705,7 +709,7 @@ export default function OrdersPage() {
         />
         <Btn onClick={doGetOrder}>Send</Btn>
         {getStatus && (
-          <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>
+          <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
             HTTP {getStatus}
           </span>
         )}
@@ -741,7 +745,7 @@ export default function OrdersPage() {
           />
           <Btn onClick={doCreateOrder}>Send</Btn>
           {createStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
               HTTP {createStatus}
             </span>
           )}
@@ -785,7 +789,7 @@ export default function OrdersPage() {
                   width: "100%",
                   padding: "4px 8px",
                   marginTop: 2,
-                  border: "1px solid #ccc",
+                  border: "1px solid #cbd5e1",
                   borderRadius: 4,
                   fontSize: 13,
                 }}
@@ -801,14 +805,14 @@ export default function OrdersPage() {
             </label>
           )}
           {isSales && (
-            <p style={{ fontSize: 12, color: "#888", margin: "4px 0 0" }}>
+            <p style={{ fontSize: 12, color: "#475569", margin: "4px 0 0" }}>
               Only works on your own PENDING orders. Status cannot be changed by
               SALES.
             </p>
           )}
           <Btn onClick={doUpdateOrder}>Send</Btn>
           {updateHttpStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
               HTTP {updateHttpStatus}
             </span>
           )}
@@ -819,7 +823,7 @@ export default function OrdersPage() {
       {/* 5. Delete Orders — ADMIN only */}
       {isAdmin && (
         <Section title="Delete Orders — DELETE /api/orders" badge="ADMIN">
-          <p style={{ fontSize: 12, color: "#888", margin: "0 0 8px" }}>
+          <p style={{ fontSize: 12, color: "#475569", margin: "0 0 8px" }}>
             Soft-deletes (sets status = CANCELLED).
           </p>
           <Input
@@ -830,7 +834,7 @@ export default function OrdersPage() {
           />
           <Btn onClick={doDeleteOrders}>Send</Btn>
           {deleteStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
               HTTP {deleteStatus}
             </span>
           )}
@@ -844,7 +848,7 @@ export default function OrdersPage() {
           title="Import CSV — POST /api/orders/import"
           badge={isAdmin ? "ADMIN" : "SUPERADMIN"}
         >
-          <p style={{ fontSize: 12, color: "#555", margin: "0 0 8px" }}>
+          <p style={{ fontSize: 12, color: "#334155", margin: "0 0 8px" }}>
             CSV columns: <code>name,type,dueDate,quantity</code>
           </p>
           <input
@@ -855,7 +859,7 @@ export default function OrdersPage() {
           />
           <Btn onClick={doImport}>Send</Btn>
           {importStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
               HTTP {importStatus}
             </span>
           )}
@@ -872,7 +876,7 @@ export default function OrdersPage() {
       <Section title="List Requests — GET /api/requests">
         <Btn onClick={doListRequests}>Send</Btn>
         {listReqStatus && (
-          <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>
+          <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
             HTTP {listReqStatus}
           </span>
         )}
@@ -905,7 +909,7 @@ export default function OrdersPage() {
                 width: "100%",
                 padding: "4px 8px",
                 marginTop: 2,
-                border: "1px solid #ccc",
+                border: "1px solid #cbd5e1",
                 borderRadius: 4,
                 fontSize: 12,
                 fontFamily: "monospace",
@@ -915,7 +919,7 @@ export default function OrdersPage() {
           </label>
           <Btn onClick={doCreateRequest}>Send</Btn>
           {createReqStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
               HTTP {createReqStatus}
             </span>
           )}
@@ -940,7 +944,7 @@ export default function OrdersPage() {
           />
           <Btn onClick={doUpdateRequest}>Send</Btn>
           {updateReqStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
               HTTP {updateReqStatus}
             </span>
           )}
@@ -954,7 +958,7 @@ export default function OrdersPage() {
           title="Approve Request — POST /api/requests/:id/approve"
           badge={isAdmin ? "ADMIN" : "SUPERADMIN"}
         >
-          <p style={{ fontSize: 12, color: "#888", margin: "0 0 8px" }}>
+          <p style={{ fontSize: 12, color: "#475569", margin: "0 0 8px" }}>
             Applies the request&apos;s payload fields to the linked order.
           </p>
           <Input
@@ -965,7 +969,7 @@ export default function OrdersPage() {
           />
           <Btn onClick={doApprove}>Send</Btn>
           {approveStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#555" }}>
+            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
               HTTP {approveStatus}
             </span>
           )}
