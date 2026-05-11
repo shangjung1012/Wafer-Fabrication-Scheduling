@@ -13,7 +13,7 @@ describe("withAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
     const handler = withAuth(async (_req, ctx) => {
       return Response.json({ requestId: ctx.requestId, user: ctx.user });
@@ -33,7 +33,7 @@ describe("withAuth", () => {
       user: {
         id: "user-1",
         role: "ADMIN",
-        accountId: "admin-A1",
+        username: "admin-A1",
       },
     });
   });
@@ -54,7 +54,7 @@ describe("withAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "SALES",
-      accountId: "sales-A",
+      username: "sales-A",
     });
     const handler = withAuth(async () => {
       throw new ForbiddenError("Nope.");
@@ -77,7 +77,7 @@ describe("withAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
     const handler = withAuth(async () => Response.json({ ok: true }));
 
@@ -102,7 +102,7 @@ describe("withAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "ADMIN",
-      accountId: "admin-A1",
+      username: "admin-A1",
     });
     const handler = withAuth(async () => {
       throw new NotFoundError("Missing.");

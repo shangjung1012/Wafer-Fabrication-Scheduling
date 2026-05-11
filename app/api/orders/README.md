@@ -104,7 +104,7 @@ Next.js 把請求交給 route handler。做三件事：
 從 `Authorization: Bearer <accessToken>` 驗證 JWT 後解析出：
 
 ```ts
-{ user: { id: "sales-A", role: "SALES", accountId: "sales-A" }, requestId: "..." }
+{ user: { id: "sales-A", role: "SALES", username: "sales-A" }, requestId: "..." }
 ```
 
 ### 3. `modules/order/order-service.ts`（業務邏輯 + 授權）

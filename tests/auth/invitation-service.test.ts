@@ -41,9 +41,8 @@ function createDb() {
   const users: Row[] = [
     {
       id: "sa-1",
-      accountId: "sa-A",
+      username: "sa-A",
       email: "sa-a@mail.shangjung.com",
-      name: "SuperAdmin A",
       role: "SUPERADMIN",
       group: "A",
       password: "hash",
@@ -60,7 +59,7 @@ function createDb() {
           where,
           select,
         }: {
-          where: { id?: string; email?: string; accountId?: string };
+          where: { id?: string; email?: string; username?: string };
           select?: Record<string, unknown>;
         }) => {
           const user =
@@ -68,7 +67,7 @@ function createDb() {
               (item) =>
                 item.id === where.id ||
                 item.email === where.email ||
-                item.accountId === where.accountId,
+                item.username === where.username,
             ) ?? null;
           return user ? project(user, select) : null;
         },
@@ -231,7 +230,7 @@ function createDb() {
 function ctx(role: UserRole = "SUPERADMIN") {
   return {
     requestId: "request-1",
-    user: { id: "sa-1", role, accountId: "sa-A" },
+    user: { id: "sa-1", role, username: "sa-A" },
   };
 }
 
@@ -256,7 +255,6 @@ describe("invitation-service", () => {
     await expect(
       createUserInvitation(ctx(), db as never, {
         email: "admin-a1@mail.shangjung.com",
-        name: "Admin A1",
         role: "ADMIN",
         group: "A",
       }),
@@ -267,16 +265,14 @@ describe("invitation-service", () => {
     });
 
     expect(users.at(-1)).toMatchObject({
-      accountId: null,
+      username: null,
       password: null,
       email: "admin-a1@mail.shangjung.com",
     });
     expect(invitations[0].tokenHash).toMatch(/^[a-f0-9]{64}$/);
     expect(sendMail).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: [
-          { address: "admin-a1@mail.shangjung.com", displayName: "Admin A1" },
-        ],
+        to: [{ address: "admin-a1@mail.shangjung.com" }],
         plainText: expect.stringContaining("180 seconds"),
       }),
     );
@@ -289,15 +285,14 @@ describe("invitation-service", () => {
     const { db } = createDb();
 
     await createUserInvitation(ctx(), db as never, {
-      email: "admin-a1@mail.shangjung.com",
-      name: '<Admin "A1">',
+      email: "admin.a1+test@mail.shangjung.com",
       role: "ADMIN",
       group: "A",
     });
 
     const html = sendMail.mock.calls[0][0].html as string;
-    expect(html).toContain("Hello &lt;Admin &quot;A1&quot;&gt;");
-    expect(html).not.toContain('Hello <Admin "A1">');
+    expect(html).toContain("admin.a1+test@mail.shangjung.com");
+    expect(html).not.toContain('href="<');
   });
 
   it("rolls back a pending user when invitation email delivery fails", async () => {
@@ -307,7 +302,6 @@ describe("invitation-service", () => {
     await expect(
       createUserInvitation(ctx(), db as never, {
         email: "admin-a1@mail.shangjung.com",
-        name: "Admin A1",
         role: "ADMIN",
         group: "A",
       }),
@@ -325,18 +319,16 @@ describe("invitation-service", () => {
     await expect(
       createUserInvitation(ctx("ADMIN"), db as never, {
         email: "sales-a@mail.shangjung.com",
-        name: "Sales A",
         role: "SALES",
         group: "A",
       }),
     ).rejects.toThrow("Role 'ADMIN' is not allowed");
   });
 
-  it("accepts an invitation once and sets account ID plus hashed password", async () => {
+  it("accepts an invitation once and sets username plus hashed password", async () => {
     const { db, users, invitations } = createDb();
     await createUserInvitation(ctx(), db as never, {
       email: "sales-a@mail.shangjung.com",
-      name: "Sales A",
       role: "SALES",
       group: "A",
     });
@@ -345,7 +337,7 @@ describe("invitation-service", () => {
     await expect(
       acceptInvitation(db as never, {
         token,
-        accountId: "sales-A",
+        username: "sales-A",
         password: "Password123!",
       }),
     ).resolves.toEqual({ ok: true });
@@ -353,7 +345,7 @@ describe("invitation-service", () => {
     const user = users.find(
       (item) => item.email === "sales-a@mail.shangjung.com",
     );
-    expect(user?.accountId).toBe("sales-A");
+    expect(user?.username).toBe("sales-A");
     expect(user?.password).not.toBe("Password123!");
     await expect(
       verifyPassword(String(user?.password), "Password123!"),
@@ -363,13 +355,13 @@ describe("invitation-service", () => {
     await expect(
       acceptInvitation(db as never, {
         token,
-        accountId: "sales-A2",
+        username: "sales-A2",
         password: "Password123!",
       }),
     ).rejects.toThrow(InvitationError);
   });
 
-  it("rejects expired invitations and duplicate account IDs", async () => {
+  it("rejects expired invitations and duplicate usernames", async () => {
     const { db } = createDb();
     const now = new Date("2026-05-12T00:00:00.000Z");
     await createUserInvitation(
@@ -377,7 +369,6 @@ describe("invitation-service", () => {
       db as never,
       {
         email: "sales-a@mail.shangjung.com",
-        name: "Sales A",
         role: "SALES",
         group: "A",
       },
@@ -392,17 +383,24 @@ describe("invitation-service", () => {
     await expect(
       acceptInvitation(db as never, {
         token,
-        accountId: "sa-A",
+        username: "sa-A",
         password: "Password123!",
       }),
-    ).rejects.toThrow("Account ID is already in use.");
+    ).rejects.toThrow("Username is already in use.");
+
+    await expect(
+      acceptInvitation(db as never, {
+        token,
+        username: "not valid",
+        password: "Password123!",
+      }),
+    ).rejects.toThrow("Username must be 3-32 characters");
   });
 
   it("resends by revoking old invitations and issuing a new token", async () => {
     const { db, invitations, users } = createDb();
     await createUserInvitation(ctx(), db as never, {
       email: "admin-a1@mail.shangjung.com",
-      name: "Admin A1",
       role: "ADMIN",
       group: "A",
     });
@@ -422,7 +420,6 @@ describe("invitation-service", () => {
     const { db, invitations, users } = createDb();
     await createUserInvitation(ctx(), db as never, {
       email: "admin-a1@mail.shangjung.com",
-      name: "Admin A1",
       role: "ADMIN",
       group: "A",
     });

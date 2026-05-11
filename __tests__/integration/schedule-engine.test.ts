@@ -42,7 +42,7 @@ describe("Schedule Engine - Database Integration", () => {
         where: { productionType: "IntegrationType" },
       });
       await prisma.user.deleteMany({
-        where: { accountId: { in: ["test-applicant-1", "test-applicant-2"] } },
+        where: { username: { in: ["test-applicant-1", "test-applicant-2"] } },
       });
     } catch {
       // Ignore if DB isn't running
@@ -58,9 +58,8 @@ describe("Schedule Engine - Database Integration", () => {
       // 1. Seed initial data
       const applicant = await prisma.user.create({
         data: {
-          accountId: "test-applicant-1",
+          username: "test-applicant-1",
           email: "test-applicant-1@mail.shangjung.com",
-          name: "Test Applicant",
           role: UserRole.SALES,
         },
       });
@@ -134,9 +133,8 @@ describe("Schedule Engine - Database Integration", () => {
     try {
       const applicant = await prisma.user.create({
         data: {
-          accountId: "test-applicant-2",
+          username: "test-applicant-2",
           email: "test-applicant-2@mail.shangjung.com",
-          name: "Test Applicant",
           role: UserRole.SALES,
         },
       });

@@ -13,26 +13,23 @@ import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
 
 export type UserRow = {
   id: string;
-  accountId: string | null;
+  username: string | null;
   email: string;
-  name: string;
   role: UserRole;
   group: string | null;
 };
 
 export type CreateUserInput = {
-  accountId?: string | null;
+  username?: string | null;
   email: string;
-  name: string;
   role: UserRole;
   group?: string | null;
   password?: string | null;
 };
 
 export type UpdateUserInput = {
-  accountId?: string;
+  username?: string;
   email?: string;
-  name?: string;
   role?: UserRole;
   group?: string | null;
   password?: string | null;
@@ -53,13 +50,12 @@ export async function findUsers(
     },
     select: {
       id: true,
-      accountId: true,
+      username: true,
       email: true,
-      name: true,
       role: true,
       group: true,
     },
-    orderBy: [{ role: "asc" }, { name: "asc" }],
+    orderBy: [{ role: "asc" }, { username: "asc" }, { email: "asc" }],
   });
 }
 
@@ -71,9 +67,8 @@ export async function findUserById(
     where: { id },
     select: {
       id: true,
-      accountId: true,
+      username: true,
       email: true,
-      name: true,
       role: true,
       group: true,
     },
@@ -90,9 +85,8 @@ export async function createUser(
 ): Promise<{ id: string }> {
   const user = await db.user.create({
     data: {
-      accountId: input.accountId ?? null,
+      username: input.username ?? null,
       email: input.email,
-      name: input.name,
       role: input.role,
       group: input.group ?? null,
       password: input.password ?? null,
@@ -116,9 +110,8 @@ export async function updateUser(
   const user = await db.user.update({
     where: { id },
     data: {
-      ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+      ...(input.username !== undefined ? { username: input.username } : {}),
       ...(input.email !== undefined ? { email: input.email } : {}),
-      ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
       ...(input.group !== undefined ? { group: input.group } : {}),
       ...(input.password !== undefined ? { password: input.password } : {}),

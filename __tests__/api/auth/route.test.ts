@@ -53,27 +53,24 @@ async function seedRouteTestUsers(): Promise<void> {
     data: [
       {
         id: "route-test-sa-A",
-        accountId: "route-test-sa-A",
+        username: "route-test-sa-A",
         email: "route-test-sa-a@mail.shangjung.com",
-        name: "Route Test SuperAdmin A",
         password,
         role: "SUPERADMIN",
         group: "A",
       },
       {
         id: "route-test-sales-A",
-        accountId: "route-test-sales-A",
+        username: "route-test-sales-A",
         email: "route-test-sales-a@mail.shangjung.com",
-        name: "Route Test Sales A",
         password,
         role: "SALES",
         group: "A",
       },
       {
         id: "route-test-sales-B",
-        accountId: "route-test-sales-B",
+        username: "route-test-sales-B",
         email: "route-test-sales-b@mail.shangjung.com",
-        name: "Route Test Sales B",
         password,
         role: "SALES",
         group: "B",
@@ -98,20 +95,20 @@ describe("auth API route flow", () => {
   it("logs in, sets auth cookies, and authorizes a protected API by role and scope", async () => {
     const loginResponse = await loginPost(
       jsonRequest("http://localhost/api/auth/login", {
-        accountId: "route-test-sa-A",
+        username: "route-test-sa-A",
         password: PASSWORD,
       }),
     );
     expect(loginResponse.status).toBe(200);
 
     const loginBody = (await loginResponse.json()) as {
-      user: { accountId: string; role: string };
+      user: { username: string; role: string };
     };
     const cookies = cookieHeader(loginResponse);
     expect(cookies).toContain("access_token=");
     expect(cookies).toContain("refresh_token=");
     expect(loginBody.user).toMatchObject({
-      accountId: "route-test-sa-A",
+      username: "route-test-sa-A",
       role: "SUPERADMIN",
     });
 
@@ -121,12 +118,12 @@ describe("auth API route flow", () => {
     expect(usersResponse.status).toBe(200);
 
     const usersBody = (await usersResponse.json()) as {
-      items: Array<{ accountId: string; group: string | null }>;
+      items: Array<{ username: string; group: string | null }>;
     };
-    expect(usersBody.items.map((user) => user.accountId)).toEqual(
+    expect(usersBody.items.map((user) => user.username)).toEqual(
       expect.arrayContaining(["route-test-sa-A", "route-test-sales-A"]),
     );
-    expect(usersBody.items.map((user) => user.accountId)).not.toContain(
+    expect(usersBody.items.map((user) => user.username)).not.toContain(
       "route-test-sales-B",
     );
   });
@@ -145,7 +142,7 @@ describe("auth API route flow", () => {
   it("rejects protected APIs when the token role lacks permission", async () => {
     const loginResponse = await loginPost(
       jsonRequest("http://localhost/api/auth/login", {
-        accountId: "route-test-sales-A",
+        username: "route-test-sales-A",
         password: PASSWORD,
       }),
     );
@@ -164,7 +161,7 @@ describe("auth API route flow", () => {
   it("logs out by revoking the refresh token", async () => {
     const loginResponse = await loginPost(
       jsonRequest("http://localhost/api/auth/login", {
-        accountId: "route-test-sa-A",
+        username: "route-test-sa-A",
         password: PASSWORD,
       }),
     );

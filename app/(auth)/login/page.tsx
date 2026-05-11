@@ -23,9 +23,17 @@ type ApiResult = {
 };
 
 const QUICK_ACCOUNTS = [
-  { label: "SuperAdmin A", accountId: "sa-A" },
-  { label: "Admin A1", accountId: "admin-A1" },
-  { label: "Sales A", accountId: "sales-A" },
+  { label: "SuperAdmin A", username: "sa-A", email: "sa-a@mail.shangjung.com" },
+  {
+    label: "Admin A1",
+    username: "admin-A1",
+    email: "admin-a1@mail.shangjung.com",
+  },
+  {
+    label: "Sales A",
+    username: "sales-A",
+    email: "sales-a@mail.shangjung.com",
+  },
 ];
 
 async function parseResponse(response: Response): Promise<ApiResult> {
@@ -34,7 +42,7 @@ async function parseResponse(response: Response): Promise<ApiResult> {
 }
 
 export default function LoginPage() {
-  const [accountId, setAccountId] = useState("sa-A");
+  const [username, setUsername] = useState("sa-A");
   const [password, setPassword] = useState("Password123!");
   const [showPassword, setShowPassword] = useState(false);
   const session = useClientAuthSession() ?? null;
@@ -66,7 +74,7 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountId, password }),
+        body: JSON.stringify({ username, password }),
       });
       const result = await parseResponse(response);
       if (!response.ok) {
@@ -149,8 +157,8 @@ export default function LoginPage() {
     }
   };
 
-  const fillAccount = (nextAccountId: string) => {
-    setAccountId(nextAccountId);
+  const fillAccount = (nextUsername: string) => {
+    setUsername(nextUsername);
     setPassword("Password123!");
   };
 
@@ -218,6 +226,9 @@ export default function LoginPage() {
             }}
           >
             <h2 style={{ margin: "0 0 16px", fontSize: 18 }}>Login</h2>
+            <p style={{ margin: "0 0 14px", color: "#475569", fontSize: 13 }}>
+              You can sign in with either your username or email address.
+            </p>
 
             <div
               style={{
@@ -229,13 +240,13 @@ export default function LoginPage() {
             >
               {QUICK_ACCOUNTS.map((account) => (
                 <button
-                  key={account.accountId}
+                  key={account.username}
                   type="button"
-                  onClick={() => fillAccount(account.accountId)}
+                  onClick={() => fillAccount(account.username)}
                   style={{
                     border: "1px solid #cbd5e1",
                     background:
-                      accountId === account.accountId ? "#e0f2fe" : "#fff",
+                      username === account.username ? "#e0f2fe" : "#fff",
                     color: "#0f172a",
                     borderRadius: 6,
                     padding: "7px 9px",
@@ -256,11 +267,12 @@ export default function LoginPage() {
                 marginBottom: 12,
               }}
             >
-              Account ID
+              Username or Email
               <input
-                value={accountId}
-                onChange={(event) => setAccountId(event.target.value)}
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
                 autoComplete="username"
+                placeholder="sa-A or sa-a@mail.shangjung.com"
                 style={{
                   display: "block",
                   width: "100%",
@@ -369,10 +381,8 @@ export default function LoginPage() {
                     fontSize: 13,
                   }}
                 >
-                  <dt style={termStyle}>Name</dt>
-                  <dd style={descStyle}>{session.user.name}</dd>
-                  <dt style={termStyle}>Account</dt>
-                  <dd style={descStyle}>{session.user.accountId}</dd>
+                  <dt style={termStyle}>Username</dt>
+                  <dd style={descStyle}>{session.user.username}</dd>
                   <dt style={termStyle}>Group</dt>
                   <dd style={descStyle}>{session.user.group ?? "-"}</dd>
                   <dt style={termStyle}>Access token</dt>

@@ -38,16 +38,15 @@ describe("client auth session", () => {
     persistClientAuthSession({
       user: {
         id: "user-1",
-        accountId: "sa-A",
+        username: "sa-A",
         email: "sa-a@mail.shangjung.com",
-        name: "SuperAdmin A",
         role: "SUPERADMIN",
         group: "A",
       },
     });
 
     expect(loadClientAuthSession()).toMatchObject({
-      user: { accountId: "sa-A", role: "SUPERADMIN", group: "A" },
+      user: { username: "sa-A", role: "SUPERADMIN", group: "A" },
     });
     expect(localStorage.getItem("auth_access_token")).toBeNull();
     expect(localStorage.getItem("auth_refresh_token")).toBeNull();
@@ -59,9 +58,8 @@ describe("client auth session", () => {
     persistClientAuthSession({
       user: {
         id: "user-1",
-        accountId: "sa-A",
+        username: "sa-A",
         email: "sa-a@mail.shangjung.com",
-        name: "SuperAdmin A",
         role: "SUPERADMIN",
         group: "A",
       },
