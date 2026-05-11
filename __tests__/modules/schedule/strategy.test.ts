@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { greedyBestFitStrategy } from "@/modules/schedule/strategy";
+import {
+  greedyBestFitStrategy,
+  type SchedulingCapacityInput,
+  type SchedulingFactoryInput,
+  type SchedulingOrderInput,
+} from "@/modules/schedule/strategy";
 import { OrderStatus, AssignmentStatus } from "@/lib/generated/prisma/client";
 
 describe("Greedy Best-Fit Strategy", () => {
@@ -13,7 +18,7 @@ describe("Greedy Best-Fit Strategy", () => {
   };
 
   it("should successfully schedule a single order when capacity is sufficient", () => {
-    const orders: any[] = [
+    const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
         status: OrderStatus.APPROVED,
@@ -24,9 +29,11 @@ describe("Greedy Best-Fit Strategy", () => {
       },
     ];
 
-    const factories: any[] = [{ id: "F1", maxCapacity: 200 }];
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 200 },
+    ];
 
-    const capacities: any[] = [
+    const capacities: SchedulingCapacityInput[] = [
       {
         id: "C1",
         factoryId: "F1",
@@ -55,7 +62,7 @@ describe("Greedy Best-Fit Strategy", () => {
   });
 
   it("should dynamically create capacity records if they do not exist", () => {
-    const orders: any[] = [
+    const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
         status: OrderStatus.APPROVED,
@@ -66,9 +73,11 @@ describe("Greedy Best-Fit Strategy", () => {
       },
     ];
 
-    const factories: any[] = [{ id: "F1", maxCapacity: 100 }];
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 100 },
+    ];
 
-    const capacities: any[] = []; // Empty capacities!
+    const capacities: SchedulingCapacityInput[] = []; // Empty capacities!
 
     const result = greedyBestFitStrategy(orders, factories, capacities, TODAY);
 
@@ -83,7 +92,7 @@ describe("Greedy Best-Fit Strategy", () => {
   });
 
   it("should split an order across multiple factories/dates if needed (Best-Fit)", () => {
-    const orders: any[] = [
+    const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
         status: OrderStatus.APPROVED,
@@ -94,12 +103,12 @@ describe("Greedy Best-Fit Strategy", () => {
       },
     ];
 
-    const factories: any[] = [
+    const factories: SchedulingFactoryInput[] = [
       { id: "F1", maxCapacity: 100 },
       { id: "F2", maxCapacity: 200 },
     ];
 
-    const capacities: any[] = [
+    const capacities: SchedulingCapacityInput[] = [
       {
         id: "C1",
         factoryId: "F1",
@@ -134,7 +143,7 @@ describe("Greedy Best-Fit Strategy", () => {
   });
 
   it("should fail and rollback if an order cannot be fully fulfilled", () => {
-    const orders: any[] = [
+    const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
         status: OrderStatus.APPROVED,
@@ -145,9 +154,9 @@ describe("Greedy Best-Fit Strategy", () => {
       },
     ];
 
-    const factories: any[] = [{ id: "F1", maxCapacity: 50 }];
+    const factories: SchedulingFactoryInput[] = [{ id: "F1", maxCapacity: 50 }];
 
-    const capacities: any[] = [
+    const capacities: SchedulingCapacityInput[] = [
       {
         id: "C1",
         factoryId: "F1",
@@ -169,7 +178,7 @@ describe("Greedy Best-Fit Strategy", () => {
   });
 
   it("should not schedule if remainingQty is fully covered by IN_PRODUCTION or COMPLETED assignments", () => {
-    const orders: any[] = [
+    const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
         status: OrderStatus.IN_PRODUCTION,
@@ -182,8 +191,10 @@ describe("Greedy Best-Fit Strategy", () => {
       },
     ];
 
-    const factories: any[] = [{ id: "F1", maxCapacity: 200 }];
-    const capacities: any[] = [];
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 200 },
+    ];
+    const capacities: SchedulingCapacityInput[] = [];
 
     const result = greedyBestFitStrategy(orders, factories, capacities, TODAY);
 
@@ -193,7 +204,7 @@ describe("Greedy Best-Fit Strategy", () => {
   });
 
   it("should not downgrade IN_PRODUCTION parent status on failure", () => {
-    const orders: any[] = [
+    const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
         status: OrderStatus.IN_PRODUCTION, // ALREADY in production
@@ -206,8 +217,8 @@ describe("Greedy Best-Fit Strategy", () => {
       },
     ];
 
-    const factories: any[] = [{ id: "F1", maxCapacity: 10 }]; // Only 10 per day -> 20 total for window, will fail (needs 50)
-    const capacities: any[] = [
+    const factories: SchedulingFactoryInput[] = [{ id: "F1", maxCapacity: 10 }]; // Only 10 per day -> 20 total for window, will fail (needs 50)
+    const capacities: SchedulingCapacityInput[] = [
       {
         id: "C1",
         factoryId: "F1",
@@ -225,7 +236,7 @@ describe("Greedy Best-Fit Strategy", () => {
   });
 
   it("should respect sorting priority (dueDate > quantity > createdAt)", () => {
-    const orders: any[] = [
+    const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
         status: OrderStatus.APPROVED,
@@ -252,8 +263,10 @@ describe("Greedy Best-Fit Strategy", () => {
       }, // Larger quantity
     ];
 
-    const factories: any[] = [{ id: "F1", maxCapacity: 100 }];
-    const capacities: any[] = [
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 100 },
+    ];
+    const capacities: SchedulingCapacityInput[] = [
       {
         id: "C1",
         factoryId: "F1",

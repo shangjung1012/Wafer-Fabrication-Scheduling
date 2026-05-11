@@ -19,7 +19,10 @@ import { prisma } from "@/lib/prisma";
 // POST /api/requests/[id]/approve
 // ---------------------------------------------------------------------------
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const { id } = await params;
 
   try {
@@ -28,7 +31,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const result = await approveRequest(ctx, prisma, id);
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
+    if (err instanceof UnauthorizedError)
+      return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);

@@ -10,9 +10,7 @@ import type {
   DiffEntry,
   FactoryInfo,
 } from "@/modules/visualization/types";
-import {
-  logoutClientAuthSession,
-} from "@/modules/auth/client-session";
+import { logoutClientAuthSession } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 
 // ---------------------------------------------------------------------------
@@ -36,7 +34,10 @@ type CellData = {
   conflicts: ConflictInfo[];
 };
 
-function buildCellMap(data: TimelineResponse, dates: string[]): Map<string, CellData> {
+function buildCellMap(
+  data: TimelineResponse,
+  dates: string[],
+): Map<string, CellData> {
   const map = new Map<string, CellData>();
 
   const capacityLookup = new Map<string, { used: number; max: number }>();
@@ -58,7 +59,7 @@ function buildCellMap(data: TimelineResponse, dates: string[]): Map<string, Cell
     for (const date of dates) {
       const key = `${factory.id}__${date}`;
       const items = data.timeline.filter(
-        (t) => t.factoryId === factory.id && t.productionDate === date
+        (t) => t.factoryId === factory.id && t.productionDate === date,
       );
       const cap = capacityLookup.get(key);
       map.set(key, {
@@ -89,14 +90,26 @@ function getCellStyle(cell: CellData): {
   }
 
   const ratio = cell.maxCapacity > 0 ? cell.usedCapacity / cell.maxCapacity : 0;
-  const hasCapacityConflict = cell.conflicts.some((c) => c.conflictType === "CAPACITY");
-  const hasDueDateConflict = cell.conflicts.some((c) => c.conflictType === "DUE_DATE");
+  const hasCapacityConflict = cell.conflicts.some(
+    (c) => c.conflictType === "CAPACITY",
+  );
+  const hasDueDateConflict = cell.conflicts.some(
+    (c) => c.conflictType === "DUE_DATE",
+  );
 
   if (hasCapacityConflict) {
-    return { bg: "bg-red-50", barColor: "bg-red-500", fillRatio: Math.min(ratio, 1) };
+    return {
+      bg: "bg-red-50",
+      barColor: "bg-red-500",
+      fillRatio: Math.min(ratio, 1),
+    };
   }
   if (hasDueDateConflict) {
-    return { bg: "bg-orange-50", barColor: "bg-orange-400", fillRatio: Math.min(ratio, 1) };
+    return {
+      bg: "bg-orange-50",
+      barColor: "bg-orange-400",
+      fillRatio: Math.min(ratio, 1),
+    };
   }
   if (ratio > 0.8) {
     return { bg: "bg-yellow-50", barColor: "bg-yellow-400", fillRatio: ratio };
@@ -109,15 +122,17 @@ function getCellStyle(cell: CellData): {
 // ---------------------------------------------------------------------------
 
 const STATUS_STYLE: Record<string, string> = {
-  SCHEDULED:     "bg-blue-100 text-blue-700",
+  SCHEDULED: "bg-blue-100 text-blue-700",
   IN_PRODUCTION: "bg-green-100 text-green-700",
-  COMPLETED:     "bg-gray-100 text-gray-600",
-  CANCELLED:     "bg-red-100 text-red-600",
+  COMPLETED: "bg-gray-100 text-gray-600",
+  CANCELLED: "bg-red-100 text-red-600",
 };
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${STATUS_STYLE[status] ?? "bg-gray-100 text-gray-600"}`}>
+    <span
+      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${STATUS_STYLE[status] ?? "bg-gray-100 text-gray-600"}`}
+    >
       {status}
     </span>
   );
@@ -138,7 +153,8 @@ function DetailPanel({
   diffByOrderId: Map<string, DiffEntry>;
   onClose: () => void;
 }) {
-  const fillRatio = cell.maxCapacity > 0 ? cell.usedCapacity / cell.maxCapacity : 0;
+  const fillRatio =
+    cell.maxCapacity > 0 ? cell.usedCapacity / cell.maxCapacity : 0;
   const isOverCapacity = fillRatio > 1;
   const pct = Math.round(fillRatio * 100);
 
@@ -147,8 +163,12 @@ function DetailPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
         <div>
-          <p className="text-xs text-gray-500 font-medium">Type {factory.productionType}</p>
-          <h2 className="text-base font-semibold text-gray-900">{factory.label}</h2>
+          <p className="text-xs text-gray-500 font-medium">
+            Type {factory.productionType}
+          </p>
+          <h2 className="text-base font-semibold text-gray-900">
+            {factory.label}
+          </h2>
           <p className="text-sm text-gray-500 mt-0.5">{cell.date}</p>
         </div>
         <button
@@ -162,9 +182,14 @@ function DetailPanel({
       {/* Capacity summary */}
       <div className="px-5 py-4 border-b border-gray-100">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-gray-500">Capacity Usage</span>
-          <span className={`text-sm font-semibold ${isOverCapacity ? "text-red-600" : "text-gray-700"}`}>
-            {cell.usedCapacity.toLocaleString()} / {cell.maxCapacity.toLocaleString()}
+          <span className="text-xs font-medium text-gray-500">
+            Capacity Usage
+          </span>
+          <span
+            className={`text-sm font-semibold ${isOverCapacity ? "text-red-600" : "text-gray-700"}`}
+          >
+            {cell.usedCapacity.toLocaleString()} /{" "}
+            {cell.maxCapacity.toLocaleString()}
             <span className="ml-1 text-xs font-normal">({pct}%)</span>
           </span>
         </div>
@@ -176,7 +201,8 @@ function DetailPanel({
         </div>
         {isOverCapacity && (
           <p className="text-xs text-red-600 mt-1 font-medium">
-            Exceeds capacity by {(cell.usedCapacity - cell.maxCapacity).toLocaleString()} units
+            Exceeds capacity by{" "}
+            {(cell.usedCapacity - cell.maxCapacity).toLocaleString()} units
           </p>
         )}
       </div>
@@ -184,10 +210,16 @@ function DetailPanel({
       {/* Conflicts */}
       {cell.conflicts.length > 0 && (
         <div className="px-5 py-3 border-b border-gray-100 space-y-2">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Conflicts</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Conflicts
+          </p>
           {cell.conflicts.map((c, i) => (
-            <div key={i} className={`rounded-lg px-3 py-2 text-xs ${c.severity === "ERROR" ? "bg-red-50 text-red-700 border border-red-200" : "bg-orange-50 text-orange-700 border border-orange-200"}`}>
-              <span className="font-semibold">[{c.conflictType}]</span> {c.message}
+            <div
+              key={i}
+              className={`rounded-lg px-3 py-2 text-xs ${c.severity === "ERROR" ? "bg-red-50 text-red-700 border border-red-200" : "bg-orange-50 text-orange-700 border border-orange-200"}`}
+            >
+              <span className="font-semibold">[{c.conflictType}]</span>{" "}
+              {c.message}
             </div>
           ))}
         </div>
@@ -209,28 +241,38 @@ function DetailPanel({
               className={`border rounded-lg p-3 transition-colors ${diff ? "border-purple-200 bg-purple-50/40 hover:border-purple-300" : "border-gray-100 hover:border-gray-200"}`}
             >
               <div className="flex items-start justify-between gap-2 mb-1.5">
-                <span className="text-sm font-medium text-gray-900">{item.orderName}</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {item.orderName}
+                </span>
                 <StatusBadge status={item.status} />
               </div>
               <div className="text-xs text-gray-500 space-y-0.5">
                 <div className="flex justify-between">
                   <span>Qty</span>
-                  <span className="font-medium text-gray-700">{item.assignedQuantity.toLocaleString()}</span>
+                  <span className="font-medium text-gray-700">
+                    {item.assignedQuantity.toLocaleString()}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Due</span>
-                  <span className={`font-medium ${item.dueDate < item.productionDate ? "text-red-600" : "text-gray-700"}`}>
+                  <span
+                    className={`font-medium ${item.dueDate < item.productionDate ? "text-red-600" : "text-gray-700"}`}
+                  >
                     {item.dueDate}
                     {item.dueDate < item.productionDate && " ⚠️"}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Applicant</span>
-                  <span className="font-medium text-blue-700 font-mono">{item.applicantId}</span>
+                  <span className="font-medium text-blue-700 font-mono">
+                    {item.applicantId}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Scheduled by</span>
-                  <span className={`font-medium font-mono ${item.lastModifiedById ? "text-purple-700" : "text-gray-400"}`}>
+                  <span
+                    className={`font-medium font-mono ${item.lastModifiedById ? "text-purple-700" : "text-gray-400"}`}
+                  >
                     {item.lastModifiedById ?? "—"}
                   </span>
                 </div>
@@ -243,13 +285,17 @@ function DetailPanel({
                   <div className="text-xs text-purple-700 space-y-0.5">
                     <div className="flex items-center gap-1.5">
                       <span className="text-gray-400 w-12">Before</span>
-                      <span className="font-medium line-through text-gray-400">{diff.before}</span>
+                      <span className="font-medium line-through text-gray-400">
+                        {diff.before}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-gray-400 w-12">After</span>
                       <span className="font-medium">{diff.after}</span>
                     </div>
-                    <p className="text-[10px] text-purple-500 mt-1 leading-relaxed">{diff.reason}</p>
+                    <p className="text-[10px] text-purple-500 mt-1 leading-relaxed">
+                      {diff.reason}
+                    </p>
                   </div>
                 </div>
               )}
@@ -294,15 +340,21 @@ function GanttCell({
       >
         {/* Conflict marker */}
         {hasConflict && (
-          <span className="absolute top-1 right-1 text-[9px] leading-none">⚠️</span>
+          <span className="absolute top-1 right-1 text-[9px] leading-none">
+            ⚠️
+          </span>
         )}
 
         {/* Rescheduled marker */}
         {hasRescheduled && !hasConflict && (
-          <span className="absolute top-1 right-1 text-[9px] leading-none text-purple-500 font-bold">↕</span>
+          <span className="absolute top-1 right-1 text-[9px] leading-none text-purple-500 font-bold">
+            ↕
+          </span>
         )}
         {hasRescheduled && hasConflict && (
-          <span className="absolute top-1 right-4 text-[9px] leading-none text-purple-500 font-bold">↕</span>
+          <span className="absolute top-1 right-4 text-[9px] leading-none text-purple-500 font-bold">
+            ↕
+          </span>
         )}
 
         {/* Order count badge */}
@@ -320,7 +372,9 @@ function GanttCell({
               style={{ width: `${Math.min(pct, 100)}%` }}
             />
           </div>
-          <p className={`text-[9px] font-semibold text-center mt-0.5 ${pct > 100 ? "text-red-600" : "text-gray-500"}`}>
+          <p
+            className={`text-[9px] font-semibold text-center mt-0.5 ${pct > 100 ? "text-red-600" : "text-gray-500"}`}
+          >
             {pct}%
           </p>
         </div>
@@ -334,7 +388,7 @@ function GanttCell({
 // ---------------------------------------------------------------------------
 
 const DEFAULT_START = "2026-05-10";
-const DEFAULT_END   = "2026-05-23";
+const DEFAULT_END = "2026-05-23";
 
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
@@ -345,12 +399,15 @@ export default function SchedulePage() {
   const token = session?.accessToken ?? "";
   const productionType = session?.user.group ?? "";
   const [startDate, setStartDate] = useState(DEFAULT_START);
-  const [endDate, setEndDate]     = useState(DEFAULT_END);
-  const [data, setData]           = useState<TimelineResponse | null>(null);
-  const [loading, setLoading]     = useState(true);
+  const [endDate, setEndDate] = useState(DEFAULT_END);
+  const [data, setData] = useState<TimelineResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<FetchError | null>(null);
-  const [selectedCell, setSelectedCell] = useState<{ factoryId: string; date: string } | null>(null);
-  const [refreshKey, setRefreshKey]     = useState(0);
+  const [selectedCell, setSelectedCell] = useState<{
+    factoryId: string;
+    date: string;
+  } | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>("idle");
 
   // Fetch timeline data
@@ -368,7 +425,10 @@ export default function SchedulePage() {
       .then(async (r) => {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}));
-          setFetchError({ status: r.status, message: body.message ?? r.statusText });
+          setFetchError({
+            status: r.status,
+            message: body.message ?? r.statusText,
+          });
           setData(null);
         } else {
           setData(await r.json());
@@ -419,7 +479,7 @@ export default function SchedulePage() {
   const dates = useMemo(() => {
     if (!startDate || !endDate) return [];
     const start = parseISO(startDate);
-    const end   = parseISO(endDate);
+    const end = parseISO(endDate);
     if (end < start) return [];
     return eachDayOfInterval({ start, end }).map((d) => toDateStr(d));
   }, [startDate, endDate]);
@@ -427,7 +487,7 @@ export default function SchedulePage() {
   // Cell map
   const cellMap = useMemo(
     () => (data ? buildCellMap(data, dates) : new Map()),
-    [data, dates]
+    [data, dates],
   );
 
   // Group factories by productionType
@@ -474,9 +534,11 @@ export default function SchedulePage() {
   }, [selectedCell, data]);
 
   // Summary counts
-  const capacityConflicts  = data?.conflicts.filter((c) => c.conflictType === "CAPACITY").length ?? 0;
-  const dueDateConflicts   = data?.conflicts.filter((c) => c.conflictType === "DUE_DATE").length ?? 0;
-  const rescheduledCount   = data?.diffs.length ?? 0;
+  const capacityConflicts =
+    data?.conflicts.filter((c) => c.conflictType === "CAPACITY").length ?? 0;
+  const dueDateConflicts =
+    data?.conflicts.filter((c) => c.conflictType === "DUE_DATE").length ?? 0;
+  const rescheduledCount = data?.diffs.length ?? 0;
 
   if (session === undefined) {
     return (
@@ -499,18 +561,30 @@ export default function SchedulePage() {
       {/* Top bar */}
       <div className="flex-none bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 flex-wrap">
         <div>
-          <h1 className="text-base font-semibold text-gray-900">Production Schedule</h1>
-          <p className="text-xs text-gray-500">Factory gantt — click a cell to inspect orders</p>
+          <h1 className="text-base font-semibold text-gray-900">
+            Production Schedule
+          </h1>
+          <p className="text-xs text-gray-500">
+            Factory gantt — click a cell to inspect orders
+          </p>
         </div>
 
         <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
-          <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Signed in as:</span>
-          <span className="text-xs font-semibold text-gray-800">{session.user.name}</span>
-          <span className="text-xs text-gray-500">({session.user.accountId})</span>
+          <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+            Signed in as:
+          </span>
+          <span className="text-xs font-semibold text-gray-800">
+            {session.user.name}
+          </span>
+          <span className="text-xs text-gray-500">
+            ({session.user.accountId})
+          </span>
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
             {session.user.role}
           </span>
-          {productionType && <span className="text-xs text-gray-500">Type {productionType}</span>}
+          {productionType && (
+            <span className="text-xs text-gray-500">Type {productionType}</span>
+          )}
           <button
             type="button"
             onClick={handleLogout}
@@ -531,11 +605,23 @@ export default function SchedulePage() {
                 : "bg-green-600 text-white border-green-600 hover:bg-green-700"
             }`}
           >
-            {scheduleStatus === "running" ? "Running…" : `▶ Run Schedule (Type ${productionType || "-"})`}
+            {scheduleStatus === "running"
+              ? "Running…"
+              : `▶ Run Schedule (Type ${productionType || "-"})`}
           </button>
-          {scheduleStatus === "success"  && <span className="text-xs text-green-600 font-medium">Scheduled ✓</span>}
-          {scheduleStatus === "conflict" && <span className="text-xs text-yellow-600 font-medium">Already running</span>}
-          {scheduleStatus === "error"    && <span className="text-xs text-red-600 font-medium">Failed</span>}
+          {scheduleStatus === "success" && (
+            <span className="text-xs text-green-600 font-medium">
+              Scheduled ✓
+            </span>
+          )}
+          {scheduleStatus === "conflict" && (
+            <span className="text-xs text-yellow-600 font-medium">
+              Already running
+            </span>
+          )}
+          {scheduleStatus === "error" && (
+            <span className="text-xs text-red-600 font-medium">Failed</span>
+          )}
         </div>
 
         {/* Date range */}
@@ -586,13 +672,33 @@ export default function SchedulePage() {
       {/* Legend */}
       <div className="flex-none px-6 py-2 flex items-center gap-4 text-xs text-gray-500 bg-white border-b border-gray-100">
         <span className="font-medium">Legend:</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-400 inline-block" /> Normal</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-400 inline-block" /> High load (&gt;80%)</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" /> Due date conflict</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Capacity exceeded</span>
-        <span className="flex items-center gap-1.5"><span className="text-[10px]">⚠️</span> Conflict</span>
-        <span className="flex items-center gap-1.5"><span className="text-[10px] font-bold text-purple-500">↕</span> Rescheduled</span>
-        <span className="flex items-center gap-1.5"><span className="text-[10px] font-bold text-gray-500">×N</span> Order count</span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-blue-400 inline-block" />{" "}
+          Normal
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-yellow-400 inline-block" />{" "}
+          High load (&gt;80%)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" /> Due
+          date conflict
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" />{" "}
+          Capacity exceeded
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-[10px]">⚠️</span> Conflict
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-[10px] font-bold text-purple-500">↕</span>{" "}
+          Rescheduled
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-[10px] font-bold text-gray-500">×N</span> Order
+          count
+        </span>
       </div>
 
       {/* Gantt body */}
@@ -605,18 +711,29 @@ export default function SchedulePage() {
 
         {!loading && fetchError && (
           <div className="flex flex-col items-center justify-center h-full gap-2">
-            <span className="text-2xl">{fetchError.status === 403 ? "🔒" : "⚠️"}</span>
+            <span className="text-2xl">
+              {fetchError.status === 403 ? "🔒" : "⚠️"}
+            </span>
             <p className="text-sm font-medium text-gray-700">
-              {fetchError.status === 401 && "Unauthorized — invalid or missing token"}
-              {fetchError.status === 403 && "Forbidden — this role cannot view the schedule"}
-              {fetchError.status === 0   && "Network error — is the server running?"}
-              {fetchError.status > 0 && fetchError.status !== 401 && fetchError.status !== 403 && `Error ${fetchError.status}: ${fetchError.message}`}
+              {fetchError.status === 401 &&
+                "Unauthorized — invalid or missing token"}
+              {fetchError.status === 403 &&
+                "Forbidden — this role cannot view the schedule"}
+              {fetchError.status === 0 &&
+                "Network error — is the server running?"}
+              {fetchError.status > 0 &&
+                fetchError.status !== 401 &&
+                fetchError.status !== 403 &&
+                `Error ${fetchError.status}: ${fetchError.message}`}
             </p>
           </div>
         )}
 
         {!loading && !fetchError && data && (
-          <table className="border-collapse text-xs" style={{ tableLayout: "fixed" }}>
+          <table
+            className="border-collapse text-xs"
+            style={{ tableLayout: "fixed" }}
+          >
             <thead>
               <tr>
                 {/* Factory label column */}
@@ -633,7 +750,9 @@ export default function SchedulePage() {
                       className={`sticky top-0 z-20 border border-gray-200 w-[72px] min-w-[72px] px-1 py-2 text-center font-medium ${isWeekend ? "bg-gray-50 text-gray-400" : "bg-white text-gray-600"}`}
                     >
                       <div>{format(day, "d")}</div>
-                      <div className="text-[9px] font-normal opacity-70">{format(day, "EEE")}</div>
+                      <div className="text-[9px] font-normal opacity-70">
+                        {format(day, "EEE")}
+                      </div>
                     </th>
                   );
                 })}
@@ -669,7 +788,9 @@ export default function SchedulePage() {
                             key={key}
                             cell={cell}
                             hasRescheduled={rescheduledCells.has(key)}
-                            onClick={() => setSelectedCell({ factoryId: factory.id, date })}
+                            onClick={() =>
+                              setSelectedCell({ factoryId: factory.id, date })
+                            }
                           />
                         );
                       })}

@@ -38,7 +38,10 @@ export const GET = withAuth<NextRequest>(async (req, ctx) => {
   const queryParams = Object.fromEntries(req.nextUrl.searchParams.entries());
   const parsed = ListUsersQuerySchema.safeParse(queryParams);
   if (!parsed.success) {
-    return badRequestResponse("Invalid query parameters.", parsed.error.flatten().fieldErrors as Record<string, unknown>);
+    return badRequestResponse(
+      "Invalid query parameters.",
+      parsed.error.flatten().fieldErrors as Record<string, unknown>,
+    );
   }
 
   const items = await listUsers(ctx, prisma, { role: parsed.data.role });
@@ -60,7 +63,10 @@ export const POST = withAuth<NextRequest>(async (req, ctx) => {
 
     const parsed = CreateUserBodySchema.safeParse(body);
     if (!parsed.success) {
-      return badRequestResponse("Invalid request body.", parsed.error.flatten().fieldErrors as Record<string, unknown>);
+      return badRequestResponse(
+        "Invalid request body.",
+        parsed.error.flatten().fieldErrors as Record<string, unknown>,
+      );
     }
 
     const result = await createUserService(ctx, prisma, parsed.data);
@@ -69,8 +75,11 @@ export const POST = withAuth<NextRequest>(async (req, ctx) => {
     const appErr = err as { status?: number; code?: string; message?: string };
     if (appErr.status === 404) {
       return new Response(
-        JSON.stringify({ code: appErr.code ?? "NOT_FOUND", message: appErr.message }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
+        JSON.stringify({
+          code: appErr.code ?? "NOT_FOUND",
+          message: appErr.message,
+        }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
       );
     }
     throw err;

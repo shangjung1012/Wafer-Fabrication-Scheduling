@@ -10,6 +10,13 @@ import {
 // This file contains database integration tests.
 // A real PostgreSQL database must be running and accessible via process.env.DATABASE_URL.
 
+function isDatabaseUnreachable(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("Can't reach database server")
+  );
+}
+
 describe("Schedule Engine - Database Integration", () => {
   const addDays = (date: Date, days: number) => {
     const result = new Date(date);
@@ -24,14 +31,20 @@ describe("Schedule Engine - Database Integration", () => {
     try {
       // Clean up only data created by this suite (scoped by productionType / name)
       // to avoid wiping shared seed data used by other test suites.
-      await prisma.orderAssignment.deleteMany({ where: { factory: { productionType: "IntegrationType" } } });
-      await prisma.dailyCapacity.deleteMany({   where: { factory: { productionType: "IntegrationType" } } });
-      await prisma.order.deleteMany({           where: { type: "IntegrationType" } });
-      await prisma.factory.deleteMany({         where: { productionType: "IntegrationType" } });
+      await prisma.orderAssignment.deleteMany({
+        where: { factory: { productionType: "IntegrationType" } },
+      });
+      await prisma.dailyCapacity.deleteMany({
+        where: { factory: { productionType: "IntegrationType" } },
+      });
+      await prisma.order.deleteMany({ where: { type: "IntegrationType" } });
+      await prisma.factory.deleteMany({
+        where: { productionType: "IntegrationType" },
+      });
       await prisma.user.deleteMany({
         where: { accountId: { in: ["test-applicant-1", "test-applicant-2"] } },
       });
-    } catch (e) {
+    } catch {
       // Ignore if DB isn't running
     }
   });
@@ -107,8 +120,8 @@ describe("Schedule Engine - Database Integration", () => {
       expect(capacities.length).toBe(2);
       expect(capacities[0].curCapacity).toBe(0);
       expect(capacities[1].curCapacity).toBe(30);
-    } catch (e: any) {
-      if (e.message && e.message.includes("Can't reach database server")) {
+    } catch (e: unknown) {
+      if (isDatabaseUnreachable(e)) {
         console.warn("Skipping DB test because database is not reachable.");
       } else {
         throw e;
@@ -187,8 +200,8 @@ describe("Schedule Engine - Database Integration", () => {
       });
 
       expect(capacities[0].curCapacity).toBe(40);
-    } catch (e: any) {
-      if (e.message && e.message.includes("Can't reach database server")) {
+    } catch (e: unknown) {
+      if (isDatabaseUnreachable(e)) {
         console.warn("Skipping DB test because database is not reachable.");
       } else {
         throw e;

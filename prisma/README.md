@@ -31,13 +31,14 @@ productionType A
 
 角色對應 `UserRole` enum：
 
-| 角色 | 說明 |
-|---|---|
+| 角色         | 說明                                                |
+| ------------ | --------------------------------------------------- |
 | `SUPERADMIN` | 管理同 type 下所有工廠與 Admin；擁有 Admin 全部權限 |
-| `ADMIN` | 管理單一工廠的訂單、排程、派工、Sales |
-| `SALES` | 建立訂單（PENDING）；提交修改申請；只能看受限訂單 |
+| `ADMIN`      | 管理單一工廠的訂單、排程、派工、Sales               |
+| `SALES`      | 建立訂單（PENDING）；提交修改申請；只能看受限訂單   |
 
 scope 來源：
+
 - `User.group`：建議存 `type:A`，用來推導 type scope
 - `Factory.adminId`：推導 factory scope（哪些工廠由誰管）
 - `OrderPermission`：SALES 細粒度可見訂單清單
@@ -48,13 +49,14 @@ scope 來源：
 
 ### `User`
 
-| 欄位 | 說明 |
-|---|---|
-| `role` | SUPERADMIN / ADMIN / SALES |
-| `group` | 建議存 `type:A`（type scope 來源） |
-| `password` | 可選（未實作 login 時為 null） |
+| 欄位       | 說明                               |
+| ---------- | ---------------------------------- |
+| `role`     | SUPERADMIN / ADMIN / SALES         |
+| `group`    | 建議存 `type:A`（type scope 來源） |
+| `password` | 可選（未實作 login 時為 null）     |
 
 Relations：
+
 - `managedFactories`：ADMIN/SUPERADMIN 管理的工廠（透過 `Factory.adminId` 反推）
 - `orders`：此 user 提出的訂單
 - `permissions`：細粒度訂單可見清單（`OrderPermission`）
@@ -64,14 +66,15 @@ Relations：
 
 ### `Factory`
 
-| 欄位 | 說明 |
-|---|---|
-| `productionType` | A / B / C（決定此工廠屬於哪個 type） |
-| `adminId` | 管理此工廠的 Admin user id（nullable） |
-| `maxCapacity` | 工廠日產能上限（預設 10000） |
-| `status` | ACTIVE / INACTIVE |
+| 欄位             | 說明                                   |
+| ---------------- | -------------------------------------- |
+| `productionType` | A / B / C（決定此工廠屬於哪個 type）   |
+| `adminId`        | 管理此工廠的 Admin user id（nullable） |
+| `maxCapacity`    | 工廠日產能上限（預設 10000）           |
+| `status`         | ACTIVE / INACTIVE                      |
 
 Relations：
+
 - `dailyCapacities`：每日產能快照（`DailyCapacity`）
 - `assignments`：分配到此工廠的派工單（`OrderAssignment`）
 
@@ -81,14 +84,15 @@ Relations：
 
 每間工廠每一天的產能快照，**一筆 = 一間工廠的一天**。
 
-| 欄位 | 說明 |
-|---|---|
-| `factoryId` | 所屬工廠 |
-| `date` | 哪一天（建議存 UTC 00:00:00 對齊） |
+| 欄位        | 說明                                           |
+| ----------- | ---------------------------------------------- |
+| `factoryId` | 所屬工廠                                       |
+| `date`      | 哪一天（建議存 UTC 00:00:00 對齊）             |
 | `maxAmount` | 該天產能上限（通常帶入 `Factory.maxCapacity`） |
-| `curAmount` | 該天剩餘產能（排程時扣除） |
+| `curAmount` | 該天剩餘產能（排程時扣除）                     |
 
 約束：
+
 - `@@unique([factoryId, date])`：同一工廠同一天只有一筆
 - 資料只按需生成（排程時需要哪天就建哪天），避免預建過多未來日期
 
@@ -96,15 +100,15 @@ Relations：
 
 ### `Order`
 
-| 欄位 | 說明 |
-|---|---|
-| `status` | 見狀態機 |
-| `dueDate` | 客戶要求交期 |
-| `productionDate` | 實際排定生產日（SCHEDULED 後才填）|
-| `factoryId` | SUPERADMIN 分配後填入 |
-| `applicantId` | 最初提出者（SALES） |
-| `lastModifiedById` | 最後修改者（任何 write 都應更新） |
-| `type` | 對應 `productionType`（A/B/C） |
+| 欄位               | 說明                               |
+| ------------------ | ---------------------------------- |
+| `status`           | 見狀態機                           |
+| `dueDate`          | 客戶要求交期                       |
+| `productionDate`   | 實際排定生產日（SCHEDULED 後才填） |
+| `factoryId`        | SUPERADMIN 分配後填入              |
+| `applicantId`      | 最初提出者（SALES）                |
+| `lastModifiedById` | 最後修改者（任何 write 都應更新）  |
+| `type`             | 對應 `productionType`（A/B/C）     |
 
 #### 狀態機
 
@@ -129,14 +133,14 @@ PENDING ──── Admin 核准 ──────────► APPROVED
 PENDING / APPROVED / SCHEDULED / IN_PRODUCTION ──► CANCELLED（不可回退）
 ```
 
-| 狀態 | 意義 | Sales 能改? | Admin 能改? |
-|---|---|---|---|
-| `PENDING` | Sales 剛建立 | 可直接改（自己的） | 可 |
-| `APPROVED` | Admin 核准，鎖定 | 只能送 `OrderRequest` | 可 |
-| `SCHEDULED` | 已排程 | 只能送 `OrderRequest` | 可（需重排） |
-| `IN_PRODUCTION` | 生產中 | 只能送 `OrderRequest` | 可（需重排） |
-| `COMPLETED` | 完成 | 不可 | 不可 |
-| `CANCELLED` | 取消 | 不可 | 不可 |
+| 狀態            | 意義             | Sales 能改?           | Admin 能改?  |
+| --------------- | ---------------- | --------------------- | ------------ |
+| `PENDING`       | Sales 剛建立     | 可直接改（自己的）    | 可           |
+| `APPROVED`      | Admin 核准，鎖定 | 只能送 `OrderRequest` | 可           |
+| `SCHEDULED`     | 已排程           | 只能送 `OrderRequest` | 可（需重排） |
+| `IN_PRODUCTION` | 生產中           | 只能送 `OrderRequest` | 可（需重排） |
+| `COMPLETED`     | 完成             | 不可                  | 不可         |
+| `CANCELLED`     | 取消             | 不可                  | 不可         |
 
 ---
 
@@ -144,11 +148,11 @@ PENDING / APPROVED / SCHEDULED / IN_PRODUCTION ──► CANCELLED（不可回�
 
 一筆 `Order` 可被拆成多筆 `OrderAssignment`，分配到不同工廠、不同日期生產。
 
-| 欄位 | 說明 |
-|---|---|
-| `orderId` | 來自哪筆訂單 |
-| `factoryId` | 分配到哪間工廠 |
-| `productionDate` | 排在哪一天生產 |
+| 欄位               | 說明             |
+| ------------------ | ---------------- |
+| `orderId`          | 來自哪筆訂單     |
+| `factoryId`        | 分配到哪間工廠   |
+| `productionDate`   | 排在哪一天生產   |
 | `assignedQuantity` | 這筆派工單的數量 |
 
 排程時需同步扣減對應的 `DailyCapacity.curAmount`（建議以 transaction 實作）。
@@ -201,11 +205,11 @@ pnpm db:seed
 
 Seed 預建的資料（stable id，可重複執行）：
 
-| id | name | role | group |
-|---|---|---|---|
+| id                | name            | role       | group  |
+| ----------------- | --------------- | ---------- | ------ |
 | `seed-superadmin` | Seed SuperAdmin | SUPERADMIN | type:A |
-| `seed-admin-a1` | Seed Admin A1 | ADMIN | type:A |
-| `seed-sales-a1` | Seed Sales A1 | SALES | type:A |
+| `seed-admin-a1`   | Seed Admin A1   | ADMIN      | type:A |
+| `seed-sales-a1`   | Seed Sales A1   | SALES      | type:A |
 
 工廠：`seed-factory-a1`（adminId = seed-admin-a1）、`seed-factory-a2`、`seed-factory-a3`
 

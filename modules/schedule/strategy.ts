@@ -29,8 +29,35 @@ export type ExistingCapacityDraft = CapacityDraft & {
   id: string;
 };
 
+export interface SchedulingAssignmentInput {
+  status: AssignmentStatus;
+  assignedQuantity: number;
+  factoryId?: string;
+  productionDate?: Date;
+}
+
+export interface SchedulingOrderInput {
+  id: string;
+  status: OrderStatus;
+  dueDate: Date;
+  quantity: number;
+  createdAt: Date;
+  assignments?: SchedulingAssignmentInput[];
+}
+
+export interface SchedulingFactoryInput {
+  id: string;
+  maxCapacity: number;
+}
+
+export type SchedulingCapacityInput = CapacityDraft;
+
+export type ProcessedSchedulingOrder = SchedulingOrderInput & {
+  status: OrderStatus;
+};
+
 export interface StrategyResult {
-  processedOrders: any[];
+  processedOrders: ProcessedSchedulingOrder[];
   newAssignments: OrderAssignmentDraft[];
   updatedCapacities: ExistingCapacityDraft[];
   newCapacities: CapacityDraft[];
@@ -46,9 +73,9 @@ function toDateString(d: Date | string): string {
 }
 
 export function greedyBestFitStrategy(
-  orders: any[],
-  factories: any[],
-  capacities: any[],
+  orders: SchedulingOrderInput[],
+  factories: SchedulingFactoryInput[],
+  capacities: SchedulingCapacityInput[],
   currentDate: Date = new Date(),
 ): StrategyResult {
   const result: StrategyResult = {
@@ -72,7 +99,7 @@ export function greedyBestFitStrategy(
   });
 
   // 2. Initialize in-memory capacity map
-  let capacityMap = new Map<string, CapacityDraft>();
+  const capacityMap = new Map<string, CapacityDraft>();
   for (const cap of capacities) {
     const dateKey = toDateString(cap.date);
     capacityMap.set(`${cap.factoryId}_${dateKey}`, { ...cap });
@@ -119,7 +146,7 @@ export function greedyBestFitStrategy(
 
     // Only attempt scheduling if window is valid and we have things to schedule
     if (windowStart.getTime() <= windowEnd.getTime() && remainingQty > 0) {
-      let currentIterDate = new Date(windowStart);
+      const currentIterDate = new Date(windowStart);
 
       while (
         currentIterDate.getTime() <= windowEnd.getTime() &&

@@ -45,11 +45,21 @@ describe("Schedule Engine", () => {
   });
 
   it("should fetch data, run strategy, and execute atomic transaction with correct repository calls", async () => {
-    const mockOrders = [{ id: "O1", status: OrderStatus.APPROVED }];
-    const mockFactories = [{ id: "F1", maxCapacity: 100 }];
+    const mockOrders = [
+      { id: "O1", status: OrderStatus.APPROVED },
+    ] as unknown as Awaited<
+      ReturnType<typeof orderRepo.findOrdersForScheduling>
+    >;
+    const mockFactories = [
+      { id: "F1", maxCapacity: 100 },
+    ] as unknown as Awaited<
+      ReturnType<typeof factoryRepo.findFactoriesWithCapacities>
+    >;
 
-    vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue(mockOrders as any);
-    vi.mocked(factoryRepo.findFactoriesWithCapacities).mockResolvedValue(mockFactories as any);
+    vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue(mockOrders);
+    vi.mocked(factoryRepo.findFactoriesWithCapacities).mockResolvedValue(
+      mockFactories,
+    );
 
     const mockStrategyResult = {
       processedOrders: [
@@ -65,16 +75,37 @@ describe("Schedule Engine", () => {
           status: AssignmentStatus.SCHEDULED,
         },
       ],
-      updatedCapacities: [{ id: "C1", factoryId: "F1", date: new Date(), maxCapacity: 100, curCapacity: 0 }],
-      newCapacities:     [{ factoryId: "F2", date: new Date(), maxCapacity: 200, curCapacity: 100 }],
+      updatedCapacities: [
+        {
+          id: "C1",
+          factoryId: "F1",
+          date: new Date(),
+          maxCapacity: 100,
+          curCapacity: 0,
+        },
+      ],
+      newCapacities: [
+        {
+          factoryId: "F2",
+          date: new Date(),
+          maxCapacity: 200,
+          curCapacity: 100,
+        },
+      ],
     };
     vi.mocked(greedyBestFitStrategy).mockReturnValue(mockStrategyResult);
 
     await runSchedule("Type A");
 
     // Data retrieval
-    expect(orderRepo.findOrdersForScheduling).toHaveBeenCalledWith(prisma, "Type A");
-    expect(factoryRepo.findFactoriesWithCapacities).toHaveBeenCalledWith(prisma, "Type A");
+    expect(orderRepo.findOrdersForScheduling).toHaveBeenCalledWith(
+      prisma,
+      "Type A",
+    );
+    expect(factoryRepo.findFactoriesWithCapacities).toHaveBeenCalledWith(
+      prisma,
+      "Type A",
+    );
 
     // Strategy
     expect(greedyBestFitStrategy).toHaveBeenCalledWith(
@@ -93,20 +124,21 @@ describe("Schedule Engine", () => {
       ["O1", "O2"],
     );
 
-    expect(orderRepo.bulkUpdateOrderStatus).toHaveBeenCalledWith(
-      mockTx,
-      [
-        { id: "O1", status: OrderStatus.SCHEDULED },
-        { id: "O2", status: OrderStatus.APPROVED },
-      ],
-    );
+    expect(orderRepo.bulkUpdateOrderStatus).toHaveBeenCalledWith(mockTx, [
+      { id: "O1", status: OrderStatus.SCHEDULED },
+      { id: "O2", status: OrderStatus.APPROVED },
+    ]);
 
     expect(capacityRepo.createDailyCapacities).toHaveBeenCalledWith(
       mockTx,
       mockStrategyResult.newCapacities,
     );
 
-    expect(capacityRepo.updateDailyCapacityById).toHaveBeenCalledWith(mockTx, "C1", 0);
+    expect(capacityRepo.updateDailyCapacityById).toHaveBeenCalledWith(
+      mockTx,
+      "C1",
+      0,
+    );
     expect(capacityRepo.updateDailyCapacityById).toHaveBeenCalledTimes(1);
 
     expect(assignmentRepo.createAssignments).toHaveBeenCalledWith(
@@ -127,7 +159,10 @@ describe("Schedule Engine", () => {
 
     await runSchedule("Type B");
 
-    expect(assignmentRepo.deleteScheduledAssignments).toHaveBeenCalledWith(mockTx, []);
+    expect(assignmentRepo.deleteScheduledAssignments).toHaveBeenCalledWith(
+      mockTx,
+      [],
+    );
     expect(orderRepo.bulkUpdateOrderStatus).toHaveBeenCalledWith(mockTx, []);
     expect(capacityRepo.createDailyCapacities).toHaveBeenCalledWith(mockTx, []);
     expect(capacityRepo.updateDailyCapacityById).not.toHaveBeenCalled();

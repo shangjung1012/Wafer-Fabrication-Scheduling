@@ -54,7 +54,7 @@ const requestSelect = {
 
 export async function findRequests(
   db: PrismaClient,
-  filters: RequestFilters = {}
+  filters: RequestFilters = {},
 ): Promise<RequestRow[]> {
   const { applicantId, orderIds } = filters;
 
@@ -81,7 +81,7 @@ export async function findRequests(
 
 export async function findRequestById(
   db: PrismaClient,
-  id: string
+  id: string,
 ): Promise<RequestRow | null> {
   return db.orderRequest.findUnique({
     where: { id },
@@ -95,14 +95,15 @@ export async function findRequestById(
 
 export async function createRequest(
   db: PrismaClient,
-  input: CreateRequestInput
+  input: CreateRequestInput,
 ): Promise<RequestRow> {
   return db.orderRequest.create({
     data: {
       applicantId: input.applicantId,
       orderId: input.orderId,
       message: input.message,
-      payload: input.payload !== undefined ? (input.payload as object) : undefined,
+      payload:
+        input.payload !== undefined ? (input.payload as object) : undefined,
     },
     select: requestSelect,
   });
@@ -111,16 +112,21 @@ export async function createRequest(
 export async function updateRequest(
   db: PrismaClient,
   id: string,
-  input: UpdateRequestInput
+  input: UpdateRequestInput,
 ): Promise<RequestRow | null> {
-  const exists = await db.orderRequest.findUnique({ where: { id }, select: { id: true } });
+  const exists = await db.orderRequest.findUnique({
+    where: { id },
+    select: { id: true },
+  });
   if (!exists) return null;
 
   return db.orderRequest.update({
     where: { id },
     data: {
       ...(input.message !== undefined ? { message: input.message } : {}),
-      ...(input.payload !== undefined ? { payload: input.payload as object } : {}),
+      ...(input.payload !== undefined
+        ? { payload: input.payload as object }
+        : {}),
     },
     select: requestSelect,
   });

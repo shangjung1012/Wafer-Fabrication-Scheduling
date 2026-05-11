@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { login } from "@/modules/auth/auth-service";
-import { authErrorResponse, parseJsonError, validationErrorResponse } from "@/app/api/auth/_shared";
+import {
+  authErrorResponse,
+  parseJsonError,
+  validationErrorResponse,
+} from "@/app/api/auth/_shared";
 
 const LoginBodySchema = z.object({
   accountId: z.string().trim().min(1, "accountId is required").max(80),

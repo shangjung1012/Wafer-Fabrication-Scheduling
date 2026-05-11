@@ -23,13 +23,15 @@ import { prisma } from "@/lib/prisma";
 // Validation schemas
 // ---------------------------------------------------------------------------
 
-const UpdateOrderBodySchema = z.object({
-  status: z.nativeEnum(OrderStatus).optional(),
-  dueDate: z.string().datetime().optional(),
-  quantity: z.number().int().positive().optional(),
-  name: z.string().min(1).optional(),
-  type: z.string().min(1).optional(),
-}).strict();
+const UpdateOrderBodySchema = z
+  .object({
+    status: z.nativeEnum(OrderStatus).optional(),
+    dueDate: z.string().datetime().optional(),
+    quantity: z.number().int().positive().optional(),
+    name: z.string().min(1).optional(),
+    type: z.string().min(1).optional(),
+  })
+  .strict();
 
 // ---------------------------------------------------------------------------
 // GET /api/orders/[id]
@@ -37,7 +39,7 @@ const UpdateOrderBodySchema = z.object({
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const ctx = await requireAuth(req);
@@ -46,7 +48,8 @@ export async function GET(
     const order = await getOrder(ctx, prisma, id);
     return NextResponse.json(order);
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
+    if (err instanceof UnauthorizedError)
+      return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);
@@ -60,7 +63,7 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const ctx = await requireAuth(req);
@@ -77,7 +80,7 @@ export async function PUT(
     if (!parsed.success) {
       return badRequestResponse(
         "Invalid request body.",
-        parsed.error.flatten().fieldErrors as Record<string, unknown>
+        parsed.error.flatten().fieldErrors as Record<string, unknown>,
       );
     }
 
@@ -95,7 +98,8 @@ export async function PUT(
     });
     return NextResponse.json(order);
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
+    if (err instanceof UnauthorizedError)
+      return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);

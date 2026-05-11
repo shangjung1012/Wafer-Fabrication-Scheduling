@@ -1,4 +1,9 @@
-import { greedyBestFitStrategy } from "../modules/schedule/strategy";
+import {
+  greedyBestFitStrategy,
+  type SchedulingCapacityInput,
+  type SchedulingFactoryInput,
+  type SchedulingOrderInput,
+} from "../modules/schedule/strategy";
 import { OrderStatus } from "../lib/generated/prisma/client";
 
 // Helpers
@@ -26,7 +31,7 @@ console.log(`\n📦 Generating Mock Data:
 - ${DAYS_OF_CAPACITY} Days of Capacity per Factory (${NUM_FACTORIES * DAYS_OF_CAPACITY} records)`);
 
 // 1. Generate Factories
-const mockFactories: any[] = [];
+const mockFactories: SchedulingFactoryInput[] = [];
 for (let i = 1; i <= NUM_FACTORIES; i++) {
   mockFactories.push({
     id: `F${i}`,
@@ -35,7 +40,7 @@ for (let i = 1; i <= NUM_FACTORIES; i++) {
 }
 
 // 2. Generate Capacities
-const mockCapacities: any[] = [];
+const mockCapacities: SchedulingCapacityInput[] = [];
 for (const factory of mockFactories) {
   for (let day = 0; day < DAYS_OF_CAPACITY; day++) {
     const targetDate = addDays(TODAY, day);
@@ -50,7 +55,7 @@ for (const factory of mockFactories) {
 }
 
 // 3. Generate Orders
-const mockOrders: any[] = [];
+const mockOrders: SchedulingOrderInput[] = [];
 for (let i = 1; i <= NUM_ORDERS; i++) {
   // Due date between tomorrow and 180 days
   const dueDays = randomInt(1, DAYS_OF_CAPACITY - 1);

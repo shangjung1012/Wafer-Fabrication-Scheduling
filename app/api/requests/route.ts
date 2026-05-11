@@ -15,7 +15,10 @@ import {
   badRequestResponse,
   notFoundResponse,
 } from "@/modules/auth/rbac";
-import { listRequests, createRequestService } from "@/modules/order/request-service";
+import {
+  listRequests,
+  createRequestService,
+} from "@/modules/order/request-service";
 import { prisma } from "@/lib/prisma";
 
 // ---------------------------------------------------------------------------
@@ -39,7 +42,8 @@ export async function GET(req: NextRequest) {
     const requests = await listRequests(ctx, prisma, {});
     return NextResponse.json(requests);
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
+    if (err instanceof UnauthorizedError)
+      return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);
@@ -66,14 +70,15 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return badRequestResponse(
         "Invalid request body.",
-        parsed.error.flatten().fieldErrors as Record<string, unknown>
+        parsed.error.flatten().fieldErrors as Record<string, unknown>,
       );
     }
 
     const request = await createRequestService(ctx, prisma, parsed.data);
     return NextResponse.json(request, { status: 201 });
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
+    if (err instanceof UnauthorizedError)
+      return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);

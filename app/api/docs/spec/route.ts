@@ -20,7 +20,7 @@ export async function GET() {
   } catch {
     return NextResponse.json(
       { error: "api_spec.yml not found" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 

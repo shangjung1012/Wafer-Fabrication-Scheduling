@@ -18,12 +18,14 @@ describe("withAuth", () => {
       return Response.json({ requestId: ctx.requestId, user: ctx.user });
     });
 
-    const response = await handler(new Request("http://localhost/api/users", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "x-request-id": "req-1",
-      },
-    }));
+    const response = await handler(
+      new Request("http://localhost/api/users", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "x-request-id": "req-1",
+        },
+      }),
+    );
 
     await expect(response.json()).resolves.toEqual({
       requestId: "req-1",
@@ -57,9 +59,11 @@ describe("withAuth", () => {
       throw new ForbiddenError("Nope.");
     });
 
-    const response = await handler(new Request("http://localhost/api/users", {
-      headers: { Authorization: `Bearer ${token}` },
-    }));
+    const response = await handler(
+      new Request("http://localhost/api/users", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    );
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({
@@ -78,9 +82,11 @@ describe("withAuth", () => {
       throw new NotFoundError("Missing.");
     });
 
-    const response = await handler(new Request("http://localhost/api/users/missing", {
-      headers: { Authorization: `Bearer ${token}` },
-    }));
+    const response = await handler(
+      new Request("http://localhost/api/users/missing", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    );
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({

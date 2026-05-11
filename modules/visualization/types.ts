@@ -1,4 +1,8 @@
-export type AssignmentStatus = "SCHEDULED" | "IN_PRODUCTION" | "COMPLETED" | "CANCELLED";
+export type AssignmentStatus =
+  | "SCHEDULED"
+  | "IN_PRODUCTION"
+  | "COMPLETED"
+  | "CANCELLED";
 export type ConflictType = "CAPACITY" | "DUE_DATE" | "ASSIGNMENT";
 export type ConflictSeverity = "ERROR" | "WARNING";
 
@@ -16,7 +20,7 @@ export type TimelineItem = {
   productionDate: string; // YYYY-MM-DD
   assignedQuantity: number;
   status: AssignmentStatus;
-  dueDate: string;        // YYYY-MM-DD
+  dueDate: string; // YYYY-MM-DD
   applicantId: string;
   lastModifiedById: string | null;
 };
@@ -42,7 +46,7 @@ export type DiffEntry = {
   orderName: string;
   field: "productionDate";
   before: string; // YYYY-MM-DD
-  after: string;  // YYYY-MM-DD
+  after: string; // YYYY-MM-DD
   reason: string;
 };
 

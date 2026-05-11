@@ -117,11 +117,11 @@ OpenAPI spec：[`api_spec.yml`](./api_spec.yml)
 
 ## Scripts
 
-| 指令 | 說明 |
-|---|---|
-| `pnpm dev` | 啟動 Next.js dev server |
-| `pnpm build` | 建置 production |
-| `pnpm db:migrate` | 執行 Prisma migration |
-| `pnpm db:generate` | 產生 Prisma client |
-| `pnpm db:seed` | Seed 測試資料進 DB |
-| `pnpm db:studio` | 開啟 Prisma Studio |
+| 指令               | 說明                    |
+| ------------------ | ----------------------- |
+| `pnpm dev`         | 啟動 Next.js dev server |
+| `pnpm build`       | 建置 production         |
+| `pnpm db:migrate`  | 執行 Prisma migration   |
+| `pnpm db:generate` | 產生 Prisma client      |
+| `pnpm db:seed`     | Seed 測試資料進 DB      |
+| `pnpm db:studio`   | 開啟 Prisma Studio      |

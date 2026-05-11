@@ -9,6 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "benchmark": "tsx scripts/benchmark.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

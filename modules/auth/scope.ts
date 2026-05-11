@@ -25,9 +25,9 @@ export type SalesScope = {
 export type AdminScope = {
   role: "ADMIN";
   userId: string;
-  factoryIds: string[];    // N-to-N: admin can manage multiple factories
+  factoryIds: string[]; // N-to-N: admin can manage multiple factories
   productionType: string;
-  group: string;           // alias for productionType — use getScopeGroup() to avoid branching
+  group: string; // alias for productionType — use getScopeGroup() to avoid branching
 };
 
 export type SuperAdminScope = {
@@ -62,7 +62,7 @@ export function getScopeGroup(scope: ActorScope): string {
  */
 export async function resolveActorScope(
   ctx: RequestContext,
-  db: PrismaClient
+  db: PrismaClient,
 ): Promise<ActorScope> {
   switch (ctx.user.role) {
     case "SALES": {
@@ -71,7 +71,9 @@ export async function resolveActorScope(
         select: { group: true },
       });
       if (!user?.group) {
-        throw new ForbiddenError("Your account does not have a production type assigned.");
+        throw new ForbiddenError(
+          "Your account does not have a production type assigned.",
+        );
       }
       return { role: "SALES", userId: ctx.user.id, group: user.group };
     }
@@ -82,7 +84,9 @@ export async function resolveActorScope(
         select: { id: true, productionType: true },
       });
       if (factories.length === 0) {
-        throw new ForbiddenError("Your account is not assigned to any factory.");
+        throw new ForbiddenError(
+          "Your account is not assigned to any factory.",
+        );
       }
       const productionType = factories[0].productionType;
       return {
@@ -100,7 +104,9 @@ export async function resolveActorScope(
         select: { group: true },
       });
       if (!user?.group) {
-        throw new ForbiddenError("Your account does not have a production type assigned.");
+        throw new ForbiddenError(
+          "Your account does not have a production type assigned.",
+        );
       }
       return { role: "SUPERADMIN", userId: ctx.user.id, group: user.group };
     }

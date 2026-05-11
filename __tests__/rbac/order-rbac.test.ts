@@ -7,7 +7,7 @@
  * Run: pnpm test
  */
 
-import { describe, it, expect, beforeEach, afterEach, afterAll } from "vitest";
+import { describe, it, expect, afterEach, afterAll } from "vitest";
 import { prisma } from "@/lib/prisma";
 import type { RequestContext } from "@/modules/auth/request-context";
 import {
@@ -27,30 +27,37 @@ import { ForbiddenError } from "@/modules/auth/rbac";
 // Test contexts (IDs match pnpm db:seed output)
 // ---------------------------------------------------------------------------
 
-const ctx = (id: string, role: RequestContext["user"]["role"]): RequestContext => ({
+const ctx = (
+  id: string,
+  role: RequestContext["user"]["role"],
+): RequestContext => ({
   user: { id, role },
   requestId: "test",
 });
 
-const salesA  = ctx("sales-A",   "SALES");
-const salesB  = ctx("sales-B",   "SALES");
-const adminA1 = ctx("admin-A1",  "ADMIN");
-const adminB1 = ctx("admin-B1",  "ADMIN");
+const salesA = ctx("sales-A", "SALES");
+const salesB = ctx("sales-B", "SALES");
+const adminA1 = ctx("admin-A1", "ADMIN");
+const adminB1 = ctx("admin-B1", "ADMIN");
 
 // ---------------------------------------------------------------------------
 // Cleanup helpers
 // ---------------------------------------------------------------------------
 
 const createdRequestIds: string[] = [];
-const createdOrderIds: string[]   = [];
+const createdOrderIds: string[] = [];
 
 afterEach(async () => {
   if (createdRequestIds.length) {
-    await prisma.orderRequest.deleteMany({ where: { id: { in: [...createdRequestIds] } } });
+    await prisma.orderRequest.deleteMany({
+      where: { id: { in: [...createdRequestIds] } },
+    });
     createdRequestIds.length = 0;
   }
   if (createdOrderIds.length) {
-    await prisma.order.deleteMany({ where: { id: { in: [...createdOrderIds] } } });
+    await prisma.order.deleteMany({
+      where: { id: { in: [...createdOrderIds] } },
+    });
     createdOrderIds.length = 0;
   }
 });
@@ -105,7 +112,7 @@ describe("流程一：正常訂單生命週期", () => {
         type: "B",
         dueDate: new Date("2026-12-31"),
         quantity: 100,
-      })
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
@@ -122,7 +129,7 @@ describe("流程一：正常訂單生命週期", () => {
     await updateOrderService(adminA1, prisma, order.id, { status: "APPROVED" });
 
     await expect(
-      updateOrderService(salesA, prisma, order.id, { name: "改名" })
+      updateOrderService(salesA, prisma, order.id, { name: "改名" }),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
@@ -182,7 +189,7 @@ describe("流程二：scope 隔離", () => {
     const orderB = await seedOrderB();
 
     await expect(
-      deleteOrdersService(adminA1, prisma, [orderB.id])
+      deleteOrdersService(adminA1, prisma, [orderB.id]),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 

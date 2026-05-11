@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from "vitest";
 import { POST } from "@/app/api/schedule/run/route";
 import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
 import Redis from "ioredis";
@@ -27,8 +35,8 @@ vi.mock("@/modules/schedule/engine", () => ({
 }));
 
 describe("POST /api/schedule/run", () => {
-  let redisSetMock: any;
-  let redisDelMock: any;
+  let redisSetMock: Mock;
+  let redisDelMock: Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -57,7 +65,7 @@ describe("POST /api/schedule/run", () => {
     vi.clearAllMocks(); // 順便清空 mock 的呼叫次數，避免跨測試污染
   });
 
-  const createRequest = (body: any, headers = {}) => {
+  const createRequest = (body: Record<string, unknown>, headers = {}) => {
     return new Request("http://localhost:3000/api/schedule/run", {
       method: "POST",
       headers: {
@@ -94,7 +102,7 @@ describe("POST /api/schedule/run", () => {
   it("should allow execution if valid CRON_SECRET is provided", async () => {
     // 動態且安全地注入環境變數
     vi.stubEnv("CRON_SECRET", "super-secret-cron-key");
-  
+
     // Mock requireAuth to reject, ensuring we bypass it entirely
     vi.mocked(requireAuth).mockRejectedValueOnce(new UnauthorizedError());
 

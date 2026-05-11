@@ -24,7 +24,9 @@ function jsonRequest(url: string, body: unknown): Request {
 
 function authedNextRequest(url: string, accessToken?: string): NextRequest {
   return new NextRequest(url, {
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    headers: accessToken
+      ? { Authorization: `Bearer ${accessToken}` }
+      : undefined,
   });
 }
 
@@ -82,13 +84,15 @@ describe("auth API route flow", () => {
   });
 
   it("logs in, issues bearer tokens, and authorizes a protected API by role and scope", async () => {
-    const loginResponse = await loginPost(jsonRequest("http://localhost/api/auth/login", {
-      accountId: "route-test-sa-A",
-      password: PASSWORD,
-    }));
+    const loginResponse = await loginPost(
+      jsonRequest("http://localhost/api/auth/login", {
+        accountId: "route-test-sa-A",
+        password: PASSWORD,
+      }),
+    );
     expect(loginResponse.status).toBe(200);
 
-    const loginBody = await loginResponse.json() as {
+    const loginBody = (await loginResponse.json()) as {
       accessToken: string;
       refreshToken: string;
       user: { accountId: string; role: string };
@@ -100,23 +104,26 @@ describe("auth API route flow", () => {
       role: "SUPERADMIN",
     });
 
-    const usersResponse = await usersGet(authedNextRequest(
-      "http://localhost/api/users",
-      loginBody.accessToken,
-    ));
+    const usersResponse = await usersGet(
+      authedNextRequest("http://localhost/api/users", loginBody.accessToken),
+    );
     expect(usersResponse.status).toBe(200);
 
-    const usersBody = await usersResponse.json() as {
+    const usersBody = (await usersResponse.json()) as {
       items: Array<{ accountId: string; group: string | null }>;
     };
     expect(usersBody.items.map((user) => user.accountId)).toEqual(
       expect.arrayContaining(["route-test-sa-A", "route-test-sales-A"]),
     );
-    expect(usersBody.items.map((user) => user.accountId)).not.toContain("route-test-sales-B");
+    expect(usersBody.items.map((user) => user.accountId)).not.toContain(
+      "route-test-sales-B",
+    );
   });
 
   it("rejects protected APIs without a bearer token", async () => {
-    const response = await usersGet(authedNextRequest("http://localhost/api/users"));
+    const response = await usersGet(
+      authedNextRequest("http://localhost/api/users"),
+    );
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toMatchObject({
@@ -125,16 +132,17 @@ describe("auth API route flow", () => {
   });
 
   it("rejects protected APIs when the token role lacks permission", async () => {
-    const loginResponse = await loginPost(jsonRequest("http://localhost/api/auth/login", {
-      accountId: "route-test-sales-A",
-      password: PASSWORD,
-    }));
-    const loginBody = await loginResponse.json() as { accessToken: string };
+    const loginResponse = await loginPost(
+      jsonRequest("http://localhost/api/auth/login", {
+        accountId: "route-test-sales-A",
+        password: PASSWORD,
+      }),
+    );
+    const loginBody = (await loginResponse.json()) as { accessToken: string };
 
-    const response = await usersGet(authedNextRequest(
-      "http://localhost/api/users",
-      loginBody.accessToken,
-    ));
+    const response = await usersGet(
+      authedNextRequest("http://localhost/api/users", loginBody.accessToken),
+    );
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({
@@ -143,21 +151,27 @@ describe("auth API route flow", () => {
   });
 
   it("logs out by revoking the refresh token", async () => {
-    const loginResponse = await loginPost(jsonRequest("http://localhost/api/auth/login", {
-      accountId: "route-test-sa-A",
-      password: PASSWORD,
-    }));
-    const loginBody = await loginResponse.json() as { refreshToken: string };
+    const loginResponse = await loginPost(
+      jsonRequest("http://localhost/api/auth/login", {
+        accountId: "route-test-sa-A",
+        password: PASSWORD,
+      }),
+    );
+    const loginBody = (await loginResponse.json()) as { refreshToken: string };
 
-    const logoutResponse = await logoutPost(jsonRequest("http://localhost/api/auth/logout", {
-      refreshToken: loginBody.refreshToken,
-    }));
+    const logoutResponse = await logoutPost(
+      jsonRequest("http://localhost/api/auth/logout", {
+        refreshToken: loginBody.refreshToken,
+      }),
+    );
     expect(logoutResponse.status).toBe(200);
     await expect(logoutResponse.json()).resolves.toEqual({ ok: true });
 
-    const refreshResponse = await refreshPost(jsonRequest("http://localhost/api/auth/refresh", {
-      refreshToken: loginBody.refreshToken,
-    }));
+    const refreshResponse = await refreshPost(
+      jsonRequest("http://localhost/api/auth/refresh", {
+        refreshToken: loginBody.refreshToken,
+      }),
+    );
     expect(refreshResponse.status).toBe(401);
     await expect(refreshResponse.json()).resolves.toMatchObject({
       code: "INVALID_REFRESH_TOKEN",

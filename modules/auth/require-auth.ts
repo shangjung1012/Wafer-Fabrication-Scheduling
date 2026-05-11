@@ -3,7 +3,9 @@ import type { RequestContext } from "@/modules/auth/request-context";
 import { verifyAccessToken } from "@/modules/auth/token-service";
 
 function parseBearerToken(request: Request): string | null {
-  const raw = request.headers.get("authorization") ?? request.headers.get("Authorization");
+  const raw =
+    request.headers.get("authorization") ??
+    request.headers.get("Authorization");
   if (!raw) return null;
 
   const match = raw.match(/^Bearer\s+(.+)$/i);

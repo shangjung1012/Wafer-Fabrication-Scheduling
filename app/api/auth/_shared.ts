@@ -15,7 +15,7 @@ export function parseJsonError(): Response {
 export function validationErrorResponse(error: ZodError): Response {
   return badRequestResponse(
     "Invalid request body.",
-    error.flatten().fieldErrors as Record<string, unknown>
+    error.flatten().fieldErrors as Record<string, unknown>,
   );
 }
 
@@ -28,7 +28,7 @@ export function authErrorResponse(err: unknown): Response | null {
   ) {
     return NextResponse.json(
       { code: err.code, message: err.message },
-      { status: err.status }
+      { status: err.status },
     );
   }
 
