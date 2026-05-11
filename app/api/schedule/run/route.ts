@@ -4,8 +4,18 @@ import { z } from "zod";
 import Redis from "ioredis";
 import { runSchedule } from "@/modules/schedule/engine";
 
-// Use REDIS_URL or default local instance
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+let redis: Redis | undefined;
+
+function getRedis(): Redis {
+  if (!redis) {
+    redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+    redis.on?.("error", (error) => {
+      console.error("Redis connection error:", error);
+    });
+  }
+
+  return redis;
+}
 
 const RunScheduleSchema = z.object({
   type: z.string().min(1, "Type is required"),
@@ -47,6 +57,7 @@ export async function POST(request: Request) {
 
     const { type } = parsed.data;
     const lockKey = `schedule:lock:${type}`;
+    const redis = getRedis();
 
     // Acquire Redis Lock (Fail-fast, 5-minute expiry)
     const lockAcquired = await redis.set(lockKey, "locked", "EX", 300, "NX");
