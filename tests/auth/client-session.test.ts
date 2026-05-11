@@ -36,8 +36,6 @@ describe("client auth session", () => {
 
   it("persists only the real login session for protected client pages", () => {
     persistClientAuthSession({
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
       user: {
         id: "user-1",
         accountId: "sa-A",
@@ -49,18 +47,16 @@ describe("client auth session", () => {
     });
 
     expect(loadClientAuthSession()).toMatchObject({
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
       user: { accountId: "sa-A", role: "SUPERADMIN", group: "A" },
     });
+    expect(localStorage.getItem("auth_access_token")).toBeNull();
+    expect(localStorage.getItem("auth_refresh_token")).toBeNull();
     expect(localStorage.getItem("dev_token")).toBeNull();
     expect(localStorage.getItem("viz_dev_token")).toBeNull();
   });
 
   it("clears active and legacy browser token keys on logout", () => {
     persistClientAuthSession({
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
       user: {
         id: "user-1",
         accountId: "sa-A",

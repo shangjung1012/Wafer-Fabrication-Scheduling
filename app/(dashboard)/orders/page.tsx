@@ -11,12 +11,12 @@ import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 
 type Role = ClientAuthSession["user"]["role"];
 
-function apiFetch(token: string, path: string, options: RequestInit = {}) {
+function apiFetch(path: string, options: RequestInit = {}) {
   return fetch(path, {
     ...options,
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
       ...(options.headers ?? {}),
     },
   });
@@ -330,7 +330,6 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 export default function OrdersPage() {
   const router = useRouter();
   const session = useClientAuthSession();
-  const token = session?.accessToken ?? "";
   const role: Role = session?.user.role ?? "SALES";
 
   const isSales = role === "SALES";
@@ -349,10 +348,10 @@ export default function OrdersPage() {
 
   const doListOrders = useCallback(async () => {
     const qs = listKeyword ? `?keyword=${encodeURIComponent(listKeyword)}` : "";
-    const res = await apiFetch(token, `/api/orders${qs}`);
+    const res = await apiFetch(`/api/orders${qs}`);
     setListResult(await res.json());
     setListStatus(`${res.status}`);
-  }, [token, listKeyword]);
+  }, [listKeyword]);
 
   // ---- Get Order ----
   const [getOrderId, setGetOrderId] = useState("");
@@ -360,10 +359,10 @@ export default function OrdersPage() {
   const [getStatus, setGetStatus] = useState("");
 
   const doGetOrder = useCallback(async () => {
-    const res = await apiFetch(token, `/api/orders/${getOrderId}`);
+    const res = await apiFetch(`/api/orders/${getOrderId}`);
     setGetResult(await res.json());
     setGetStatus(`${res.status}`);
-  }, [token, getOrderId]);
+  }, [getOrderId]);
 
   // ---- Create Order (SALES) ----
   const [createName, setCreateName] = useState("");
@@ -374,7 +373,7 @@ export default function OrdersPage() {
   const [createStatus, setCreateStatus] = useState("");
 
   const doCreateOrder = useCallback(async () => {
-    const res = await apiFetch(token, "/api/orders", {
+    const res = await apiFetch("/api/orders", {
       method: "POST",
       body: JSON.stringify({
         name: createName,
@@ -385,7 +384,7 @@ export default function OrdersPage() {
     });
     setCreateResult(await res.json());
     setCreateStatus(`${res.status}`);
-  }, [token, createName, createType, createDueDate, createQty]);
+  }, [createName, createType, createDueDate, createQty]);
 
   // ---- Update Order ----
   const [updateId, setUpdateId] = useState("");
@@ -400,13 +399,13 @@ export default function OrdersPage() {
     if (updateName) body.name = updateName;
     if (updateQty) body.quantity = Number(updateQty);
     if (isAdminOrSuper && updateStatus2) body.status = updateStatus2;
-    const res = await apiFetch(token, `/api/orders/${updateId}`, {
+    const res = await apiFetch(`/api/orders/${updateId}`, {
       method: "PUT",
       body: JSON.stringify(body),
     });
     setUpdateResult(await res.json());
     setUpdateHttpStatus(`${res.status}`);
-  }, [token, updateId, updateName, updateQty, updateStatus2, isAdminOrSuper]);
+  }, [updateId, updateName, updateQty, updateStatus2, isAdminOrSuper]);
 
   // ---- Delete Orders (ADMIN) ----
   const [deleteIds, setDeleteIds] = useState("");
@@ -418,13 +417,13 @@ export default function OrdersPage() {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const res = await apiFetch(token, "/api/orders", {
+    const res = await apiFetch("/api/orders", {
       method: "DELETE",
       body: JSON.stringify({ ids }),
     });
     setDeleteResult(await res.json());
     setDeleteStatus(`${res.status}`);
-  }, [token, deleteIds]);
+  }, [deleteIds]);
 
   // ---- Import CSV (ADMIN + SUPERADMIN) ----
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -437,22 +436,22 @@ export default function OrdersPage() {
     form.append("file", csvFile);
     const res = await fetch("/api/orders/import", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "same-origin",
       body: form,
     });
     setImportResult(await res.json());
     setImportStatus(`${res.status}`);
-  }, [token, csvFile]);
+  }, [csvFile]);
 
   // ---- List Requests ----
   const [listReqResult, setListReqResult] = useState<unknown>(null);
   const [listReqStatus, setListReqStatus] = useState("");
 
   const doListRequests = useCallback(async () => {
-    const res = await apiFetch(token, "/api/requests");
+    const res = await apiFetch("/api/requests");
     setListReqResult(await res.json());
     setListReqStatus(`${res.status}`);
-  }, [token]);
+  }, []);
 
   // ---- Create Request (SALES) ----
   const [reqOrderId, setReqOrderId] = useState("");
@@ -468,7 +467,7 @@ export default function OrdersPage() {
     } catch {
       payload = {};
     }
-    const res = await apiFetch(token, "/api/requests", {
+    const res = await apiFetch("/api/requests", {
       method: "POST",
       body: JSON.stringify({
         orderId: reqOrderId,
@@ -478,7 +477,7 @@ export default function OrdersPage() {
     });
     setCreateReqResult(await res.json());
     setCreateReqStatus(`${res.status}`);
-  }, [token, reqOrderId, reqMessage, reqPayload]);
+  }, [reqOrderId, reqMessage, reqPayload]);
 
   // ---- Update Request (SALES) ----
   const [updateReqId, setUpdateReqId] = useState("");
@@ -487,13 +486,13 @@ export default function OrdersPage() {
   const [updateReqStatus, setUpdateReqStatus] = useState("");
 
   const doUpdateRequest = useCallback(async () => {
-    const res = await apiFetch(token, `/api/requests/${updateReqId}`, {
+    const res = await apiFetch(`/api/requests/${updateReqId}`, {
       method: "PUT",
       body: JSON.stringify({ message: updateReqMessage }),
     });
     setUpdateReqResult(await res.json());
     setUpdateReqStatus(`${res.status}`);
-  }, [token, updateReqId, updateReqMessage]);
+  }, [updateReqId, updateReqMessage]);
 
   // ---- Approve Request (ADMIN + SUPERADMIN) ----
   const [approveReqId, setApproveReqId] = useState("");
@@ -501,17 +500,17 @@ export default function OrdersPage() {
   const [approveStatus, setApproveStatus] = useState("");
 
   const doApprove = useCallback(async () => {
-    const res = await apiFetch(token, `/api/requests/${approveReqId}/approve`, {
+    const res = await apiFetch(`/api/requests/${approveReqId}/approve`, {
       method: "POST",
     });
     setApproveResult(await res.json());
     setApproveStatus(`${res.status}`);
-  }, [token, approveReqId]);
+  }, [approveReqId]);
 
   const handleLogout = useCallback(async () => {
-    await logoutClientAuthSession(session?.refreshToken);
+    await logoutClientAuthSession();
     router.replace("/login");
-  }, [router, session?.refreshToken]);
+  }, [router]);
 
   // ---------------------------------------------------------------------------
   // Role badge colour

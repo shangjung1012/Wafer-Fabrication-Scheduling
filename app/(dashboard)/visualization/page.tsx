@@ -396,7 +396,6 @@ type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
 export default function SchedulePage() {
   const router = useRouter();
   const session = useClientAuthSession();
-  const token = session?.accessToken ?? "";
   const productionType = session?.user.group ?? "";
   const [startDate, setStartDate] = useState(DEFAULT_START);
   const [endDate, setEndDate] = useState(DEFAULT_END);
@@ -420,7 +419,7 @@ export default function SchedulePage() {
 
     const params = new URLSearchParams({ startDate, endDate });
     fetch(`/api/visualization/timeline?${params}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "same-origin",
     })
       .then(async (r) => {
         if (!r.ok) {
@@ -439,7 +438,7 @@ export default function SchedulePage() {
         setFetchError({ status: 0, message: "Network error" });
         setLoading(false);
       });
-  }, [router, session, token, startDate, endDate, refreshKey]);
+  }, [router, session, startDate, endDate, refreshKey]);
 
   // Run schedule handler
   const handleRunSchedule = async () => {
@@ -448,9 +447,9 @@ export default function SchedulePage() {
     try {
       const res = await fetch("/api/schedule/run", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ type: productionType }),
       });
@@ -471,7 +470,7 @@ export default function SchedulePage() {
   };
 
   const handleLogout = async () => {
-    await logoutClientAuthSession(session?.refreshToken);
+    await logoutClientAuthSession();
     router.replace("/login");
   };
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { login } from "@/modules/auth/auth-service";
+import { setAuthCookies } from "@/app/api/auth/_cookies";
 import {
   authErrorResponse,
   parseJsonError,
@@ -28,7 +29,9 @@ export async function POST(req: Request) {
     }
 
     const result = await login(prisma, parsed.data);
-    return NextResponse.json(result);
+    const response = NextResponse.json({ user: result.user });
+    setAuthCookies(response, result);
+    return response;
   } catch (err) {
     const response = authErrorResponse(err);
     if (response) return response;
