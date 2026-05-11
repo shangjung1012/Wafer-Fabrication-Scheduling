@@ -49,7 +49,7 @@ enum AssignmentStatus {
 
 model User {
   id                String    @id @default(cuid())
-  accountId         String    @unique
+  accountId         String?   @unique
   email             String    @unique
   name              String
   password          String?
@@ -65,8 +65,28 @@ model User {
   managedFactories Factory[]         @relation("FactoryAdmins")
   requests         OrderRequest[]    @relation("RequestApplicant")
   refreshTokens    RefreshToken[]
+  invitations      UserInvitation[]  @relation("InvitationUser")
+  createdInvitations UserInvitation[] @relation("InvitationCreator")
 
   @@map("user")
+}
+
+model UserInvitation {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique
+  userId      String
+  createdById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user      User @relation("InvitationUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([createdById])
+  @@map("user_invitation")
 }
 
 model RefreshToken {

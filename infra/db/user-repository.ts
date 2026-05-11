@@ -13,7 +13,7 @@ import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
 
 export type UserRow = {
   id: string;
-  accountId: string;
+  accountId: string | null;
   email: string;
   name: string;
   role: UserRole;
@@ -21,7 +21,7 @@ export type UserRow = {
 };
 
 export type CreateUserInput = {
-  accountId: string;
+  accountId?: string | null;
   email: string;
   name: string;
   role: UserRole;
@@ -90,7 +90,7 @@ export async function createUser(
 ): Promise<{ id: string }> {
   const user = await db.user.create({
     data: {
-      accountId: input.accountId,
+      accountId: input.accountId ?? null,
       email: input.email,
       name: input.name,
       role: input.role,

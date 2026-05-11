@@ -5,6 +5,7 @@ import {
   AuthConflictError,
   InvalidCredentialsError,
   InvalidRefreshTokenError,
+  SelfRegistrationDisabledError,
 } from "@/modules/auth/auth-service";
 import { badRequestResponse } from "@/modules/auth/rbac";
 
@@ -24,7 +25,8 @@ export function authErrorResponse(err: unknown): Response | null {
     err instanceof AuthConflictError ||
     err instanceof InvalidCredentialsError ||
     err instanceof AccountLockedError ||
-    err instanceof InvalidRefreshTokenError
+    err instanceof InvalidRefreshTokenError ||
+    err instanceof SelfRegistrationDisabledError
   ) {
     return NextResponse.json(
       { code: err.code, message: err.message },
