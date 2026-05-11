@@ -39,6 +39,54 @@ export default function DocsPage() {
     link.href = "https://unpkg.com/swagger-ui-dist@5/swagger-ui.css";
     document.head.appendChild(link);
 
+    const style = document.createElement("style");
+    style.textContent = `
+      #swagger-ui {
+        color: #0f172a;
+      }
+      #swagger-ui .swagger-ui {
+        color: #0f172a;
+      }
+      #swagger-ui .swagger-ui .info .title,
+      #swagger-ui .swagger-ui .opblock-tag,
+      #swagger-ui .swagger-ui table thead tr td,
+      #swagger-ui .swagger-ui table thead tr th {
+        color: #0f172a;
+      }
+      #swagger-ui .swagger-ui .opblock-summary-description,
+      #swagger-ui .swagger-ui .parameter__name,
+      #swagger-ui .swagger-ui .parameter__type,
+      #swagger-ui .swagger-ui .response-col_status {
+        color: #334155;
+      }
+      #swagger-ui .swagger-ui .btn.authorize {
+        border-color: #047857;
+        color: #047857;
+        background: #ecfdf5;
+      }
+      #swagger-ui .swagger-ui .btn.authorize svg {
+        fill: #047857;
+      }
+      #swagger-ui .swagger-ui .opblock.opblock-post .opblock-summary-method,
+      #swagger-ui .swagger-ui .opblock.opblock-patch .opblock-summary-method {
+        background: #047857;
+        color: #ffffff;
+      }
+      #swagger-ui .swagger-ui .opblock.opblock-get .opblock-summary-method {
+        background: #1d4ed8;
+        color: #ffffff;
+      }
+      #swagger-ui .swagger-ui .opblock.opblock-put .opblock-summary-method {
+        background: #7c2d12;
+        color: #ffffff;
+      }
+      #swagger-ui .swagger-ui .opblock.opblock-delete .opblock-summary-method {
+        background: #b91c1c;
+        color: #ffffff;
+      }
+    `;
+    document.head.appendChild(style);
+
     // 2. Load Swagger UI bundle, then initialise
     const script = document.createElement("script");
     script.src = "https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js";
@@ -90,7 +138,7 @@ export default function DocsPage() {
           style={{
             fontSize: "11px",
             background: "#334155",
-            color: "#94a3b8",
+            color: "#e2e8f0",
             padding: "2px 8px",
             borderRadius: "999px",
             fontFamily: "monospace",

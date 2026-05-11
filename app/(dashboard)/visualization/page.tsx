@@ -624,8 +624,8 @@ export default function SchedulePage() {
             disabled={scheduleStatus === "running"}
             className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
               scheduleStatus === "running"
-                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                : "bg-green-600 text-white border-green-600 hover:bg-green-700"
+                ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
+                : "bg-green-700 text-white border-green-700 hover:bg-green-800"
             }`}
           >
             {scheduleStatus === "running"

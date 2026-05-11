@@ -262,7 +262,7 @@ export default function UsersPage() {
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 750 }}>
             User Invitations
           </h1>
-          <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
+          <p style={{ margin: "4px 0 0", color: "#475569", fontSize: 13 }}>
             Invite account owners and monitor pending setup status.
           </p>
         </div>
@@ -284,12 +284,12 @@ export default function UsersPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Users size={16} />
           <strong style={{ fontSize: 13 }}>{session.user.name}</strong>
-          <span style={{ color: "#64748b", fontSize: 12 }}>
+          <span style={{ color: "#475569", fontSize: 12 }}>
             {session.user.accountId}
           </span>
           <RoleBadge role={session.user.role} />
           {session.user.group && (
-            <span style={{ color: "#64748b", fontSize: 12 }}>
+            <span style={{ color: "#475569", fontSize: 12 }}>
               Group {session.user.group}
             </span>
           )}
@@ -487,7 +487,7 @@ export default function UsersPage() {
               })}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ ...tdStyle, color: "#64748b" }}>
+                  <td colSpan={7} style={{ ...tdStyle, color: "#475569" }}>
                     No users found.
                   </td>
                 </tr>
@@ -508,9 +508,13 @@ export default function UsersPage() {
 const pageStyle: React.CSSProperties = {
   fontFamily: "system-ui, sans-serif",
   maxWidth: 1040,
+  minHeight: "100vh",
   margin: "0 auto",
   padding: 24,
   color: "#0f172a",
+  background: "#f8fafc",
+  boxShadow: "0 0 0 100vmax #f8fafc",
+  clipPath: "inset(0 -100vmax)",
 };
 
 const topBarStyle: React.CSSProperties = {
@@ -533,7 +537,7 @@ const navLinkStyle: React.CSSProperties = {
   border: "1px solid #cbd5e1",
   borderRadius: 6,
   padding: "7px 11px",
-  color: "#334155",
+  color: "#1e293b",
   background: "#fff",
   textDecoration: "none",
   fontSize: 13,
@@ -553,7 +557,7 @@ const sessionBarStyle: React.CSSProperties = {
   gap: 12,
   flexWrap: "wrap",
   border: "1px solid #dbe3ef",
-  background: "#f8fafc",
+  background: "#f1f5f9",
   borderRadius: 8,
   padding: 12,
   marginBottom: 16,
@@ -564,7 +568,8 @@ const panelStyle: React.CSSProperties = {
   borderRadius: 8,
   padding: 16,
   marginBottom: 16,
-  background: "#fff",
+  background: "#ffffff",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 };
 
 const sectionHeaderStyle: React.CSSProperties = {
@@ -583,7 +588,7 @@ const sectionTitleStyle: React.CSSProperties = {
 
 const sectionMetaStyle: React.CSSProperties = {
   margin: "4px 0 0",
-  color: "#64748b",
+  color: "#475569",
   fontSize: 12,
 };
 
@@ -600,7 +605,7 @@ const fieldStyle: React.CSSProperties = {
 };
 
 const labelStyle: React.CSSProperties = {
-  color: "#475569",
+  color: "#334155",
   fontSize: 12,
   fontWeight: 700,
 };
@@ -643,7 +648,7 @@ const secondaryButtonStyle: React.CSSProperties = {
   borderRadius: 6,
   padding: "6px 10px",
   background: "#fff",
-  color: "#334155",
+  color: "#1e293b",
   fontSize: 13,
   fontWeight: 700,
   cursor: "pointer",
@@ -658,7 +663,7 @@ const iconButtonStyle: React.CSSProperties = {
   borderRadius: 6,
   padding: "5px 9px",
   background: "#fff",
-  color: "#334155",
+  color: "#1e293b",
   fontSize: 12,
   fontWeight: 700,
   cursor: "pointer",
@@ -686,7 +691,7 @@ const tableStyle: React.CSSProperties = {
 const thStyle: React.CSSProperties = {
   borderBottom: "1px solid #dbe3ef",
   padding: "9px 10px",
-  color: "#475569",
+  color: "#334155",
   fontSize: 12,
   fontWeight: 750,
   textAlign: "left",
@@ -706,27 +711,27 @@ const tdStyle: React.CSSProperties = {
 
 const messageStyle: React.CSSProperties = {
   border: "1px solid #cbd5e1",
-  background: "#f8fafc",
+  background: "#f1f5f9",
   borderRadius: 8,
   padding: 12,
   margin: "0 0 16px",
-  color: "#334155",
+  color: "#1e293b",
   fontSize: 13,
 };
 
 const resultStyle: React.CSSProperties = {
   border: "1px solid #dbe3ef",
-  background: "#f8fafc",
+  background: "#f1f5f9",
   borderRadius: 8,
   padding: 12,
   margin: 0,
-  color: "#334155",
+  color: "#1e293b",
   fontSize: 12,
   overflowX: "auto",
   maxHeight: 260,
 };
 
 const mutedTextStyle: React.CSSProperties = {
-  color: "#64748b",
+  color: "#475569",
   fontSize: 14,
 };
