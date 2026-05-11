@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
+import {
+  CsrfError,
+  requireAuth,
+  UnauthorizedError,
+} from "@/modules/auth/require-auth";
 import {
   ForbiddenError,
+  csrfResponse,
   forbiddenResponse,
   unauthorizedResponse,
 } from "@/modules/auth/rbac";
@@ -26,6 +31,7 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     if (err instanceof UnauthorizedError)
       return unauthorizedResponse(err.message);
+    if (err instanceof CsrfError) return csrfResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     throw err;
   }

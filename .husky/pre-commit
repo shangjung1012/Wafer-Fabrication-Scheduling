@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+set -eu
+
+files="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(js|jsx|ts|tsx|json|css|md|mdx|yml|yaml)$' || true)"
+
+if [ -z "$files" ]; then
+  exit 0
+fi
+
+printf "%s\n" "$files" | xargs pnpm exec prettier --write --ignore-unknown
+printf "%s\n" "$files" | xargs git add

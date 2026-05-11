@@ -15,6 +15,10 @@ import * as scheduleEngine from "@/modules/schedule/engine";
 // Mock requireAuth
 vi.mock("@/modules/auth/require-auth", () => ({
   requireAuth: vi.fn(),
+  CsrfError: class CsrfError extends Error {
+    status = 403;
+    code = "CSRF_FORBIDDEN";
+  },
   UnauthorizedError: class UnauthorizedError extends Error {
     status = 401;
     code = "UNAUTHORIZED";
@@ -127,6 +131,20 @@ describe("POST /api/schedule/run", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(401);
+  });
+
+  it("should not allow cron bypass when CRON_SECRET is unset", async () => {
+    vi.stubEnv("CRON_SECRET", "");
+    vi.mocked(requireAuth).mockRejectedValueOnce(new UnauthorizedError());
+
+    const req = createRequest(
+      { type: "Type A" },
+      { Authorization: "Bearer undefined" },
+    );
+    const res = await POST(req);
+
+    expect(res.status).toBe(401);
+    expect(scheduleEngine.runSchedule).not.toHaveBeenCalled();
   });
 
   it("should return 400 if body is invalid", async () => {

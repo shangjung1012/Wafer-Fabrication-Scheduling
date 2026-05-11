@@ -396,7 +396,6 @@ type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
 export default function SchedulePage() {
   const router = useRouter();
   const session = useClientAuthSession();
-  const token = session?.accessToken ?? "";
   const productionType = session?.user.group ?? "";
   const [startDate, setStartDate] = useState(DEFAULT_START);
   const [endDate, setEndDate] = useState(DEFAULT_END);
@@ -420,7 +419,7 @@ export default function SchedulePage() {
 
     const params = new URLSearchParams({ startDate, endDate });
     fetch(`/api/visualization/timeline?${params}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "same-origin",
     })
       .then(async (r) => {
         if (!r.ok) {
@@ -439,7 +438,7 @@ export default function SchedulePage() {
         setFetchError({ status: 0, message: "Network error" });
         setLoading(false);
       });
-  }, [router, session, token, startDate, endDate, refreshKey]);
+  }, [router, session, startDate, endDate, refreshKey]);
 
   // Run schedule handler
   const handleRunSchedule = async () => {
@@ -448,9 +447,9 @@ export default function SchedulePage() {
     try {
       const res = await fetch("/api/schedule/run", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ type: productionType }),
       });
@@ -471,7 +470,7 @@ export default function SchedulePage() {
   };
 
   const handleLogout = async () => {
-    await logoutClientAuthSession(session?.refreshToken);
+    await logoutClientAuthSession();
     router.replace("/login");
   };
 
@@ -568,6 +567,30 @@ export default function SchedulePage() {
             Factory gantt — click a cell to inspect orders
           </p>
         </div>
+
+        <nav
+          className="flex items-center gap-2 flex-wrap"
+          aria-label="Dashboard navigation"
+        >
+          <a
+            href="/orders"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Orders
+          </a>
+          <a
+            href="/visualization"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700"
+          >
+            Visualization
+          </a>
+          <a
+            href="/users"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Users
+          </a>
+        </nav>
 
         <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
           <span className="text-xs text-gray-500 font-medium whitespace-nowrap">

@@ -1,8 +1,13 @@
 import type { RequestContext } from "@/modules/auth/request-context";
-import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
+import {
+  CsrfError,
+  requireAuth,
+  UnauthorizedError,
+} from "@/modules/auth/require-auth";
 import {
   ForbiddenError,
   NotFoundError,
+  csrfResponse,
   forbiddenResponse,
   notFoundResponse,
   unauthorizedResponse,
@@ -32,6 +37,7 @@ export function withAuth<
     } catch (err) {
       if (err instanceof UnauthorizedError)
         return unauthorizedResponse(err.message);
+      if (err instanceof CsrfError) return csrfResponse(err.message);
       if (err instanceof ForbiddenError) return forbiddenResponse(err);
       if (err instanceof NotFoundError) return notFoundResponse(err.message);
       throw err;

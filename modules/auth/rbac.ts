@@ -75,6 +75,15 @@ export function unauthorizedResponse(
   });
 }
 
+export function csrfResponse(
+  message = "Request origin is not allowed.",
+): Response {
+  return new Response(JSON.stringify({ code: "CSRF_FORBIDDEN", message }), {
+    status: 403,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 export function badRequestResponse(
   message: string,
   details?: Record<string, unknown>,

@@ -22,11 +22,19 @@ function jsonRequest(url: string, body: unknown): Request {
   });
 }
 
-function authedNextRequest(url: string, accessToken?: string): NextRequest {
+function cookieHeader(response: Response): string {
+  const setCookie = (
+    response.headers as Headers & { getSetCookie?: () => string[] }
+  ).getSetCookie?.() ?? [response.headers.get("set-cookie") ?? ""];
+  return setCookie
+    .filter(Boolean)
+    .map((cookie) => cookie.split(";")[0])
+    .join("; ");
+}
+
+function authedNextRequest(url: string, cookie?: string): NextRequest {
   return new NextRequest(url, {
-    headers: accessToken
-      ? { Authorization: `Bearer ${accessToken}` }
-      : undefined,
+    headers: cookie ? { Cookie: cookie } : undefined,
   });
 }
 
@@ -46,6 +54,7 @@ async function seedRouteTestUsers(): Promise<void> {
       {
         id: "route-test-sa-A",
         accountId: "route-test-sa-A",
+        email: "route-test-sa-a@mail.shangjung.com",
         name: "Route Test SuperAdmin A",
         password,
         role: "SUPERADMIN",
@@ -54,6 +63,7 @@ async function seedRouteTestUsers(): Promise<void> {
       {
         id: "route-test-sales-A",
         accountId: "route-test-sales-A",
+        email: "route-test-sales-a@mail.shangjung.com",
         name: "Route Test Sales A",
         password,
         role: "SALES",
@@ -62,6 +72,7 @@ async function seedRouteTestUsers(): Promise<void> {
       {
         id: "route-test-sales-B",
         accountId: "route-test-sales-B",
+        email: "route-test-sales-b@mail.shangjung.com",
         name: "Route Test Sales B",
         password,
         role: "SALES",
@@ -74,6 +85,7 @@ async function seedRouteTestUsers(): Promise<void> {
 describe("auth API route flow", () => {
   beforeEach(async () => {
     process.env.JWT_SECRET = "test-secret-at-least-32-characters-long";
+    process.env.APP_BASE_URL = "http://localhost";
     await cleanupRouteTestUsers();
     await seedRouteTestUsers();
   });
@@ -83,7 +95,7 @@ describe("auth API route flow", () => {
     await prisma.$disconnect();
   });
 
-  it("logs in, issues bearer tokens, and authorizes a protected API by role and scope", async () => {
+  it("logs in, sets auth cookies, and authorizes a protected API by role and scope", async () => {
     const loginResponse = await loginPost(
       jsonRequest("http://localhost/api/auth/login", {
         accountId: "route-test-sa-A",
@@ -93,19 +105,18 @@ describe("auth API route flow", () => {
     expect(loginResponse.status).toBe(200);
 
     const loginBody = (await loginResponse.json()) as {
-      accessToken: string;
-      refreshToken: string;
       user: { accountId: string; role: string };
     };
-    expect(loginBody.accessToken).toBeTypeOf("string");
-    expect(loginBody.refreshToken).toBeTypeOf("string");
+    const cookies = cookieHeader(loginResponse);
+    expect(cookies).toContain("access_token=");
+    expect(cookies).toContain("refresh_token=");
     expect(loginBody.user).toMatchObject({
       accountId: "route-test-sa-A",
       role: "SUPERADMIN",
     });
 
     const usersResponse = await usersGet(
-      authedNextRequest("http://localhost/api/users", loginBody.accessToken),
+      authedNextRequest("http://localhost/api/users", cookies),
     );
     expect(usersResponse.status).toBe(200);
 
@@ -138,10 +149,10 @@ describe("auth API route flow", () => {
         password: PASSWORD,
       }),
     );
-    const loginBody = (await loginResponse.json()) as { accessToken: string };
+    const cookies = cookieHeader(loginResponse);
 
     const response = await usersGet(
-      authedNextRequest("http://localhost/api/users", loginBody.accessToken),
+      authedNextRequest("http://localhost/api/users", cookies),
     );
 
     expect(response.status).toBe(403);
@@ -157,19 +168,21 @@ describe("auth API route flow", () => {
         password: PASSWORD,
       }),
     );
-    const loginBody = (await loginResponse.json()) as { refreshToken: string };
+    const cookies = cookieHeader(loginResponse);
 
     const logoutResponse = await logoutPost(
-      jsonRequest("http://localhost/api/auth/logout", {
-        refreshToken: loginBody.refreshToken,
+      new Request("http://localhost/api/auth/logout", {
+        method: "POST",
+        headers: { Cookie: cookies, Origin: "http://localhost" },
       }),
     );
     expect(logoutResponse.status).toBe(200);
     await expect(logoutResponse.json()).resolves.toEqual({ ok: true });
 
     const refreshResponse = await refreshPost(
-      jsonRequest("http://localhost/api/auth/refresh", {
-        refreshToken: loginBody.refreshToken,
+      new Request("http://localhost/api/auth/refresh", {
+        method: "POST",
+        headers: { Cookie: cookies, Origin: "http://localhost" },
       }),
     );
     expect(refreshResponse.status).toBe(401);
