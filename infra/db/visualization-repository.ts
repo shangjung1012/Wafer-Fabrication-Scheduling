@@ -33,8 +33,8 @@ export type DailyCapacityRow = {
 
 export type VisualizationFilters = {
   factoryId?: string;
-  startDate?: string;      // YYYY-MM-DD
-  endDate?: string;        // YYYY-MM-DD
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD
   productionType?: string; // scope-enforced by service layer
 };
 
@@ -44,13 +44,15 @@ export type VisualizationFilters = {
 
 export async function findFactoriesForVisualization(
   db: PrismaClient,
-  filters: VisualizationFilters
+  filters: VisualizationFilters,
 ): Promise<FactoryRow[]> {
   return db.factory.findMany({
     where: {
       status: "ACTIVE",
-      ...(filters.factoryId     ? { id: filters.factoryId }                 : {}),
-      ...(filters.productionType ? { productionType: filters.productionType } : {}),
+      ...(filters.factoryId ? { id: filters.factoryId } : {}),
+      ...(filters.productionType
+        ? { productionType: filters.productionType }
+        : {}),
     },
     select: { id: true, productionType: true, maxCapacity: true },
     orderBy: [{ productionType: "asc" }, { id: "asc" }],
@@ -59,15 +61,17 @@ export async function findFactoriesForVisualization(
 
 export async function findAssignmentsForVisualization(
   db: PrismaClient,
-  filters: VisualizationFilters
+  filters: VisualizationFilters,
 ): Promise<AssignmentWithOrderRow[]> {
   const dateWhere = buildDateWhere(filters.startDate, filters.endDate);
 
   const rows = await db.orderAssignment.findMany({
     where: {
-      ...(filters.factoryId      ? { factoryId: filters.factoryId }                              : {}),
-      ...(filters.productionType ? { factory: { productionType: filters.productionType } }       : {}),
-      ...(dateWhere              ? { productionDate: dateWhere }                                  : {}),
+      ...(filters.factoryId ? { factoryId: filters.factoryId } : {}),
+      ...(filters.productionType
+        ? { factory: { productionType: filters.productionType } }
+        : {}),
+      ...(dateWhere ? { productionDate: dateWhere } : {}),
     },
     select: {
       id: true,
@@ -77,7 +81,12 @@ export async function findAssignmentsForVisualization(
       assignedQuantity: true,
       status: true,
       order: {
-        select: { name: true, dueDate: true, applicantId: true, lastModifiedById: true },
+        select: {
+          name: true,
+          dueDate: true,
+          applicantId: true,
+          lastModifiedById: true,
+        },
       },
     },
     orderBy: { productionDate: "asc" },
@@ -99,15 +108,17 @@ export async function findAssignmentsForVisualization(
 
 export async function findDailyCapacitiesForVisualization(
   db: PrismaClient,
-  filters: VisualizationFilters
+  filters: VisualizationFilters,
 ): Promise<DailyCapacityRow[]> {
   const dateWhere = buildDateWhere(filters.startDate, filters.endDate);
 
   const rows = await db.dailyCapacity.findMany({
     where: {
-      ...(filters.factoryId      ? { factoryId: filters.factoryId }                        : {}),
-      ...(filters.productionType ? { factory: { productionType: filters.productionType } } : {}),
-      ...(dateWhere              ? { date: dateWhere }                                      : {}),
+      ...(filters.factoryId ? { factoryId: filters.factoryId } : {}),
+      ...(filters.productionType
+        ? { factory: { productionType: filters.productionType } }
+        : {}),
+      ...(dateWhere ? { date: dateWhere } : {}),
     },
     select: {
       factoryId: true,
@@ -134,6 +145,6 @@ function buildDateWhere(startDate?: string, endDate?: string) {
   if (!startDate && !endDate) return null;
   return {
     ...(startDate ? { gte: new Date(`${startDate}T00:00:00.000Z`) } : {}),
-    ...(endDate   ? { lte: new Date(`${endDate}T23:59:59.999Z`)   } : {}),
+    ...(endDate ? { lte: new Date(`${endDate}T23:59:59.999Z`) } : {}),
   };
 }

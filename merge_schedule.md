@@ -291,10 +291,10 @@ model User {
 
 ```ts
 // 之前
-factoryId: factory.id
+factoryId: factory.id;
 
 // 之後
-factoryIds: factories.map(f => f.id)
+factoryIds: factories.map((f) => f.id);
 ```
 
 **`prisma/seed.ts`**
@@ -307,11 +307,11 @@ factoryIds: factories.map(f => f.id)
 
 ### 更動內容
 
-| 功能 | 之前 | 之後 |
-|------|------|------|
-| Visualization 甘特圖 | ADMIN 只看自己工廠 | ADMIN 看整個 type（A1/A2/A3） |
-| 管理 SALES 使用者 | SUPERADMIN only | ADMIN + SUPERADMIN |
-| 建立/升級 ADMIN 使用者 | SUPERADMIN only | SUPERADMIN only（維持） |
+| 功能                   | 之前               | 之後                          |
+| ---------------------- | ------------------ | ----------------------------- |
+| Visualization 甘特圖   | ADMIN 只看自己工廠 | ADMIN 看整個 type（A1/A2/A3） |
+| 管理 SALES 使用者      | SUPERADMIN only    | ADMIN + SUPERADMIN            |
+| 建立/升級 ADMIN 使用者 | SUPERADMIN only    | SUPERADMIN only（維持）       |
 
 **`modules/visualization/service.ts`**：移除 ADMIN factory-only 限制，ADMIN 和 SUPERADMIN 統一使用 type-wide scope。
 
@@ -365,6 +365,7 @@ Test Files  6 passed (6)
 ```
 
 API 行為確認：
+
 - `ADMIN admin-A1` 看 `/visualization` → factory-A1/A2/A3 全部可見
 - `ADMIN admin-A1` 建 SALES 使用者 → HTTP 201
 - `ADMIN admin-A1` 建 ADMIN 使用者 → HTTP 403（正確攔截）

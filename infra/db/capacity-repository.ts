@@ -9,7 +9,7 @@ export type CreateDailyCapacityInput = {
 
 export async function createDailyCapacities(
   db: PrismaClient,
-  capacities: CreateDailyCapacityInput[]
+  capacities: CreateDailyCapacityInput[],
 ): Promise<void> {
   if (capacities.length === 0) return;
   await db.dailyCapacity.createMany({ data: capacities, skipDuplicates: true });
@@ -18,7 +18,7 @@ export async function createDailyCapacities(
 export async function updateDailyCapacityById(
   db: PrismaClient,
   id: string,
-  curCapacity: number
+  curCapacity: number,
 ): Promise<void> {
   await db.dailyCapacity.update({
     where: { id },

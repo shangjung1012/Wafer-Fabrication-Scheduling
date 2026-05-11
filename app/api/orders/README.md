@@ -8,23 +8,23 @@
 
 ### Orders
 
-| Method | Path | 說明 | 權限 |
-|---|---|---|---|
-| GET | `/api/orders` | 列出訂單（可帶 `?status=` `?keyword=` filter） | ALL |
-| GET | `/api/orders/:id` | 取得單筆訂單 | ALL |
-| POST | `/api/orders` | 建立訂單（單筆） | SALES |
-| PUT | `/api/orders/:id` | 修改訂單欄位 | SALES / ADMIN |
-| DELETE | `/api/orders` | 批次軟刪除訂單（body: `{ids:[...]}`） | ADMIN |
-| POST | `/api/orders/import` | 匯入 CSV 批次建立訂單 | ADMIN / SUPERADMIN |
+| Method | Path                 | 說明                                           | 權限               |
+| ------ | -------------------- | ---------------------------------------------- | ------------------ |
+| GET    | `/api/orders`        | 列出訂單（可帶 `?status=` `?keyword=` filter） | ALL                |
+| GET    | `/api/orders/:id`    | 取得單筆訂單                                   | ALL                |
+| POST   | `/api/orders`        | 建立訂單（單筆）                               | SALES              |
+| PUT    | `/api/orders/:id`    | 修改訂單欄位                                   | SALES / ADMIN      |
+| DELETE | `/api/orders`        | 批次軟刪除訂單（body: `{ids:[...]}`）          | ADMIN              |
+| POST   | `/api/orders/import` | 匯入 CSV 批次建立訂單                          | ADMIN / SUPERADMIN |
 
 ### Requests
 
-| Method | Path | 說明 | 權限 |
-|---|---|---|---|
-| GET | `/api/requests` | 列出修改申請 | ALL |
-| POST | `/api/requests` | 建立修改申請 | SALES |
-| PUT | `/api/requests/:id` | 修改申請內容（message / payload） | SALES |
-| POST | `/api/requests/:id/approve` | 核准申請，將 payload 套用到訂單 | ADMIN / SUPERADMIN |
+| Method | Path                        | 說明                              | 權限               |
+| ------ | --------------------------- | --------------------------------- | ------------------ |
+| GET    | `/api/requests`             | 列出修改申請                      | ALL                |
+| POST   | `/api/requests`             | 建立修改申請                      | SALES              |
+| PUT    | `/api/requests/:id`         | 修改申請內容（message / payload） | SALES              |
+| POST   | `/api/requests/:id/approve` | 核准申請，將 payload 套用到訂單   | ADMIN / SUPERADMIN |
 
 ---
 
@@ -34,16 +34,16 @@
 
 ```ts
 {
-  id: string
-  name: string
-  type: string          // production group: "A" | "B" | "C"
-  status: OrderStatus   // PENDING | APPROVED | SCHEDULED | IN_PRODUCTION | COMPLETED | CANCELLED
-  dueDate: Date
-  quantity: number
-  applicantId: string   // SALES user who created it
-  lastModifiedById: string | null
-  createdAt: Date
-  updatedAt: Date
+  id: string;
+  name: string;
+  type: string; // production group: "A" | "B" | "C"
+  status: OrderStatus; // PENDING | APPROVED | SCHEDULED | IN_PRODUCTION | COMPLETED | CANCELLED
+  dueDate: Date;
+  quantity: number;
+  applicantId: string; // SALES user who created it
+  lastModifiedById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -61,13 +61,13 @@ PENDING → APPROVED → SCHEDULED → IN_PRODUCTION → COMPLETED
 
 ```ts
 {
-  id: string
-  orderId: string
-  requesterId: string
-  message: string
-  payload: Record<string, unknown>  // 想改的欄位，例如 { quantity: 2000 }
-  createdAt: Date
-  updatedAt: Date
+  id: string;
+  orderId: string;
+  requesterId: string;
+  message: string;
+  payload: Record<string, unknown>; // 想改的欄位，例如 { quantity: 2000 }
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -75,17 +75,17 @@ PENDING → APPROVED → SCHEDULED → IN_PRODUCTION → COMPLETED
 
 ## 各角色可做的事
 
-| 操作 | SALES | ADMIN | SUPERADMIN |
-|---|---|---|---|
-| 列出訂單 | ✓ 只看自己建立的 | ✓ 同 group 的訂單 | ✓ 同 group 的訂單 |
-| 取得單筆訂單 | ✓ 只看自己建立的 | ✓ 同 group | ✓ 同 group |
-| 建立訂單 | ✓ | — | — |
-| 修改訂單 | ✓ 自己的 PENDING，不能改 status | ✓ 同 group，可改 status | — |
-| 刪除訂單 | — | ✓ | — |
-| 匯入 CSV | — | ✓ | ✓ |
-| 建立申請 | ✓ 自己建立的訂單 | — | — |
-| 修改申請 | ✓ 自己的申請 | — | — |
-| 核准申請 | — | ✓ | ✓ |
+| 操作         | SALES                           | ADMIN                   | SUPERADMIN        |
+| ------------ | ------------------------------- | ----------------------- | ----------------- |
+| 列出訂單     | ✓ 只看自己建立的                | ✓ 同 group 的訂單       | ✓ 同 group 的訂單 |
+| 取得單筆訂單 | ✓ 只看自己建立的                | ✓ 同 group              | ✓ 同 group        |
+| 建立訂單     | ✓                               | —                       | —                 |
+| 修改訂單     | ✓ 自己的 PENDING，不能改 status | ✓ 同 group，可改 status | —                 |
+| 刪除訂單     | —                               | ✓                       | —                 |
+| 匯入 CSV     | —                               | ✓                       | ✓                 |
+| 建立申請     | ✓ 自己建立的訂單                | —                       | —                 |
+| 修改申請     | ✓ 自己的申請                    | —                       | —                 |
+| 核准申請     | —                               | ✓                       | ✓                 |
 
 ---
 
@@ -111,12 +111,12 @@ Next.js 把請求交給 route handler。做三件事：
 
 `updateOrderService` 做以下檢查，按順序 throw：
 
-| 情況 | 錯誤 |
-|---|---|
-| 不是 SALES 或 ADMIN | 403 ForbiddenError |
-| 找不到訂單 | 404 NOT_FOUND |
-| SALES 試圖改 `status` | 403 ForbiddenError |
-| SALES 改別人的訂單 | 403 ForbiddenError |
+| 情況                      | 錯誤               |
+| ------------------------- | ------------------ |
+| 不是 SALES 或 ADMIN       | 403 ForbiddenError |
+| 找不到訂單                | 404 NOT_FOUND      |
+| SALES 試圖改 `status`     | 403 ForbiddenError |
+| SALES 改別人的訂單        | 403 ForbiddenError |
 | SALES 改非 PENDING 的訂單 | 403 ForbiddenError |
 | ADMIN 改不同 group 的訂單 | 403 ForbiddenError |
 
@@ -127,7 +127,11 @@ Next.js 把請求交給 route handler。做三件事：
 執行 Prisma query，回傳 `OrderRow`：
 
 ```ts
-prisma.order.update({ where: { id }, data: { ...fields }, select: orderSelect })
+prisma.order.update({
+  where: { id },
+  data: { ...fields },
+  select: orderSelect,
+});
 ```
 
 ### 5. 回傳 response
@@ -183,12 +187,12 @@ CustomerOrderB,B,2026-07-15,200
 
 ## 錯誤對照
 
-| 狀況 | HTTP | code |
-|---|---|---|
-| 未帶 token 或 token 無效 | 401 | `UNAUTHORIZED` |
-| role 不符 | 403 | `FORBIDDEN` |
-| 找不到資源 | 404 | `NOT_FOUND` |
-| body 格式錯誤或未知欄位 | 400 | `BAD_REQUEST` |
+| 狀況                     | HTTP | code           |
+| ------------------------ | ---- | -------------- |
+| 未帶 token 或 token 無效 | 401  | `UNAUTHORIZED` |
+| role 不符                | 403  | `FORBIDDEN`    |
+| 找不到資源               | 404  | `NOT_FOUND`    |
+| body 格式錯誤或未知欄位  | 400  | `BAD_REQUEST`  |
 
 ---
 

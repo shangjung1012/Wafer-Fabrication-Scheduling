@@ -74,21 +74,20 @@ const orderSelect = {
 
 export async function findOrders(
   db: PrismaClient,
-  filters: OrderFilters = {}
+  filters: OrderFilters = {},
 ): Promise<OrderRow[]> {
   const { applicantId, status, keyword, group } = filters;
 
   const ownershipClause = applicantId ? { applicantId } : undefined;
 
-  const keywordClause =
-    keyword
-      ? {
-          OR: [
-            { name: { contains: keyword, mode: "insensitive" as const } },
-            { type: { contains: keyword, mode: "insensitive" as const } },
-          ],
-        }
-      : undefined;
+  const keywordClause = keyword
+    ? {
+        OR: [
+          { name: { contains: keyword, mode: "insensitive" as const } },
+          { type: { contains: keyword, mode: "insensitive" as const } },
+        ],
+      }
+    : undefined;
 
   return db.order.findMany({
     where: {
@@ -104,7 +103,7 @@ export async function findOrders(
 
 export async function findOrderById(
   db: PrismaClient,
-  id: string
+  id: string,
 ): Promise<OrderRow | null> {
   return db.order.findUnique({
     where: { id },
@@ -118,7 +117,7 @@ export async function findOrderById(
 
 export async function createOrder(
   db: PrismaClient,
-  input: CreateOrderInput
+  input: CreateOrderInput,
 ): Promise<OrderRow> {
   return db.order.create({
     data: {
@@ -135,9 +134,12 @@ export async function createOrder(
 export async function updateOrder(
   db: PrismaClient,
   id: string,
-  input: UpdateOrderInput
+  input: UpdateOrderInput,
 ): Promise<OrderRow | null> {
-  const exists = await db.order.findUnique({ where: { id }, select: { id: true } });
+  const exists = await db.order.findUnique({
+    where: { id },
+    select: { id: true },
+  });
   if (!exists) return null;
 
   return db.order.update({
@@ -158,7 +160,7 @@ export async function updateOrder(
 
 export async function deleteOrders(
   db: PrismaClient,
-  ids: string[]
+  ids: string[],
 ): Promise<{ count: number }> {
   const result = await db.order.updateMany({
     where: { id: { in: ids } },
@@ -169,7 +171,7 @@ export async function deleteOrders(
 
 export async function bulkUpdateOrderStatus(
   db: PrismaClient,
-  updates: { id: string; status: OrderStatus }[]
+  updates: { id: string; status: OrderStatus }[],
 ): Promise<void> {
   for (const { id, status } of updates) {
     await db.order.update({ where: { id }, data: { status } });
@@ -180,10 +182,7 @@ export async function bulkUpdateOrderStatus(
 // Schedule engine queries
 // ---------------------------------------------------------------------------
 
-export async function findOrdersForScheduling(
-  db: PrismaClient,
-  type: string,
-) {
+export async function findOrdersForScheduling(db: PrismaClient, type: string) {
   return db.order.findMany({
     where: {
       type,

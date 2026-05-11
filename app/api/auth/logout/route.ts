@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { logout } from "@/modules/auth/auth-service";
-import { authErrorResponse, parseJsonError, validationErrorResponse } from "@/app/api/auth/_shared";
+import {
+  authErrorResponse,
+  parseJsonError,
+  validationErrorResponse,
+} from "@/app/api/auth/_shared";
 
 const LogoutBodySchema = z.object({
   refreshToken: z.string().min(1, "refreshToken is required"),

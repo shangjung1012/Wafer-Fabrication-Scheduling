@@ -59,7 +59,9 @@ export function clearClientAuthSession(): void {
   emitClientAuthSessionChange();
 }
 
-export async function logoutClientAuthSession(refreshToken?: string): Promise<void> {
+export async function logoutClientAuthSession(
+  refreshToken?: string,
+): Promise<void> {
   if (refreshToken) {
     await fetch("/api/auth/logout", {
       method: "POST",

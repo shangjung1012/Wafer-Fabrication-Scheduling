@@ -13,7 +13,9 @@
 import { useEffect, useRef } from "react";
 
 declare global {
-  type SwaggerUIBundleWithPresets = ((config: Record<string, unknown>) => void) & {
+  type SwaggerUIBundleWithPresets = ((
+    config: Record<string, unknown>,
+  ) => void) & {
     presets?: Record<string, unknown>;
     SwaggerUIStandalonePreset?: unknown;
   };
@@ -25,7 +27,7 @@ declare global {
 
 export default function DocsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const initialised   = useRef(false);
+  const initialised = useRef(false);
 
   useEffect(() => {
     if (initialised.current) return;
@@ -33,7 +35,7 @@ export default function DocsPage() {
 
     // 1. Inject Swagger UI CSS
     const link = document.createElement("link");
-    link.rel  = "stylesheet";
+    link.rel = "stylesheet";
     link.href = "https://unpkg.com/swagger-ui-dist@5/swagger-ui.css";
     document.head.appendChild(link);
 
@@ -96,7 +98,6 @@ export default function DocsPage() {
         >
           OpenAPI 3.0
         </span>
-
       </div>
 
       {/* Auth note */}
@@ -113,7 +114,9 @@ export default function DocsPage() {
           }}
         >
           <strong>Dev mode：</strong> 先到{" "}
-          <a href="/login" style={{ color: "#0369a1", fontWeight: 700 }}>/login</a>{" "}
+          <a href="/login" style={{ color: "#0369a1", fontWeight: 700 }}>
+            /login
+          </a>{" "}
           登入取得 access token，再點右上角「Authorize」輸入{" "}
           <code
             style={{

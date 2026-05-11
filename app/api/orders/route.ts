@@ -16,7 +16,11 @@ import {
   badRequestResponse,
   notFoundResponse,
 } from "@/modules/auth/rbac";
-import { listOrders, createOrderService, deleteOrdersService } from "@/modules/order/order-service";
+import {
+  listOrders,
+  createOrderService,
+  deleteOrdersService,
+} from "@/modules/order/order-service";
 import { OrderStatus } from "@/infra/db/order-repository";
 import { prisma } from "@/lib/prisma";
 
@@ -32,7 +36,9 @@ const ListOrdersQuerySchema = z.object({
 const CreateOrderBodySchema = z.object({
   name: z.string().min(1, "name is required"),
   type: z.string().min(1, "type is required"),
-  dueDate: z.string().datetime({ message: "dueDate must be a valid ISO datetime string" }),
+  dueDate: z
+    .string()
+    .datetime({ message: "dueDate must be a valid ISO datetime string" }),
   quantity: z.number().int().positive("quantity must be a positive integer"),
 });
 
@@ -53,7 +59,7 @@ export async function GET(req: NextRequest) {
     if (!parsed.success) {
       return badRequestResponse(
         "Invalid query parameters.",
-        parsed.error.flatten().fieldErrors as Record<string, unknown>
+        parsed.error.flatten().fieldErrors as Record<string, unknown>,
       );
     }
 
@@ -61,7 +67,8 @@ export async function GET(req: NextRequest) {
     const orders = await listOrders(ctx, prisma, { status, keyword });
     return NextResponse.json(orders);
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
+    if (err instanceof UnauthorizedError)
+      return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);
@@ -88,7 +95,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return badRequestResponse(
         "Invalid request body.",
-        parsed.error.flatten().fieldErrors as Record<string, unknown>
+        parsed.error.flatten().fieldErrors as Record<string, unknown>,
       );
     }
 
@@ -98,7 +105,8 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(order, { status: 201 });
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
+    if (err instanceof UnauthorizedError)
+      return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);
@@ -125,14 +133,15 @@ export async function DELETE(req: NextRequest) {
     if (!parsed.success) {
       return badRequestResponse(
         "Invalid request body.",
-        parsed.error.flatten().fieldErrors as Record<string, unknown>
+        parsed.error.flatten().fieldErrors as Record<string, unknown>,
       );
     }
 
     const result = await deleteOrdersService(ctx, prisma, parsed.data.ids);
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
+    if (err instanceof UnauthorizedError)
+      return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);

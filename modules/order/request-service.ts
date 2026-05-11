@@ -19,7 +19,11 @@ import {
   type CreateRequestInput,
   type UpdateRequestInput,
 } from "@/infra/db/request-repository";
-import { findOrderById, updateOrder, OrderStatus } from "@/infra/db/order-repository";
+import {
+  findOrderById,
+  updateOrder,
+  OrderStatus,
+} from "@/infra/db/order-repository";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -40,7 +44,7 @@ function requestNotFound(): never {
 export async function listRequests(
   ctx: RequestContext,
   db: PrismaClient,
-  _input: Record<string, never> = {}
+  _input: Record<string, never> = {},
 ): Promise<RequestRow[]> {
   void _input;
 
@@ -62,7 +66,7 @@ export async function listRequests(
 export async function getRequest(
   ctx: RequestContext,
   db: PrismaClient,
-  id: string
+  id: string,
 ): Promise<RequestRow> {
   const request = await findRequestById(db, id);
   if (!request) requestNotFound();
@@ -89,7 +93,7 @@ export type CreateRequestServiceInput = {
 export async function createRequestService(
   ctx: RequestContext,
   db: PrismaClient,
-  input: CreateRequestServiceInput
+  input: CreateRequestServiceInput,
 ): Promise<RequestRow> {
   requireRole(ctx, ["SALES"]);
 
@@ -104,7 +108,7 @@ export async function createRequestService(
   // SALES can only submit requests for orders they created
   if (order.applicantId !== ctx.user.id) {
     throw new ForbiddenError(
-      "You do not have permission to submit a request for this order."
+      "You do not have permission to submit a request for this order.",
     );
   }
 
@@ -125,7 +129,7 @@ export async function updateRequestService(
   ctx: RequestContext,
   db: PrismaClient,
   id: string,
-  input: UpdateRequestServiceInput
+  input: UpdateRequestServiceInput,
 ): Promise<RequestRow> {
   requireRole(ctx, ["SALES"]);
 
@@ -136,7 +140,11 @@ export async function updateRequestService(
     throw new ForbiddenError("You can only edit your own requests.");
   }
 
-  const result = await updateRequest(db, id, input satisfies UpdateRequestInput);
+  const result = await updateRequest(
+    db,
+    id,
+    input satisfies UpdateRequestInput,
+  );
   if (!result) requestNotFound();
   return result;
 }
@@ -144,7 +152,7 @@ export async function updateRequestService(
 export async function approveRequest(
   ctx: RequestContext,
   db: PrismaClient,
-  id: string
+  id: string,
 ): Promise<{ requestId: string; orderId: string }> {
   requireRole(ctx, ["ADMIN"]);
 
@@ -161,7 +169,9 @@ export async function approveRequest(
     });
   }
   if (order.type !== getScopeGroup(scope)) {
-    throw new ForbiddenError("This request's order is not in your production group.");
+    throw new ForbiddenError(
+      "This request's order is not in your production group.",
+    );
   }
 
   // Apply safe fields from request payload to the order

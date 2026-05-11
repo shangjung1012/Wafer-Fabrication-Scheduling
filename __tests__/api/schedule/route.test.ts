@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from "vitest";
 import { POST } from "@/app/api/schedule/run/route";
 import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
 import Redis from "ioredis";
@@ -94,7 +102,7 @@ describe("POST /api/schedule/run", () => {
   it("should allow execution if valid CRON_SECRET is provided", async () => {
     // 動態且安全地注入環境變數
     vi.stubEnv("CRON_SECRET", "super-secret-cron-key");
-  
+
     // Mock requireAuth to reject, ensuring we bypass it entirely
     vi.mocked(requireAuth).mockRejectedValueOnce(new UnauthorizedError());
 

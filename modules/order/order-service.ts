@@ -43,7 +43,7 @@ export type ListOrdersInput = {
 export async function listOrders(
   ctx: RequestContext,
   db: PrismaClient,
-  input: ListOrdersInput = {}
+  input: ListOrdersInput = {},
 ): Promise<OrderRow[]> {
   const { status, keyword } = input;
   const scope = await resolveActorScope(ctx, db);
@@ -58,7 +58,7 @@ export async function listOrders(
 export async function getOrder(
   ctx: RequestContext,
   db: PrismaClient,
-  id: string
+  id: string,
 ): Promise<OrderRow> {
   const scope = await resolveActorScope(ctx, db);
 
@@ -84,13 +84,15 @@ export type CreateOrderServiceInput = {
 export async function createOrderService(
   ctx: RequestContext,
   db: PrismaClient,
-  input: CreateOrderServiceInput
+  input: CreateOrderServiceInput,
 ): Promise<OrderRow> {
   requireRole(ctx, ["SALES"]);
   const scope = await resolveActorScope(ctx, db);
 
   if (input.type !== getScopeGroup(scope)) {
-    throw new ForbiddenError("You can only create orders for your own production type.");
+    throw new ForbiddenError(
+      "You can only create orders for your own production type.",
+    );
   }
 
   return createOrder(db, {
@@ -113,7 +115,7 @@ export async function updateOrderService(
   ctx: RequestContext,
   db: PrismaClient,
   id: string,
-  input: UpdateOrderServiceInput
+  input: UpdateOrderServiceInput,
 ): Promise<OrderRow> {
   requireRole(ctx, ["SALES", "ADMIN"]);
   const scope = await resolveActorScope(ctx, db);
@@ -129,7 +131,9 @@ export async function updateOrderService(
       throw new ForbiddenError("You can only edit your own orders.");
     }
     if (order.status !== OrderStatus.PENDING) {
-      throw new ForbiddenError("You can only edit orders that are still pending.");
+      throw new ForbiddenError(
+        "You can only edit orders that are still pending.",
+      );
     }
     const salesInput: UpdateOrderInput = {
       dueDate: input.dueDate,
@@ -146,7 +150,10 @@ export async function updateOrderService(
     throw new ForbiddenError("This order is not in your production group.");
   }
 
-  const result = await updateOrder(db, id, { ...input, lastModifiedById: scope.userId });
+  const result = await updateOrder(db, id, {
+    ...input,
+    lastModifiedById: scope.userId,
+  });
   if (!result) orderNotFound();
   return result;
 }
@@ -154,7 +161,7 @@ export async function updateOrderService(
 export async function deleteOrdersService(
   ctx: RequestContext,
   db: PrismaClient,
-  ids: string[]
+  ids: string[],
 ): Promise<{ count: number }> {
   requireRole(ctx, ["ADMIN"]);
   const scope = await resolveActorScope(ctx, db);
@@ -164,7 +171,9 @@ export async function deleteOrdersService(
   const orders = await Promise.all(ids.map((id) => findOrderById(db, id)));
   for (const order of orders) {
     if (!order || order.type !== group) {
-      throw new ForbiddenError("One or more orders are not in your production group.");
+      throw new ForbiddenError(
+        "One or more orders are not in your production group.",
+      );
     }
   }
 

@@ -29,7 +29,9 @@ describe("Greedy Best-Fit Strategy", () => {
       },
     ];
 
-    const factories: SchedulingFactoryInput[] = [{ id: "F1", maxCapacity: 200 }];
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 200 },
+    ];
 
     const capacities: SchedulingCapacityInput[] = [
       {
@@ -71,7 +73,9 @@ describe("Greedy Best-Fit Strategy", () => {
       },
     ];
 
-    const factories: SchedulingFactoryInput[] = [{ id: "F1", maxCapacity: 100 }];
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 100 },
+    ];
 
     const capacities: SchedulingCapacityInput[] = []; // Empty capacities!
 
@@ -187,7 +191,9 @@ describe("Greedy Best-Fit Strategy", () => {
       },
     ];
 
-    const factories: SchedulingFactoryInput[] = [{ id: "F1", maxCapacity: 200 }];
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 200 },
+    ];
     const capacities: SchedulingCapacityInput[] = [];
 
     const result = greedyBestFitStrategy(orders, factories, capacities, TODAY);
@@ -257,7 +263,9 @@ describe("Greedy Best-Fit Strategy", () => {
       }, // Larger quantity
     ];
 
-    const factories: SchedulingFactoryInput[] = [{ id: "F1", maxCapacity: 100 }];
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 100 },
+    ];
     const capacities: SchedulingCapacityInput[] = [
       {
         id: "C1",

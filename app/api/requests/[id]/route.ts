@@ -21,16 +21,21 @@ import { prisma } from "@/lib/prisma";
 // Validation schemas
 // ---------------------------------------------------------------------------
 
-const UpdateRequestBodySchema = z.object({
-  message: z.string().min(1).optional(),
-  payload: z.record(z.string(), z.unknown()).nullable().optional(),
-}).strict();
+const UpdateRequestBodySchema = z
+  .object({
+    message: z.string().min(1).optional(),
+    payload: z.record(z.string(), z.unknown()).nullable().optional(),
+  })
+  .strict();
 
 // ---------------------------------------------------------------------------
 // PUT /api/requests/[id]
 // ---------------------------------------------------------------------------
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const { id } = await params;
 
   try {
@@ -47,18 +52,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!parsed.success) {
       return badRequestResponse(
         "Invalid request body.",
-        parsed.error.flatten().fieldErrors as Record<string, unknown>
+        parsed.error.flatten().fieldErrors as Record<string, unknown>,
       );
     }
 
-    if (parsed.data.message === undefined && parsed.data.payload === undefined) {
-      return badRequestResponse("At least one field (message or payload) must be provided.");
+    if (
+      parsed.data.message === undefined &&
+      parsed.data.payload === undefined
+    ) {
+      return badRequestResponse(
+        "At least one field (message or payload) must be provided.",
+      );
     }
 
     const request = await updateRequestService(ctx, prisma, id, parsed.data);
     return NextResponse.json(request);
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
+    if (err instanceof UnauthorizedError)
+      return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);

@@ -8,7 +8,11 @@
 
 import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
 import type { RequestContext } from "@/modules/auth/request-context";
-import { requireRole, ForbiddenError, NotFoundError } from "@/modules/auth/rbac";
+import {
+  requireRole,
+  ForbiddenError,
+  NotFoundError,
+} from "@/modules/auth/rbac";
 import { resolveActorScope, getScopeGroup } from "@/modules/auth/scope";
 import { hashPassword } from "@/modules/auth/password-service";
 import {
@@ -33,7 +37,7 @@ export type ListUsersInput = {
 export async function listUsers(
   ctx: RequestContext,
   db: PrismaClient,
-  input: ListUsersInput = {}
+  input: ListUsersInput = {},
 ): Promise<UserRow[]> {
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
@@ -59,7 +63,7 @@ export type CreateUserServiceInput = {
 export async function createUserService(
   ctx: RequestContext,
   db: PrismaClient,
-  input: CreateUserServiceInput
+  input: CreateUserServiceInput,
 ): Promise<{ id: string }> {
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
@@ -74,7 +78,7 @@ export async function createUserService(
   const targetGroup = input.group ?? adminGroup;
   if (targetGroup !== adminGroup) {
     throw new ForbiddenError(
-      `Cannot create user in type '${targetGroup}'. You manage type '${adminGroup}'.`
+      `Cannot create user in type '${targetGroup}'. You manage type '${adminGroup}'.`,
     );
   }
 
@@ -99,7 +103,7 @@ export async function updateUserService(
   ctx: RequestContext,
   db: PrismaClient,
   targetId: string,
-  input: UpdateUserServiceInput
+  input: UpdateUserServiceInput,
 ): Promise<{ id: string }> {
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
@@ -111,7 +115,7 @@ export async function updateUserService(
   }
   if (target.group !== adminGroup) {
     throw new ForbiddenError(
-      `User '${targetId}' belongs to type '${target.group}', not your type '${adminGroup}'.`
+      `User '${targetId}' belongs to type '${target.group}', not your type '${adminGroup}'.`,
     );
   }
 
@@ -120,19 +124,23 @@ export async function updateUserService(
       throw new ForbiddenError("Admins can only update SALES users.");
     }
     if (input.role && input.role !== "SALES") {
-      throw new ForbiddenError("Admins cannot promote users to ADMIN or SUPERADMIN.");
+      throw new ForbiddenError(
+        "Admins cannot promote users to ADMIN or SUPERADMIN.",
+      );
     }
   }
 
   if (input.group !== undefined && input.group !== adminGroup) {
     throw new ForbiddenError(
-      `Cannot move user to type '${input.group}'. You manage type '${adminGroup}'.`
+      `Cannot move user to type '${input.group}'. You manage type '${adminGroup}'.`,
     );
   }
 
   const result = await updateUser(db, targetId, {
     ...input,
-    password: input.password ? await hashPassword(input.password) : input.password,
+    password: input.password
+      ? await hashPassword(input.password)
+      : input.password,
   } satisfies UpdateUserInput);
   if (!result) {
     throw new NotFoundError("User not found.");
@@ -143,7 +151,7 @@ export async function updateUserService(
 export async function deleteUserService(
   ctx: RequestContext,
   db: PrismaClient,
-  targetId: string
+  targetId: string,
 ): Promise<{ id: string }> {
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
@@ -159,7 +167,7 @@ export async function deleteUserService(
   }
   if (target.group !== adminGroup) {
     throw new ForbiddenError(
-      `User '${targetId}' belongs to type '${target.group}', not your type '${adminGroup}'.`
+      `User '${targetId}' belongs to type '${target.group}', not your type '${adminGroup}'.`,
     );
   }
 

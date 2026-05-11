@@ -31,10 +31,16 @@ describe("Schedule Engine - Database Integration", () => {
     try {
       // Clean up only data created by this suite (scoped by productionType / name)
       // to avoid wiping shared seed data used by other test suites.
-      await prisma.orderAssignment.deleteMany({ where: { factory: { productionType: "IntegrationType" } } });
-      await prisma.dailyCapacity.deleteMany({   where: { factory: { productionType: "IntegrationType" } } });
-      await prisma.order.deleteMany({           where: { type: "IntegrationType" } });
-      await prisma.factory.deleteMany({         where: { productionType: "IntegrationType" } });
+      await prisma.orderAssignment.deleteMany({
+        where: { factory: { productionType: "IntegrationType" } },
+      });
+      await prisma.dailyCapacity.deleteMany({
+        where: { factory: { productionType: "IntegrationType" } },
+      });
+      await prisma.order.deleteMany({ where: { type: "IntegrationType" } });
+      await prisma.factory.deleteMany({
+        where: { productionType: "IntegrationType" },
+      });
       await prisma.user.deleteMany({
         where: { accountId: { in: ["test-applicant-1", "test-applicant-2"] } },
       });

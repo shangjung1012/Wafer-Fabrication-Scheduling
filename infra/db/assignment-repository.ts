@@ -11,7 +11,7 @@ export type CreateAssignmentInput = {
 
 export async function deleteScheduledAssignments(
   db: PrismaClient,
-  orderIds: string[]
+  orderIds: string[],
 ): Promise<void> {
   if (orderIds.length === 0) return;
   await db.orderAssignment.deleteMany({
@@ -24,7 +24,7 @@ export async function deleteScheduledAssignments(
 
 export async function createAssignments(
   db: PrismaClient,
-  assignments: CreateAssignmentInput[]
+  assignments: CreateAssignmentInput[],
 ): Promise<void> {
   if (assignments.length === 0) return;
   await db.orderAssignment.createMany({ data: assignments });

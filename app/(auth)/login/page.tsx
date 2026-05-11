@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye, EyeOff, LogIn, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 
 import {
   clearClientAuthSession,
@@ -31,7 +38,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("Password123!");
   const [showPassword, setShowPassword] = useState(false);
   const session = useClientAuthSession() ?? null;
-  const [loading, setLoading] = useState<"login" | "logout" | "refresh" | "probe" | null>(null);
+  const [loading, setLoading] = useState<
+    "login" | "logout" | "refresh" | "probe" | null
+  >(null);
   const [message, setMessage] = useState<string | null>(null);
   const [apiResult, setApiResult] = useState<ApiResult | null>(null);
 
@@ -133,7 +142,11 @@ export default function LoginPage() {
       });
       const result = await parseResponse(response);
       setApiResult(result);
-      setMessage(response.ok ? "Protected API allowed this token." : "Protected API rejected this token.");
+      setMessage(
+        response.ok
+          ? "Protected API allowed this token."
+          : "Protected API rejected this token.",
+      );
     } finally {
       setLoading(null);
     }
@@ -145,57 +158,78 @@ export default function LoginPage() {
   };
 
   return (
-    <main style={{
-      minHeight: "100vh",
-      background: "#f8fafc",
-      color: "#111827",
-      padding: "32px 20px",
-    }}>
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "#f8fafc",
+        color: "#111827",
+        padding: "32px 20px",
+      }}
+    >
       <div style={{ maxWidth: 1120, margin: "0 auto" }}>
-        <header style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 16,
-          alignItems: "flex-start",
-          marginBottom: 24,
-        }}>
+        <header
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 16,
+            alignItems: "flex-start",
+            marginBottom: 24,
+          }}
+        >
           <div>
-            <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.2 }}>Wafer Scheduling Auth</h1>
+            <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.2 }}>
+              Wafer Scheduling Auth
+            </h1>
             <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: 14 }}>
-              Sign in once, then use the issued JWT across protected scheduling APIs.
+              Sign in once, then use the issued JWT across protected scheduling
+              APIs.
             </p>
           </div>
           {session && (
-            <span style={{
-              ...roleTone,
-              border: `1px solid ${roleTone.border}`,
-              borderRadius: 999,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-            }}>
+            <span
+              style={{
+                ...roleTone,
+                border: `1px solid ${roleTone.border}`,
+                borderRadius: 999,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+              }}
+            >
               {session.user.role}
             </span>
           )}
         </header>
 
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
-          gap: 20,
-          alignItems: "start",
-        }}>
-          <section style={{
-            background: "#fff",
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-            padding: 20,
-            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
-          }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
+            gap: 20,
+            alignItems: "start",
+          }}
+        >
+          <section
+            style={{
+              background: "#fff",
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              padding: 20,
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+            }}
+          >
             <h2 style={{ margin: "0 0 16px", fontSize: 18 }}>Login</h2>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                marginBottom: 16,
+              }}
+            >
               {QUICK_ACCOUNTS.map((account) => (
                 <button
                   key={account.accountId}
@@ -203,7 +237,8 @@ export default function LoginPage() {
                   onClick={() => fillAccount(account.accountId)}
                   style={{
                     border: "1px solid #cbd5e1",
-                    background: accountId === account.accountId ? "#e0f2fe" : "#fff",
+                    background:
+                      accountId === account.accountId ? "#e0f2fe" : "#fff",
                     color: "#0f172a",
                     borderRadius: 6,
                     padding: "7px 9px",
@@ -216,7 +251,14 @@ export default function LoginPage() {
               ))}
             </div>
 
-            <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                marginBottom: 12,
+              }}
+            >
               Account ID
               <input
                 value={accountId}
@@ -235,7 +277,14 @@ export default function LoginPage() {
               />
             </label>
 
-            <div style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+            <div
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                marginBottom: 16,
+              }}
+            >
               <label htmlFor="login-password">Password</label>
               <span style={{ display: "flex", gap: 8, marginTop: 6 }}>
                 <input
@@ -301,24 +350,28 @@ export default function LoginPage() {
             </div>
           </section>
 
-          <section style={{
-            background: "#fff",
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-            padding: 20,
-            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
-          }}>
+          <section
+            style={{
+              background: "#fff",
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              padding: 20,
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+            }}
+          >
             <h2 style={{ margin: "0 0 16px", fontSize: 18 }}>Session</h2>
 
             {session ? (
               <div>
-                <dl style={{
-                  display: "grid",
-                  gridTemplateColumns: "120px minmax(0, 1fr)",
-                  gap: "8px 14px",
-                  margin: 0,
-                  fontSize: 13,
-                }}>
+                <dl
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "120px minmax(0, 1fr)",
+                    gap: "8px 14px",
+                    margin: 0,
+                    fontSize: 13,
+                  }}
+                >
                   <dt style={termStyle}>Name</dt>
                   <dd style={descStyle}>{session.user.name}</dd>
                   <dt style={termStyle}>Account</dt>
@@ -326,12 +379,24 @@ export default function LoginPage() {
                   <dt style={termStyle}>Group</dt>
                   <dd style={descStyle}>{session.user.group ?? "-"}</dd>
                   <dt style={termStyle}>Access token</dt>
-                  <dd style={{ ...descStyle, fontFamily: "var(--font-geist-mono), monospace" }}>
+                  <dd
+                    style={{
+                      ...descStyle,
+                      fontFamily: "var(--font-geist-mono), monospace",
+                    }}
+                  >
                     {session.accessToken.slice(0, 28)}...
                   </dd>
                 </dl>
 
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    marginTop: 18,
+                  }}
+                >
                   <button
                     type="button"
                     onClick={handleRefresh}
@@ -350,41 +415,50 @@ export default function LoginPage() {
                     <ShieldCheck size={16} />
                     Test /api/users
                   </button>
-                  <a href="/orders" style={linkButtonStyle}>Orders</a>
-                  <a href="/visualization" style={linkButtonStyle}>Visualization</a>
+                  <a href="/orders" style={linkButtonStyle}>
+                    Orders
+                  </a>
+                  <a href="/visualization" style={linkButtonStyle}>
+                    Visualization
+                  </a>
                 </div>
               </div>
             ) : (
               <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
-                No active session. Login to issue tokens and enable protected API calls.
+                No active session. Login to issue tokens and enable protected
+                API calls.
               </p>
             )}
 
             {message && (
-              <p style={{
-                margin: "18px 0 0",
-                padding: "10px 12px",
-                background: "#f1f5f9",
-                border: "1px solid #cbd5e1",
-                borderRadius: 6,
-                fontSize: 13,
-              }}>
+              <p
+                style={{
+                  margin: "18px 0 0",
+                  padding: "10px 12px",
+                  background: "#f1f5f9",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 6,
+                  fontSize: 13,
+                }}
+              >
                 {message}
               </p>
             )}
 
             {apiResult && (
-              <pre style={{
-                margin: "16px 0 0",
-                maxHeight: 320,
-                overflow: "auto",
-                background: "#0f172a",
-                color: "#dbeafe",
-                borderRadius: 8,
-                padding: 14,
-                fontSize: 12,
-                lineHeight: 1.5,
-              }}>
+              <pre
+                style={{
+                  margin: "16px 0 0",
+                  maxHeight: 320,
+                  overflow: "auto",
+                  background: "#0f172a",
+                  color: "#dbeafe",
+                  borderRadius: 8,
+                  padding: 14,
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                }}
+              >
                 {JSON.stringify(apiResult, null, 2)}
               </pre>
             )}

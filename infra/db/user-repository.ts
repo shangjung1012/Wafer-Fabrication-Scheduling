@@ -41,7 +41,7 @@ export type UpdateUserInput = {
 
 export async function findUsers(
   db: PrismaClient,
-  filters: { role?: UserRole; group?: string } = {}
+  filters: { role?: UserRole; group?: string } = {},
 ): Promise<UserRow[]> {
   return db.user.findMany({
     where: {
@@ -55,7 +55,7 @@ export async function findUsers(
 
 export async function findUserById(
   db: PrismaClient,
-  id: string
+  id: string,
 ): Promise<UserRow | null> {
   return db.user.findUnique({
     where: { id },
@@ -69,7 +69,7 @@ export async function findUserById(
 
 export async function createUser(
   db: PrismaClient,
-  input: CreateUserInput
+  input: CreateUserInput,
 ): Promise<{ id: string }> {
   const user = await db.user.create({
     data: {
@@ -87,9 +87,12 @@ export async function createUser(
 export async function updateUser(
   db: PrismaClient,
   id: string,
-  input: UpdateUserInput
+  input: UpdateUserInput,
 ): Promise<{ id: string } | null> {
-  const exists = await db.user.findUnique({ where: { id }, select: { id: true } });
+  const exists = await db.user.findUnique({
+    where: { id },
+    select: { id: true },
+  });
   if (!exists) return null;
 
   const user = await db.user.update({
@@ -108,9 +111,12 @@ export async function updateUser(
 
 export async function deleteUser(
   db: PrismaClient,
-  id: string
+  id: string,
 ): Promise<{ id: string } | null> {
-  const exists = await db.user.findUnique({ where: { id }, select: { id: true } });
+  const exists = await db.user.findUnique({
+    where: { id },
+    select: { id: true },
+  });
   if (!exists) return null;
 
   await db.user.delete({ where: { id } });

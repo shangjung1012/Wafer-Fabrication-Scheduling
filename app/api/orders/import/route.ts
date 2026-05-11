@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       const quantity = Number(quantityRaw);
       if (!Number.isInteger(quantity) || quantity <= 0) {
         errorList.push(
-          `Row ${rowNum}: "quantity" must be a positive integer (got "${quantityRaw}").`
+          `Row ${rowNum}: "quantity" must be a positive integer (got "${quantityRaw}").`,
         );
         continue;
       }
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       const parsedDueDate = new Date(dueDate);
       if (isNaN(parsedDueDate.getTime())) {
         errorList.push(
-          `Row ${rowNum}: "dueDate" is not a valid date string (got "${dueDate}").`
+          `Row ${rowNum}: "dueDate" is not a valid date string (got "${dueDate}").`,
         );
         continue;
       }
@@ -100,14 +100,15 @@ export async function POST(req: NextRequest) {
       } catch (rowErr) {
         const e = rowErr as { message?: string };
         errorList.push(
-          `Row ${rowNum}: failed to create order — ${e.message ?? "unknown error"}.`
+          `Row ${rowNum}: failed to create order — ${e.message ?? "unknown error"}.`,
         );
       }
     }
 
     return NextResponse.json({ successCount: successes.length, errorList });
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorizedResponse(err.message);
+    if (err instanceof UnauthorizedError)
+      return unauthorizedResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);

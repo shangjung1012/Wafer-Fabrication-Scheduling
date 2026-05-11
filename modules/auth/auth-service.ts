@@ -114,7 +114,7 @@ function sanitizeUser(user: SanitizedUser): SanitizedUser {
 
 async function createStoredRefreshToken(
   db: PrismaClient,
-  userId: string
+  userId: string,
 ): Promise<string> {
   const refreshToken = issueRefreshToken();
   await db.refreshToken.create({
@@ -128,7 +128,10 @@ async function createStoredRefreshToken(
   return refreshToken;
 }
 
-async function issueAuthTokens(db: PrismaClient, user: SanitizedUser): Promise<AuthTokenResult> {
+async function issueAuthTokens(
+  db: PrismaClient,
+  user: SanitizedUser,
+): Promise<AuthTokenResult> {
   const [accessToken, refreshToken] = await Promise.all([
     issueAccessToken({
       id: user.id,
@@ -147,7 +150,7 @@ async function issueAuthTokens(db: PrismaClient, user: SanitizedUser): Promise<A
 
 export async function register(
   db: PrismaClient,
-  input: RegisterInput
+  input: RegisterInput,
 ): Promise<SanitizedUser> {
   if (input.role === "SUPERADMIN") {
     throw new AuthConflictError("SUPERADMIN cannot self-register.");
@@ -182,11 +185,18 @@ export async function register(
   return sanitizeUser(user);
 }
 
-function isLocked(user: Pick<AuthUserRecord, "lockedUntil">, now: Date): boolean {
+function isLocked(
+  user: Pick<AuthUserRecord, "lockedUntil">,
+  now: Date,
+): boolean {
   return !!user.lockedUntil && user.lockedUntil.getTime() > now.getTime();
 }
 
-async function recordFailedLogin(db: PrismaClient, user: AuthUserRecord, now: Date): Promise<void> {
+async function recordFailedLogin(
+  db: PrismaClient,
+  user: AuthUserRecord,
+  now: Date,
+): Promise<void> {
   const failedLoginCount = user.failedLoginCount + 1;
   const lockedUntil =
     failedLoginCount >= LOGIN_LOCK_THRESHOLD
@@ -211,9 +221,9 @@ async function recordFailedLogin(db: PrismaClient, user: AuthUserRecord, now: Da
 export async function login(
   db: PrismaClient,
   input: LoginInput,
-  now = new Date()
+  now = new Date(),
 ): Promise<AuthTokenResult> {
-  const user = await db.user.findUnique({
+  const user = (await db.user.findUnique({
     where: { accountId: input.accountId },
     select: {
       id: true,
@@ -226,7 +236,7 @@ export async function login(
       lockedUntil: true,
       lastFailedLoginAt: true,
     },
-  }) as AuthUserRecord | null;
+  })) as AuthUserRecord | null;
 
   if (!user?.password) {
     throw new InvalidCredentialsError();
@@ -263,9 +273,9 @@ function refreshTokenUsable(token: RefreshTokenRecord, now: Date): boolean {
 export async function refresh(
   db: PrismaClient,
   input: RefreshInput,
-  now = new Date()
+  now = new Date(),
 ): Promise<AuthTokenResult> {
-  const existing = await db.refreshToken.findUnique({
+  const existing = (await db.refreshToken.findUnique({
     where: { tokenHash: hashRefreshToken(input.refreshToken) },
     include: {
       user: {
@@ -278,7 +288,7 @@ export async function refresh(
         },
       },
     },
-  }) as RefreshTokenRecord | null;
+  })) as RefreshTokenRecord | null;
 
   if (!existing || !refreshTokenUsable(existing, now)) {
     throw new InvalidRefreshTokenError();
@@ -317,7 +327,7 @@ export async function refresh(
 export async function logout(
   db: PrismaClient,
   input: LogoutInput,
-  now = new Date()
+  now = new Date(),
 ): Promise<{ ok: true }> {
   const existing = await db.refreshToken.findUnique({
     where: { tokenHash: hashRefreshToken(input.refreshToken) },
@@ -328,7 +338,11 @@ export async function logout(
     },
   });
 
-  if (existing && !existing.revokedAt && existing.expiresAt.getTime() > now.getTime()) {
+  if (
+    existing &&
+    !existing.revokedAt &&
+    existing.expiresAt.getTime() > now.getTime()
+  ) {
     await db.refreshToken.update({
       where: { id: existing.id },
       data: { revokedAt: now },

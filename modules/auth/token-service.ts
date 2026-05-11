@@ -76,7 +76,9 @@ export async function issueAccessToken(user: AccessTokenUser): Promise<string> {
     .sign(jwtSecret());
 }
 
-export async function verifyAccessToken(token: string): Promise<VerifiedAccessTokenPayload> {
+export async function verifyAccessToken(
+  token: string,
+): Promise<VerifiedAccessTokenPayload> {
   const { payload } = await jwtVerify(token, jwtSecret(), {
     issuer: process.env.JWT_ISSUER || DEFAULT_ISSUER,
     audience: process.env.JWT_AUDIENCE || DEFAULT_AUDIENCE,
@@ -84,7 +86,9 @@ export async function verifyAccessToken(token: string): Promise<VerifiedAccessTo
 
   if (
     typeof payload.sub !== "string" ||
-    (payload.role !== "SUPERADMIN" && payload.role !== "ADMIN" && payload.role !== "SALES") ||
+    (payload.role !== "SUPERADMIN" &&
+      payload.role !== "ADMIN" &&
+      payload.role !== "SALES") ||
     typeof payload.accountId !== "string"
   ) {
     throw new Error("Invalid access token payload.");

@@ -24,7 +24,7 @@ export type TimelineFilters = {
 export async function getTimeline(
   ctx: RequestContext,
   db: PrismaClient,
-  filters: TimelineFilters
+  filters: TimelineFilters,
 ): Promise<TimelineResponse> {
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
@@ -75,7 +75,12 @@ export async function getTimeline(
 
 function detectConflicts(
   timeline: TimelineItem[],
-  capacities: Array<{ factoryId: string; date: string; maxCapacity: number; curCapacity: number }>
+  capacities: Array<{
+    factoryId: string;
+    date: string;
+    maxCapacity: number;
+    curCapacity: number;
+  }>,
 ): ConflictInfo[] {
   const conflicts: ConflictInfo[] = [];
 
@@ -83,7 +88,9 @@ function detectConflicts(
   for (const cap of capacities) {
     if (cap.curCapacity < 0) {
       const affectedOrders = timeline
-        .filter((t) => t.factoryId === cap.factoryId && t.productionDate === cap.date)
+        .filter(
+          (t) => t.factoryId === cap.factoryId && t.productionDate === cap.date,
+        )
         .map((t) => t.orderId);
 
       const used = cap.maxCapacity - cap.curCapacity;

@@ -50,7 +50,7 @@ export class NotFoundError extends Error {
 export function requireRole(ctx: RequestContext, allowed: UserRole[]): void {
   if (!allowed.includes(ctx.user.role)) {
     throw new ForbiddenError(
-      `Role '${ctx.user.role}' is not allowed. Required: ${allowed.join(" | ")}.`
+      `Role '${ctx.user.role}' is not allowed. Required: ${allowed.join(" | ")}.`,
     );
   }
 }
@@ -62,27 +62,36 @@ export function requireRole(ctx: RequestContext, allowed: UserRole[]): void {
 export function forbiddenResponse(err: ForbiddenError): Response {
   return new Response(
     JSON.stringify({ code: err.code, message: err.message }),
-    { status: err.status, headers: { "Content-Type": "application/json" } }
+    { status: err.status, headers: { "Content-Type": "application/json" } },
   );
 }
 
-export function unauthorizedResponse(message = "Missing or invalid token"): Response {
-  return new Response(
-    JSON.stringify({ code: "UNAUTHORIZED", message }),
-    { status: 401, headers: { "Content-Type": "application/json" } }
-  );
+export function unauthorizedResponse(
+  message = "Missing or invalid token",
+): Response {
+  return new Response(JSON.stringify({ code: "UNAUTHORIZED", message }), {
+    status: 401,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
-export function badRequestResponse(message: string, details?: Record<string, unknown>): Response {
+export function badRequestResponse(
+  message: string,
+  details?: Record<string, unknown>,
+): Response {
   return new Response(
-    JSON.stringify({ code: "BAD_REQUEST", message, ...(details ? { details } : {}) }),
-    { status: 400, headers: { "Content-Type": "application/json" } }
+    JSON.stringify({
+      code: "BAD_REQUEST",
+      message,
+      ...(details ? { details } : {}),
+    }),
+    { status: 400, headers: { "Content-Type": "application/json" } },
   );
 }
 
 export function notFoundResponse(message = "Resource not found."): Response {
-  return new Response(
-    JSON.stringify({ code: "NOT_FOUND", message }),
-    { status: 404, headers: { "Content-Type": "application/json" } }
-  );
+  return new Response(JSON.stringify({ code: "NOT_FOUND", message }), {
+    status: 404,
+    headers: { "Content-Type": "application/json" },
+  });
 }

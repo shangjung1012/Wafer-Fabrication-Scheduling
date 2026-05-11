@@ -4,10 +4,19 @@ import {
   greedyBestFitStrategy,
   type SchedulingCapacityInput,
 } from "@/modules/schedule/strategy";
-import { findOrdersForScheduling, bulkUpdateOrderStatus } from "@/infra/db/order-repository";
+import {
+  findOrdersForScheduling,
+  bulkUpdateOrderStatus,
+} from "@/infra/db/order-repository";
 import { findFactoriesWithCapacities } from "@/infra/db/factory-repository";
-import { deleteScheduledAssignments, createAssignments } from "@/infra/db/assignment-repository";
-import { createDailyCapacities, updateDailyCapacityById } from "@/infra/db/capacity-repository";
+import {
+  deleteScheduledAssignments,
+  createAssignments,
+} from "@/infra/db/assignment-repository";
+import {
+  createDailyCapacities,
+  updateDailyCapacityById,
+} from "@/infra/db/capacity-repository";
 import { AssignmentStatus } from "@/lib/generated/prisma";
 
 export async function runSchedule(type: string): Promise<void> {
@@ -30,7 +39,8 @@ export async function runSchedule(type: string): Promise<void> {
           const cap = capacities.find(
             (c) =>
               c.factoryId === assignment.factoryId &&
-              new Date(c.date).getTime() === new Date(assignment.productionDate).getTime(),
+              new Date(c.date).getTime() ===
+                new Date(assignment.productionDate).getTime(),
           );
           if (cap) cap.curCapacity += assignment.assignedQuantity;
         } else {
@@ -42,7 +52,12 @@ export async function runSchedule(type: string): Promise<void> {
   }
 
   const currentDate = new Date();
-  const strategyResult = greedyBestFitStrategy(orders, factories, capacities, currentDate);
+  const strategyResult = greedyBestFitStrategy(
+    orders,
+    factories,
+    capacities,
+    currentDate,
+  );
   const processedOrderIds = strategyResult.processedOrders.map((o) => o.id);
 
   await prisma.$transaction(async (tx) => {
@@ -52,7 +67,10 @@ export async function runSchedule(type: string): Promise<void> {
 
     await bulkUpdateOrderStatus(
       db,
-      strategyResult.processedOrders.map((o) => ({ id: o.id, status: o.status })),
+      strategyResult.processedOrders.map((o) => ({
+        id: o.id,
+        status: o.status,
+      })),
     );
 
     await createDailyCapacities(db, strategyResult.newCapacities);

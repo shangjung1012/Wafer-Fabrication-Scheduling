@@ -9,7 +9,10 @@ import {
   refresh,
   register,
 } from "@/modules/auth/auth-service";
-import { hashRefreshToken, verifyAccessToken } from "@/modules/auth/token-service";
+import {
+  hashRefreshToken,
+  verifyAccessToken,
+} from "@/modules/auth/token-service";
 
 function createDb() {
   type Row = Record<string, unknown>;
@@ -23,54 +26,118 @@ function createDb() {
     refreshTokens,
     db: {
       user: {
-        findUnique: vi.fn(async ({ where }: { where: { id?: string; accountId?: string } }) =>
-          users.find((user) => user.id === where.id || user.accountId === where.accountId) ?? null
+        findUnique: vi.fn(
+          async ({ where }: { where: { id?: string; accountId?: string } }) =>
+            users.find(
+              (user) =>
+                user.id === where.id || user.accountId === where.accountId,
+            ) ?? null,
         ),
-        create: vi.fn(async ({ data, select }: { data: Record<string, unknown>; select?: Record<string, boolean> }) => {
-          const user: Row = {
-            id: data.id ?? `user-${++userSeq}`,
-            failedLoginCount: 0,
-            lockedUntil: null,
-            lastFailedLoginAt: null,
-            ...data,
-          };
-          users.push(user);
-          if (!select) return user;
-          return Object.fromEntries(Object.keys(select).map((key) => [key, user[key]]));
-        }),
-        update: vi.fn(async ({ where, data, select }: { where: { id: string }; data: Record<string, unknown>; select?: Record<string, boolean> }) => {
-          const user = users.find((item) => item.id === where.id);
-          if (!user) throw new Error("User not found");
-          Object.assign(user, data);
-          if (!select) return user;
-          return Object.fromEntries(Object.keys(select).map((key) => [key, user[key]]));
-        }),
+        create: vi.fn(
+          async ({
+            data,
+            select,
+          }: {
+            data: Record<string, unknown>;
+            select?: Record<string, boolean>;
+          }) => {
+            const user: Row = {
+              id: data.id ?? `user-${++userSeq}`,
+              failedLoginCount: 0,
+              lockedUntil: null,
+              lastFailedLoginAt: null,
+              ...data,
+            };
+            users.push(user);
+            if (!select) return user;
+            return Object.fromEntries(
+              Object.keys(select).map((key) => [key, user[key]]),
+            );
+          },
+        ),
+        update: vi.fn(
+          async ({
+            where,
+            data,
+            select,
+          }: {
+            where: { id: string };
+            data: Record<string, unknown>;
+            select?: Record<string, boolean>;
+          }) => {
+            const user = users.find((item) => item.id === where.id);
+            if (!user) throw new Error("User not found");
+            Object.assign(user, data);
+            if (!select) return user;
+            return Object.fromEntries(
+              Object.keys(select).map((key) => [key, user[key]]),
+            );
+          },
+        ),
       },
       refreshToken: {
-        create: vi.fn(async ({ data, select }: { data: Record<string, unknown>; select?: Record<string, boolean> }) => {
-          const token: Row = { id: `rt-${++tokenSeq}`, createdAt: new Date(), ...data };
-          refreshTokens.push(token);
-          if (!select) return token;
-          return Object.fromEntries(Object.keys(select).map((key) => [key, token[key]]));
-        }),
-        findUnique: vi.fn(async ({ where, include }: { where: { tokenHash: string }; include?: { user?: unknown } }) => {
-          const token = refreshTokens.find((item) => item.tokenHash === where.tokenHash);
-          if (!token) return null;
-          if (!include?.user) return token;
-          return {
-            ...token,
-            user: users.find((user) => user.id === token.userId),
-          };
-        }),
-        update: vi.fn(async ({ where, data, select }: { where: { id: string }; data: Record<string, unknown>; select?: Record<string, boolean> }) => {
-          const token = refreshTokens.find((item) => item.id === where.id);
-          if (!token) throw new Error("Refresh token not found");
-          Object.assign(token, data);
-          if (!select) return token;
-          return Object.fromEntries(Object.keys(select).map((key) => [key, token[key]]));
-        }),
+        create: vi.fn(
+          async ({
+            data,
+            select,
+          }: {
+            data: Record<string, unknown>;
+            select?: Record<string, boolean>;
+          }) => {
+            const token: Row = {
+              id: `rt-${++tokenSeq}`,
+              createdAt: new Date(),
+              ...data,
+            };
+            refreshTokens.push(token);
+            if (!select) return token;
+            return Object.fromEntries(
+              Object.keys(select).map((key) => [key, token[key]]),
+            );
+          },
+        ),
+        findUnique: vi.fn(
+          async ({
+            where,
+            include,
+          }: {
+            where: { tokenHash: string };
+            include?: { user?: unknown };
+          }) => {
+            const token = refreshTokens.find(
+              (item) => item.tokenHash === where.tokenHash,
+            );
+            if (!token) return null;
+            if (!include?.user) return token;
+            return {
+              ...token,
+              user: users.find((user) => user.id === token.userId),
+            };
+          },
+        ),
+        update: vi.fn(
+          async ({
+            where,
+            data,
+            select,
+          }: {
+            where: { id: string };
+            data: Record<string, unknown>;
+            select?: Record<string, boolean>;
+          }) => {
+            const token = refreshTokens.find((item) => item.id === where.id);
+            if (!token) throw new Error("Refresh token not found");
+            Object.assign(token, data);
+            if (!select) return token;
+            return Object.fromEntries(
+              Object.keys(select).map((key) => [key, token[key]]),
+            );
+          },
+        ),
       },
-      $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback((undefined as unknown as { db: unknown }).db ?? undefined)),
+      $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback((undefined as unknown as { db: unknown }).db ?? undefined),
+      ),
     },
   };
 }
@@ -105,13 +172,15 @@ describe("auth-service", () => {
   it("rejects SUPERADMIN self-registration and duplicate account IDs", async () => {
     const { db } = createDb();
 
-    await expect(register(db as never, {
-      accountId: "sa-A",
-      name: "Super Admin A",
-      password: "Password123!",
-      role: "SUPERADMIN",
-      group: "A",
-    })).rejects.toThrow(AuthConflictError);
+    await expect(
+      register(db as never, {
+        accountId: "sa-A",
+        name: "Super Admin A",
+        password: "Password123!",
+        role: "SUPERADMIN",
+        group: "A",
+      }),
+    ).rejects.toThrow(AuthConflictError);
 
     await register(db as never, {
       accountId: "sales-A",
@@ -121,13 +190,15 @@ describe("auth-service", () => {
       group: "A",
     });
 
-    await expect(register(db as never, {
-      accountId: "sales-A",
-      name: "Sales A Copy",
-      password: "Password123!",
-      role: "SALES",
-      group: "A",
-    })).rejects.toThrow(AuthConflictError);
+    await expect(
+      register(db as never, {
+        accountId: "sales-A",
+        name: "Sales A Copy",
+        password: "Password123!",
+        role: "SALES",
+        group: "A",
+      }),
+    ).rejects.toThrow(AuthConflictError);
   });
 
   it("logs in, stores a hashed refresh token, and returns a verifiable access token", async () => {
@@ -151,7 +222,9 @@ describe("auth-service", () => {
       accountId: "admin-A1",
     });
     expect(result.refreshToken).toBeTypeOf("string");
-    expect(refreshTokens[0].tokenHash).toBe(hashRefreshToken(result.refreshToken));
+    expect(refreshTokens[0].tokenHash).toBe(
+      hashRefreshToken(result.refreshToken),
+    );
   });
 
   it("locks an account for 15 minutes after 5 failed login attempts", async () => {
@@ -165,16 +238,20 @@ describe("auth-service", () => {
     });
 
     for (let i = 0; i < 4; i++) {
-      await expect(login(db as never, {
-        accountId: "sales-A",
-        password: "wrong-password",
-      })).rejects.toThrow(InvalidCredentialsError);
+      await expect(
+        login(db as never, {
+          accountId: "sales-A",
+          password: "wrong-password",
+        }),
+      ).rejects.toThrow(InvalidCredentialsError);
     }
 
-    await expect(login(db as never, {
-      accountId: "sales-A",
-      password: "wrong-password",
-    })).rejects.toThrow(AccountLockedError);
+    await expect(
+      login(db as never, {
+        accountId: "sales-A",
+        password: "wrong-password",
+      }),
+    ).rejects.toThrow(AccountLockedError);
 
     expect(users[0].failedLoginCount).toBe(5);
     expect(users[0].lockedUntil).toBeInstanceOf(Date);
@@ -199,13 +276,17 @@ describe("auth-service", () => {
     });
 
     expect(refreshed.refreshToken).not.toBe(loginResult.refreshToken);
-    await expect(refresh(db as never, {
-      refreshToken: loginResult.refreshToken,
-    })).rejects.toThrow(InvalidRefreshTokenError);
+    await expect(
+      refresh(db as never, {
+        refreshToken: loginResult.refreshToken,
+      }),
+    ).rejects.toThrow(InvalidRefreshTokenError);
 
     await logout(db as never, { refreshToken: refreshed.refreshToken });
-    await expect(refresh(db as never, {
-      refreshToken: refreshed.refreshToken,
-    })).rejects.toThrow(InvalidRefreshTokenError);
+    await expect(
+      refresh(db as never, {
+        refreshToken: refreshed.refreshToken,
+      }),
+    ).rejects.toThrow(InvalidRefreshTokenError);
   });
 });
