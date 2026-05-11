@@ -568,6 +568,30 @@ export default function SchedulePage() {
           </p>
         </div>
 
+        <nav
+          className="flex items-center gap-2 flex-wrap"
+          aria-label="Dashboard navigation"
+        >
+          <a
+            href="/orders"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Orders
+          </a>
+          <a
+            href="/visualization"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700"
+          >
+            Visualization
+          </a>
+          <a
+            href="/users"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Users
+          </a>
+        </nav>
+
         <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
           <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
             Signed in as:

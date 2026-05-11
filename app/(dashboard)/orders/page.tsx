@@ -525,6 +525,17 @@ export default function OrdersPage() {
     color: isSales ? "#166534" : isAdmin ? "#1e40af" : "#6b21a8",
   };
 
+  const navLinkStyle: React.CSSProperties = {
+    border: "1px solid #cbd5e1",
+    borderRadius: 6,
+    padding: "7px 11px",
+    color: "#334155",
+    background: "#fff",
+    textDecoration: "none",
+    fontSize: 13,
+    fontWeight: 650,
+  };
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -571,6 +582,25 @@ export default function OrdersPage() {
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
         WOMS — API Test UI
       </h1>
+      <nav
+        aria-label="Dashboard navigation"
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          margin: "12px 0 18px",
+        }}
+      >
+        <a href="/orders" style={navLinkStyle}>
+          Orders
+        </a>
+        <a href="/visualization" style={navLinkStyle}>
+          Visualization
+        </a>
+        <a href="/users" style={navLinkStyle}>
+          Users
+        </a>
+      </nav>
 
       <div
         style={{

@@ -46,6 +46,13 @@ function SetPasswordContent() {
       password !== confirmPassword,
     [password, confirmPassword],
   );
+  const passwordTooShort = password.length > 0 && password.length < 8;
+  const canSubmit =
+    loading === null &&
+    !!preview &&
+    accountId.trim().length > 0 &&
+    password.length >= 8 &&
+    !passwordMismatch;
 
   useEffect(() => {
     let cancelled = false;
@@ -88,7 +95,12 @@ function SetPasswordContent() {
   }, [token]);
 
   const handleSubmit = async () => {
-    if (!preview || passwordMismatch) return;
+    if (!canSubmit) {
+      if (password.length > 0 && password.length < 8) {
+        setMessage("Password must be at least 8 characters.");
+      }
+      return;
+    }
 
     setLoading("submit");
     setMessage(null);
@@ -180,6 +192,14 @@ function SetPasswordContent() {
             </span>
           </label>
 
+          {passwordTooShort && (
+            <p
+              style={{ margin: "-4px 0 12px", color: "#b91c1c", fontSize: 13 }}
+            >
+              Password must be at least 8 characters.
+            </p>
+          )}
+
           <label style={labelStyle}>
             Confirm Password
             <input
@@ -200,13 +220,11 @@ function SetPasswordContent() {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={
-              loading !== null ||
-              !accountId ||
-              password.length < 8 ||
-              passwordMismatch
-            }
-            style={primaryButtonStyle}
+            disabled={!canSubmit}
+            style={{
+              ...primaryButtonStyle,
+              ...(!canSubmit ? disabledButtonStyle : {}),
+            }}
           >
             <KeyRound size={16} />
             {loading === "submit" ? "Saving" : "Set password"}
@@ -307,6 +325,14 @@ const primaryButtonStyle: CSSProperties = {
   fontWeight: 700,
   fontSize: 14,
   cursor: "pointer",
+};
+
+const disabledButtonStyle: CSSProperties = {
+  borderColor: "#cbd5e1",
+  background: "#94a3b8",
+  color: "#f8fafc",
+  cursor: "not-allowed",
+  opacity: 0.8,
 };
 
 const termStyle: CSSProperties = {

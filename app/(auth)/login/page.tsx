@@ -418,6 +418,9 @@ export default function LoginPage() {
                   <a href="/visualization" style={linkButtonStyle}>
                     Visualization
                   </a>
+                  <a href="/users" style={linkButtonStyle}>
+                    Users
+                  </a>
                 </div>
               </div>
             ) : (
