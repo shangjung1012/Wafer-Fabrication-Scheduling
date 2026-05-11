@@ -85,6 +85,7 @@ async function seedRouteTestUsers(): Promise<void> {
 describe("auth API route flow", () => {
   beforeEach(async () => {
     process.env.JWT_SECRET = "test-secret-at-least-32-characters-long";
+    process.env.APP_BASE_URL = "http://localhost";
     await cleanupRouteTestUsers();
     await seedRouteTestUsers();
   });
@@ -172,7 +173,7 @@ describe("auth API route flow", () => {
     const logoutResponse = await logoutPost(
       new Request("http://localhost/api/auth/logout", {
         method: "POST",
-        headers: { Cookie: cookies },
+        headers: { Cookie: cookies, Origin: "http://localhost" },
       }),
     );
     expect(logoutResponse.status).toBe(200);
@@ -181,7 +182,7 @@ describe("auth API route flow", () => {
     const refreshResponse = await refreshPost(
       new Request("http://localhost/api/auth/refresh", {
         method: "POST",
-        headers: { Cookie: cookies },
+        headers: { Cookie: cookies, Origin: "http://localhost" },
       }),
     );
     expect(refreshResponse.status).toBe(401);

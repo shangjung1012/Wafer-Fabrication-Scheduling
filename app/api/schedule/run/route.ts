@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
+import {
+  CsrfError,
+  requireAuth,
+  UnauthorizedError,
+} from "@/modules/auth/require-auth";
 import { z } from "zod";
 import Redis from "ioredis";
 import { runSchedule } from "@/modules/schedule/engine";
@@ -85,6 +89,12 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { code: "UNAUTHORIZED", message: error.message },
         { status: 401 },
+      );
+    }
+    if (error instanceof CsrfError) {
+      return NextResponse.json(
+        { code: error.code, message: error.message },
+        { status: error.status },
       );
     }
 

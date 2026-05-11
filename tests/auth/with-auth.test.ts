@@ -6,6 +6,7 @@ import { withAuth } from "@/modules/auth/with-auth";
 describe("withAuth", () => {
   beforeEach(() => {
     process.env.JWT_SECRET = "test-secret-at-least-32-characters-long";
+    process.env.APP_BASE_URL = "http://localhost:3000";
   });
 
   it("passes the authenticated request context to the route handler", async () => {
@@ -69,6 +70,31 @@ describe("withAuth", () => {
     await expect(response.json()).resolves.toEqual({
       code: "FORBIDDEN",
       message: "Nope.",
+    });
+  });
+
+  it("returns a standard CSRF response for cross-origin cookie auth", async () => {
+    const token = await issueAccessToken({
+      id: "user-1",
+      role: "ADMIN",
+      accountId: "admin-A1",
+    });
+    const handler = withAuth(async () => Response.json({ ok: true }));
+
+    const response = await handler(
+      new Request("http://localhost:3000/api/users", {
+        method: "POST",
+        headers: {
+          Cookie: `access_token=${token}`,
+          Origin: "https://evil.example",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      code: "CSRF_FORBIDDEN",
+      message: "Request origin is not allowed.",
     });
   });
 

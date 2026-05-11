@@ -15,6 +15,10 @@ import * as scheduleEngine from "@/modules/schedule/engine";
 // Mock requireAuth
 vi.mock("@/modules/auth/require-auth", () => ({
   requireAuth: vi.fn(),
+  CsrfError: class CsrfError extends Error {
+    status = 403;
+    code = "CSRF_FORBIDDEN";
+  },
   UnauthorizedError: class UnauthorizedError extends Error {
     status = 401;
     code = "UNAUTHORIZED";

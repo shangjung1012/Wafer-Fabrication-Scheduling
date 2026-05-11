@@ -52,6 +52,7 @@ function authedNextRequest(
     headers: {
       "Content-Type": "application/json",
       Cookie: cookie,
+      Origin: "https://wafer.example.com",
     },
     body: JSON.stringify(body),
   });
@@ -224,7 +225,7 @@ describe("invitation API routes", () => {
         `http://localhost/api/users/${inviteBody.id}/invitation/resend`,
         {
           method: "POST",
-          headers: { Cookie: cookies },
+          headers: { Cookie: cookies, Origin: "https://wafer.example.com" },
         },
       ),
       { params: Promise.resolve({ id: inviteBody.id }) },

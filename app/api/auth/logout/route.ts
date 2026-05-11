@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { logout } from "@/modules/auth/auth-service";
+import { requireSameOriginForCookieAuth } from "@/modules/auth/require-auth";
 import {
   REFRESH_TOKEN_COOKIE,
   clearAuthCookies,
@@ -34,6 +35,8 @@ export async function POST(req: Request) {
         return validationErrorResponse(parsed.error);
       }
       refreshToken = parsed.data.refreshToken;
+    } else {
+      requireSameOriginForCookieAuth(req);
     }
 
     const result = await logout(prisma, { refreshToken });
