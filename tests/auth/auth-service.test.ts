@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AccountLockedError,
-  AuthConflictError,
   InvalidCredentialsError,
   InvalidRefreshTokenError,
+  SelfRegistrationDisabledError,
   login,
   logout,
   refresh,
   register,
 } from "@/modules/auth/auth-service";
+import { hashPassword } from "@/modules/auth/password-service";
 import {
   hashRefreshToken,
   verifyAccessToken,
@@ -30,7 +31,9 @@ function createDb() {
           async ({ where }: { where: { id?: string; accountId?: string } }) =>
             users.find(
               (user) =>
-                user.id === where.id || user.accountId === where.accountId,
+                user.id === where.id ||
+                user.accountId === where.accountId ||
+                user.email === (where as { email?: string }).email,
             ) ?? null,
         ),
         create: vi.fn(
@@ -147,66 +150,44 @@ describe("auth-service", () => {
     process.env.JWT_SECRET = "test-secret-at-least-32-characters-long";
   });
 
-  it("registers ADMIN and SALES users with hashed passwords", async () => {
-    const { db, users } = createDb();
-
-    const user = await register(db as never, {
-      accountId: "admin-A1",
-      name: "Admin A1",
-      password: "Password123!",
-      role: "ADMIN",
-      group: "A",
+  async function seedActiveUser(
+    db: ReturnType<typeof createDb>["db"],
+    input: {
+      accountId: string;
+      email: string;
+      name: string;
+      role: "SUPERADMIN" | "ADMIN" | "SALES";
+      group: string;
+    },
+  ) {
+    return db.user.create({
+      data: {
+        ...input,
+        password: await hashPassword("Password123!"),
+      },
     });
+  }
 
-    expect(user).toEqual({
-      id: "user-1",
-      accountId: "admin-A1",
-      name: "Admin A1",
-      role: "ADMIN",
-      group: "A",
-    });
-    expect(users[0].password).not.toBe("Password123!");
-    expect(String(users[0].password).startsWith("$argon2id$")).toBe(true);
-  });
-
-  it("rejects SUPERADMIN self-registration and duplicate account IDs", async () => {
+  it("disables public self-registration", async () => {
     const { db } = createDb();
 
     await expect(
       register(db as never, {
-        accountId: "sa-A",
+        email: "sa-a@mail.shangjung.com",
         name: "Super Admin A",
         password: "Password123!",
         role: "SUPERADMIN",
         group: "A",
       }),
-    ).rejects.toThrow(AuthConflictError);
-
-    await register(db as never, {
-      accountId: "sales-A",
-      name: "Sales A",
-      password: "Password123!",
-      role: "SALES",
-      group: "A",
-    });
-
-    await expect(
-      register(db as never, {
-        accountId: "sales-A",
-        name: "Sales A Copy",
-        password: "Password123!",
-        role: "SALES",
-        group: "A",
-      }),
-    ).rejects.toThrow(AuthConflictError);
+    ).rejects.toThrow(SelfRegistrationDisabledError);
   });
 
-  it("logs in, stores a hashed refresh token, and returns a verifiable access token", async () => {
+  it("logs in by account ID or email, stores a hashed refresh token, and returns a verifiable access token", async () => {
     const { db, refreshTokens } = createDb();
-    await register(db as never, {
+    await seedActiveUser(db, {
       accountId: "admin-A1",
+      email: "admin-a1@mail.shangjung.com",
       name: "Admin A1",
-      password: "Password123!",
       role: "ADMIN",
       group: "A",
     });
@@ -225,14 +206,26 @@ describe("auth-service", () => {
     expect(refreshTokens[0].tokenHash).toBe(
       hashRefreshToken(result.refreshToken),
     );
+
+    await expect(
+      login(db as never, {
+        accountId: "admin-a1@mail.shangjung.com",
+        password: "Password123!",
+      }),
+    ).resolves.toMatchObject({
+      user: {
+        accountId: "admin-A1",
+        email: "admin-a1@mail.shangjung.com",
+      },
+    });
   });
 
   it("locks an account for 15 minutes after 5 failed login attempts", async () => {
     const { db, users } = createDb();
-    await register(db as never, {
+    await seedActiveUser(db, {
       accountId: "sales-A",
+      email: "sales-a@mail.shangjung.com",
       name: "Sales A",
-      password: "Password123!",
       role: "SALES",
       group: "A",
     });
@@ -259,10 +252,10 @@ describe("auth-service", () => {
 
   it("rotates refresh tokens and rejects reused or logged-out tokens", async () => {
     const { db } = createDb();
-    await register(db as never, {
+    await seedActiveUser(db, {
       accountId: "admin-A1",
+      email: "admin-a1@mail.shangjung.com",
       name: "Admin A1",
-      password: "Password123!",
       role: "ADMIN",
       group: "A",
     });

@@ -41,6 +41,7 @@ describe("client auth session", () => {
       user: {
         id: "user-1",
         accountId: "sa-A",
+        email: "sa-a@mail.shangjung.com",
         name: "SuperAdmin A",
         role: "SUPERADMIN",
         group: "A",
@@ -63,6 +64,7 @@ describe("client auth session", () => {
       user: {
         id: "user-1",
         accountId: "sa-A",
+        email: "sa-a@mail.shangjung.com",
         name: "SuperAdmin A",
         role: "SUPERADMIN",
         group: "A",

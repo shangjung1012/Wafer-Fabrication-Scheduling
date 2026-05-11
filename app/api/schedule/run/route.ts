@@ -25,8 +25,8 @@ export async function POST(request: Request) {
   try {
     // 1. Check for Cron execution first
     const authHeader = request.headers.get("Authorization");
-    const isCron =
-      authHeader && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+    const cronSecret = process.env.CRON_SECRET;
+    const isCron = !!cronSecret && authHeader === `Bearer ${cronSecret}`;
 
     // 2. If not a valid cron, fallback to standard user Auth + RBAC
     if (!isCron) {

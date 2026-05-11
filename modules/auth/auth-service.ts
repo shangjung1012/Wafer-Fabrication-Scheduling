@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import type { UserRole } from "@/lib/generated/prisma/enums";
-import { hashPassword, verifyPassword } from "@/modules/auth/password-service";
+import { verifyPassword } from "@/modules/auth/password-service";
 import {
   hashRefreshToken,
   issueAccessToken,
@@ -14,12 +14,14 @@ const LOGIN_LOCK_MS = 15 * 60 * 1000;
 export type SanitizedUser = {
   id: string;
   accountId: string;
+  email: string;
   name: string;
   role: UserRole;
   group: string | null;
 };
 
-type AuthUserRecord = SanitizedUser & {
+type AuthUserRecord = Omit<SanitizedUser, "accountId"> & {
+  accountId: string | null;
   password: string | null;
   failedLoginCount: number;
   lockedUntil: Date | null;
@@ -75,8 +77,18 @@ export class InvalidRefreshTokenError extends Error {
   }
 }
 
+export class SelfRegistrationDisabledError extends Error {
+  readonly status = 403 as const;
+  readonly code = "SELF_REGISTRATION_DISABLED" as const;
+
+  constructor(message = "Self registration is disabled.") {
+    super(message);
+    this.name = "SelfRegistrationDisabledError";
+  }
+}
+
 export type RegisterInput = {
-  accountId: string;
+  email: string;
   name: string;
   password: string;
   role: UserRole;
@@ -106,6 +118,7 @@ function sanitizeUser(user: SanitizedUser): SanitizedUser {
   return {
     id: user.id,
     accountId: user.accountId,
+    email: user.email,
     name: user.name,
     role: user.role,
     group: user.group,
@@ -152,37 +165,9 @@ export async function register(
   db: PrismaClient,
   input: RegisterInput,
 ): Promise<SanitizedUser> {
-  if (input.role === "SUPERADMIN") {
-    throw new AuthConflictError("SUPERADMIN cannot self-register.");
-  }
-
-  const exists = await db.user.findUnique({
-    where: { accountId: input.accountId },
-    select: { id: true },
-  });
-  if (exists) {
-    throw new AuthConflictError("Account ID is already registered.");
-  }
-
-  const passwordHash = await hashPassword(input.password);
-  const user = await db.user.create({
-    data: {
-      accountId: input.accountId,
-      name: input.name,
-      password: passwordHash,
-      role: input.role,
-      group: input.group,
-    },
-    select: {
-      id: true,
-      accountId: true,
-      name: true,
-      role: true,
-      group: true,
-    },
-  });
-
-  return sanitizeUser(user);
+  void db;
+  void input;
+  throw new SelfRegistrationDisabledError();
 }
 
 function isLocked(
@@ -228,6 +213,7 @@ export async function login(
     select: {
       id: true,
       accountId: true,
+      email: true,
       name: true,
       password: true,
       role: true,
@@ -238,23 +224,47 @@ export async function login(
     },
   })) as AuthUserRecord | null;
 
-  if (!user?.password) {
+  const loginUser =
+    user ??
+    ((await db.user.findUnique({
+      where: { email: input.accountId },
+      select: {
+        id: true,
+        accountId: true,
+        email: true,
+        name: true,
+        password: true,
+        role: true,
+        group: true,
+        failedLoginCount: true,
+        lockedUntil: true,
+        lastFailedLoginAt: true,
+      },
+    })) as AuthUserRecord | null);
+
+  if (!loginUser?.password || !loginUser.accountId) {
     throw new InvalidCredentialsError();
   }
 
-  if (isLocked(user, now)) {
+  if (isLocked(loginUser, now)) {
     throw new AccountLockedError();
   }
 
-  const passwordMatches = await verifyPassword(user.password, input.password);
+  const passwordMatches = await verifyPassword(
+    loginUser.password,
+    input.password,
+  );
   if (!passwordMatches) {
-    await recordFailedLogin(db, user, now);
+    await recordFailedLogin(db, loginUser, now);
     throw new InvalidCredentialsError();
   }
 
-  const sanitized = sanitizeUser(user);
+  const sanitized = sanitizeUser({
+    ...loginUser,
+    accountId: loginUser.accountId,
+  });
   await db.user.update({
-    where: { id: user.id },
+    where: { id: loginUser.id },
     data: {
       failedLoginCount: 0,
       lockedUntil: null,
@@ -282,6 +292,7 @@ export async function refresh(
         select: {
           id: true,
           accountId: true,
+          email: true,
           name: true,
           role: true,
           group: true,

@@ -9,7 +9,7 @@ import {
 } from "@/app/api/auth/_shared";
 
 const LoginBodySchema = z.object({
-  accountId: z.string().trim().min(1, "accountId is required").max(80),
+  accountId: z.string().trim().min(1, "accountId is required").max(320),
   password: z.string().min(1, "password is required").max(256),
 });
 

@@ -46,6 +46,7 @@ async function seedRouteTestUsers(): Promise<void> {
       {
         id: "route-test-sa-A",
         accountId: "route-test-sa-A",
+        email: "route-test-sa-a@mail.shangjung.com",
         name: "Route Test SuperAdmin A",
         password,
         role: "SUPERADMIN",
@@ -54,6 +55,7 @@ async function seedRouteTestUsers(): Promise<void> {
       {
         id: "route-test-sales-A",
         accountId: "route-test-sales-A",
+        email: "route-test-sales-a@mail.shangjung.com",
         name: "Route Test Sales A",
         password,
         role: "SALES",
@@ -62,6 +64,7 @@ async function seedRouteTestUsers(): Promise<void> {
       {
         id: "route-test-sales-B",
         accountId: "route-test-sales-B",
+        email: "route-test-sales-b@mail.shangjung.com",
         name: "Route Test Sales B",
         password,
         role: "SALES",

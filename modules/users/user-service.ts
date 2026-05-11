@@ -54,6 +54,7 @@ export async function listUsers(
 
 export type CreateUserServiceInput = {
   accountId: string;
+  email: string;
   name: string;
   role: UserRole;
   group?: string | null;
@@ -84,6 +85,7 @@ export async function createUserService(
 
   return createUser(db, {
     accountId: input.accountId,
+    email: input.email,
     name: input.name,
     role: input.role,
     group: targetGroup,
@@ -93,6 +95,7 @@ export async function createUserService(
 
 export type UpdateUserServiceInput = {
   accountId?: string;
+  email?: string;
   name?: string;
   role?: UserRole;
   group?: string | null;

@@ -46,6 +46,7 @@ function d(dateStr: string): Date {
 type SeedUser = {
   id: string;
   accountId: string;
+  email: string;
   name: string;
   role: UserRole;
   group: string;
@@ -97,6 +98,7 @@ function buildUsers(): SeedUser[] {
     users.push({
       id: `sa-${t}`,
       accountId: `sa-${t}`,
+      email: `sa-${t.toLowerCase()}@mail.com`,
       name: `SuperAdmin ${t}`,
       role: "SUPERADMIN",
       group: t,
@@ -107,6 +109,7 @@ function buildUsers(): SeedUser[] {
       users.push({
         id: `admin-${t}${i}`,
         accountId: `admin-${t}${i}`,
+        email: `admin-${t.toLowerCase()}${i}@mail.com`,
         name: `Admin ${t}${i}`,
         role: "ADMIN",
         group: t,
@@ -116,6 +119,7 @@ function buildUsers(): SeedUser[] {
     users.push({
       id: `sales-${t}`,
       accountId: `sales-${t}`,
+      email: `sales-${t.toLowerCase()}@mail.com`,
       name: `Sales ${t}`,
       role: "SALES",
       group: t,
@@ -562,6 +566,7 @@ async function seedUsers(users: SeedUser[]) {
       create: {
         id: u.id,
         accountId: u.accountId,
+        email: u.email,
         name: u.name,
         password,
         role: u.role,
@@ -569,6 +574,7 @@ async function seedUsers(users: SeedUser[]) {
       },
       update: {
         accountId: u.accountId,
+        email: u.email,
         name: u.name,
         password,
         role: u.role,

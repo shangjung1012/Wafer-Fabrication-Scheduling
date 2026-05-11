@@ -9,7 +9,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/modules/auth/with-auth";
 import { badRequestResponse } from "@/modules/auth/rbac";
-import { listUsers, createUserService } from "@/modules/users/user-service";
+import { listUsers } from "@/modules/users/user-service";
+import {
+  createUserInvitation,
+  InvitationError,
+} from "@/modules/auth/invitation-service";
 import { prisma } from "@/lib/prisma";
 
 // ---------------------------------------------------------------------------
@@ -23,11 +27,10 @@ const ListUsersQuerySchema = z.object({
 });
 
 const CreateUserBodySchema = z.object({
-  accountId: z.string().min(1, "accountId is required"),
+  email: z.string().trim().email("email must be valid"),
   name: z.string().min(1, "name is required"),
   role: UserRoleSchema,
-  group: z.string().min(1).optional().nullable(),
-  password: z.string().min(8).max(256).optional().nullable(),
+  group: z.string().min(1, "group is required"),
 });
 
 // ---------------------------------------------------------------------------
@@ -69,9 +72,15 @@ export const POST = withAuth<NextRequest>(async (req, ctx) => {
       );
     }
 
-    const result = await createUserService(ctx, prisma, parsed.data);
+    const result = await createUserInvitation(ctx, prisma, parsed.data);
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
+    if (err instanceof InvitationError) {
+      return NextResponse.json(
+        { code: err.code, message: err.message },
+        { status: err.status },
+      );
+    }
     const appErr = err as { status?: number; code?: string; message?: string };
     if (appErr.status === 404) {
       return new Response(
