@@ -1,0 +1,16 @@
+.git
+.next
+node_modules
+coverage
+dist
+
+lib/generated/prisma
+
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+.env
+.env.*
+!.env.example
+

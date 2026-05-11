@@ -13,21 +13,26 @@ import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
 
 export type UserRow = {
   id: string;
+  accountId: string;
   name: string;
   role: UserRole;
   group: string | null;
 };
 
 export type CreateUserInput = {
+  accountId: string;
   name: string;
   role: UserRole;
   group?: string | null;
+  password?: string | null;
 };
 
 export type UpdateUserInput = {
+  accountId?: string;
   name?: string;
   role?: UserRole;
   group?: string | null;
+  password?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -36,25 +41,25 @@ export type UpdateUserInput = {
 
 export async function findUsers(
   db: PrismaClient,
-  filters: { role?: UserRole; group?: string } = {}
+  filters: { role?: UserRole; group?: string } = {},
 ): Promise<UserRow[]> {
   return db.user.findMany({
     where: {
       ...(filters.role ? { role: filters.role } : {}),
       ...(filters.group ? { group: filters.group } : {}),
     },
-    select: { id: true, name: true, role: true, group: true },
+    select: { id: true, accountId: true, name: true, role: true, group: true },
     orderBy: [{ role: "asc" }, { name: "asc" }],
   });
 }
 
 export async function findUserById(
   db: PrismaClient,
-  id: string
+  id: string,
 ): Promise<UserRow | null> {
   return db.user.findUnique({
     where: { id },
-    select: { id: true, name: true, role: true, group: true },
+    select: { id: true, accountId: true, name: true, role: true, group: true },
   });
 }
 
@@ -64,13 +69,15 @@ export async function findUserById(
 
 export async function createUser(
   db: PrismaClient,
-  input: CreateUserInput
+  input: CreateUserInput,
 ): Promise<{ id: string }> {
   const user = await db.user.create({
     data: {
+      accountId: input.accountId,
       name: input.name,
       role: input.role,
       group: input.group ?? null,
+      password: input.password ?? null,
     },
     select: { id: true },
   });
@@ -80,17 +87,22 @@ export async function createUser(
 export async function updateUser(
   db: PrismaClient,
   id: string,
-  input: UpdateUserInput
+  input: UpdateUserInput,
 ): Promise<{ id: string } | null> {
-  const exists = await db.user.findUnique({ where: { id }, select: { id: true } });
+  const exists = await db.user.findUnique({
+    where: { id },
+    select: { id: true },
+  });
   if (!exists) return null;
 
   const user = await db.user.update({
     where: { id },
     data: {
+      ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
       ...(input.group !== undefined ? { group: input.group } : {}),
+      ...(input.password !== undefined ? { password: input.password } : {}),
     },
     select: { id: true },
   });
@@ -99,9 +111,12 @@ export async function updateUser(
 
 export async function deleteUser(
   db: PrismaClient,
-  id: string
+  id: string,
 ): Promise<{ id: string } | null> {
-  const exists = await db.user.findUnique({ where: { id }, select: { id: true } });
+  const exists = await db.user.findUnique({
+    where: { id },
+    select: { id: true },
+  });
   if (!exists) return null;
 
   await db.user.delete({ where: { id } });
