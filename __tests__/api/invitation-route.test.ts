@@ -113,6 +113,7 @@ describe("invitation API routes", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     process.env.JWT_SECRET = "test-secret-at-least-32-characters-long";
+    process.env.APP_BASE_URL = "https://wafer.example.com";
     await cleanupRouteInvitationUsers();
     await seedRouteInvitationUsers();
   });
@@ -152,6 +153,12 @@ describe("invitation API routes", () => {
     expect(inviteBody.id).toBeTypeOf("string");
     expect(inviteBody.invitationExpiresAt).toBeTypeOf("string");
     expect(sendMail).toHaveBeenCalledTimes(1);
+    expect(sendMail.mock.calls[0][0].plainText).toContain(
+      "https://wafer.example.com/set-password?token=",
+    );
+    expect(sendMail.mock.calls[0][0].plainText).not.toContain(
+      "http://localhost/set-password",
+    );
 
     const token = extractInviteToken();
     const acceptResponse = await acceptInvitationPost(

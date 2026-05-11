@@ -208,6 +208,7 @@ function lastInvitationToken(): string {
 describe("invitation-service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.APP_BASE_URL = "http://localhost:3000";
   });
 
   it("creates a password-null user, stores only a hashed token, and sends an invitation email", async () => {
@@ -219,7 +220,6 @@ describe("invitation-service", () => {
         name: "Admin A1",
         role: "ADMIN",
         group: "A",
-        origin: "http://localhost:3000",
       }),
     ).resolves.toMatchObject({
       email: "admin-a1@mail.shangjung.com",
@@ -255,7 +255,6 @@ describe("invitation-service", () => {
         name: "Sales A",
         role: "SALES",
         group: "A",
-        origin: "http://localhost:3000",
       }),
     ).rejects.toThrow("Role 'ADMIN' is not allowed");
   });
@@ -267,7 +266,6 @@ describe("invitation-service", () => {
       name: "Sales A",
       role: "SALES",
       group: "A",
-      origin: "http://localhost:3000",
     });
     const token = lastInvitationToken();
 
@@ -309,7 +307,6 @@ describe("invitation-service", () => {
         name: "Sales A",
         role: "SALES",
         group: "A",
-        origin: "http://localhost:3000",
       },
       now,
     );
@@ -335,18 +332,12 @@ describe("invitation-service", () => {
       name: "Admin A1",
       role: "ADMIN",
       group: "A",
-      origin: "http://localhost:3000",
     });
     const user = users.find(
       (item) => item.email === "admin-a1@mail.shangjung.com",
     );
 
-    await resendUserInvitation(
-      ctx(),
-      db as never,
-      String(user?.id),
-      "http://localhost:3000",
-    );
+    await resendUserInvitation(ctx(), db as never, String(user?.id));
 
     expect(invitations).toHaveLength(2);
     expect(invitations[0].revokedAt).toBeInstanceOf(Date);

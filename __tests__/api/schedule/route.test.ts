@@ -129,6 +129,20 @@ describe("POST /api/schedule/run", () => {
     expect(res.status).toBe(401);
   });
 
+  it("should not allow cron bypass when CRON_SECRET is unset", async () => {
+    vi.stubEnv("CRON_SECRET", "");
+    vi.mocked(requireAuth).mockRejectedValueOnce(new UnauthorizedError());
+
+    const req = createRequest(
+      { type: "Type A" },
+      { Authorization: "Bearer undefined" },
+    );
+    const res = await POST(req);
+
+    expect(res.status).toBe(401);
+    expect(scheduleEngine.runSchedule).not.toHaveBeenCalled();
+  });
+
   it("should return 400 if body is invalid", async () => {
     const req = createRequest({}); // Missing 'type'
     const res = await POST(req);

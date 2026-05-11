@@ -24,7 +24,6 @@ export type CreateInvitationInput = {
   name: string;
   role: UserRole;
   group: string;
-  origin: string;
 };
 
 export type CreateInvitationResult = InvitationUser & {
@@ -67,12 +66,23 @@ function setPasswordUrl(origin: string, token: string): string {
   return url.toString();
 }
 
+function appBaseUrl(): string {
+  const value = process.env.APP_BASE_URL?.trim();
+  if (!value) {
+    throw new InvitationError(
+      500,
+      "APP_BASE_URL_MISSING",
+      "APP_BASE_URL is required to send invitation emails.",
+    );
+  }
+  return value;
+}
+
 async function sendInvitationMail(
   user: InvitationUser,
   token: string,
-  origin: string,
 ): Promise<void> {
-  const link = setPasswordUrl(origin, token);
+  const link = setPasswordUrl(appBaseUrl(), token);
   await sendMail({
     to: [{ address: user.email, displayName: user.name }],
     subject: "Set your Wafer Scheduling password",
@@ -167,7 +177,7 @@ export async function createUserInvitation(
     return createdUser;
   });
 
-  await sendInvitationMail(user, token, input.origin);
+  await sendInvitationMail(user, token);
 
   return {
     ...user,
@@ -179,7 +189,6 @@ export async function resendUserInvitation(
   ctx: RequestContext,
   db: PrismaClient,
   userId: string,
-  origin: string,
   now = new Date(),
 ): Promise<CreateInvitationResult> {
   requireRole(ctx, ["SUPERADMIN"]);
@@ -230,7 +239,7 @@ export async function resendUserInvitation(
     });
   });
 
-  await sendInvitationMail(user, token, origin);
+  await sendInvitationMail(user, token);
 
   return {
     id: user.id,

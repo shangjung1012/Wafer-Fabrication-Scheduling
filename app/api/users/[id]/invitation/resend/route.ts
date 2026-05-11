@@ -18,12 +18,7 @@ export async function POST(
   try {
     const ctx = await requireAuth(req);
     const { id } = await params;
-    const result = await resendUserInvitation(
-      ctx,
-      prisma,
-      id,
-      req.nextUrl.origin,
-    );
+    const result = await resendUserInvitation(ctx, prisma, id);
     return NextResponse.json(result);
   } catch (err) {
     if (err instanceof UnauthorizedError)

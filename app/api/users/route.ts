@@ -72,10 +72,7 @@ export const POST = withAuth<NextRequest>(async (req, ctx) => {
       );
     }
 
-    const result = await createUserInvitation(ctx, prisma, {
-      ...parsed.data,
-      origin: req.nextUrl.origin,
-    });
+    const result = await createUserInvitation(ctx, prisma, parsed.data);
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
     if (err instanceof InvitationError) {
