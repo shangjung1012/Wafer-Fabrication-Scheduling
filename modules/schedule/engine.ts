@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import type { PrismaClient } from "@/lib/generated/prisma";
-import { greedyBestFitStrategy } from "@/modules/schedule/strategy";
+import {
+  greedyBestFitStrategy,
+  type SchedulingCapacityInput,
+} from "@/modules/schedule/strategy";
 import { findOrdersForScheduling, bulkUpdateOrderStatus } from "@/infra/db/order-repository";
 import { findFactoriesWithCapacities } from "@/infra/db/factory-repository";
 import { deleteScheduledAssignments, createAssignments } from "@/infra/db/assignment-repository";
@@ -12,7 +15,7 @@ export async function runSchedule(type: string): Promise<void> {
   const factories = await findFactoriesWithCapacities(prisma, type);
 
   // In-memory reset: restore capacity used by SCHEDULED assignments
-  const capacities: any[] = [];
+  const capacities: SchedulingCapacityInput[] = [];
   for (const factory of factories) {
     if (factory.dailyCapacities) {
       capacities.push(...factory.dailyCapacities);

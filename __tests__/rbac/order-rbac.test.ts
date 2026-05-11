@@ -7,7 +7,7 @@
  * Run: pnpm test
  */
 
-import { describe, it, expect, beforeEach, afterEach, afterAll } from "vitest";
+import { describe, it, expect, afterEach, afterAll } from "vitest";
 import { prisma } from "@/lib/prisma";
 import type { RequestContext } from "@/modules/auth/request-context";
 import {

@@ -42,6 +42,8 @@ export async function listRequests(
   db: PrismaClient,
   _input: Record<string, never> = {}
 ): Promise<RequestRow[]> {
+  void _input;
+
   if (ctx.user.role === "SALES") {
     return findRequests(db, { applicantId: ctx.user.id });
   }

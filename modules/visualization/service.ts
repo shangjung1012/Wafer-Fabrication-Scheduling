@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@/lib/generated/prisma";
 import type { RequestContext } from "@/modules/auth/request-context";
-import { requireRole, ForbiddenError } from "@/modules/auth/rbac";
+import { requireRole } from "@/modules/auth/rbac";
 import { resolveActorScope, getScopeGroup } from "@/modules/auth/scope";
 import {
   findFactoriesForVisualization,

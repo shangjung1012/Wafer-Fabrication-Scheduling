@@ -45,11 +45,15 @@ describe("Schedule Engine", () => {
   });
 
   it("should fetch data, run strategy, and execute atomic transaction with correct repository calls", async () => {
-    const mockOrders = [{ id: "O1", status: OrderStatus.APPROVED }];
-    const mockFactories = [{ id: "F1", maxCapacity: 100 }];
+    const mockOrders = [{ id: "O1", status: OrderStatus.APPROVED }] as unknown as Awaited<
+      ReturnType<typeof orderRepo.findOrdersForScheduling>
+    >;
+    const mockFactories = [{ id: "F1", maxCapacity: 100 }] as unknown as Awaited<
+      ReturnType<typeof factoryRepo.findFactoriesWithCapacities>
+    >;
 
-    vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue(mockOrders as any);
-    vi.mocked(factoryRepo.findFactoriesWithCapacities).mockResolvedValue(mockFactories as any);
+    vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue(mockOrders);
+    vi.mocked(factoryRepo.findFactoriesWithCapacities).mockResolvedValue(mockFactories);
 
     const mockStrategyResult = {
       processedOrders: [
