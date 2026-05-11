@@ -105,6 +105,25 @@ function createDb() {
           return project(user, select);
         },
       ),
+      delete: vi.fn(
+        async ({
+          where,
+          select,
+        }: {
+          where: { id: string };
+          select?: Record<string, unknown>;
+        }) => {
+          const index = users.findIndex((item) => item.id === where.id);
+          if (index === -1) throw new Error("User not found");
+          const [deleted] = users.splice(index, 1);
+          for (let i = invitations.length - 1; i >= 0; i--) {
+            if (invitations[i].userId === where.id) {
+              invitations.splice(i, 1);
+            }
+          }
+          return project(deleted, select);
+        },
+      ),
     },
     userInvitation: {
       findUnique: vi.fn(
@@ -158,18 +177,38 @@ function createDb() {
           return project(invitation, select);
         },
       ),
+      delete: vi.fn(
+        async ({
+          where,
+          select,
+        }: {
+          where: { id: string };
+          select?: Record<string, unknown>;
+        }) => {
+          const index = invitations.findIndex((item) => item.id === where.id);
+          if (index === -1) throw new Error("Invitation not found");
+          const [deleted] = invitations.splice(index, 1);
+          return project(deleted, select);
+        },
+      ),
       updateMany: vi.fn(
         async ({
           where,
           data,
         }: {
-          where: { userId: string; acceptedAt: null; revokedAt: null };
+          where: {
+            userId: string;
+            id?: { not: string };
+            acceptedAt: null;
+            revokedAt: null;
+          };
           data: Row;
         }) => {
           let count = 0;
           for (const invitation of invitations) {
             if (
               invitation.userId === where.userId &&
+              invitation.id !== where.id?.not &&
               invitation.acceptedAt === null &&
               invitation.revokedAt === null
             ) {
@@ -244,6 +283,40 @@ describe("invitation-service", () => {
     expect(sendMail.mock.calls[0][0].plainText).toContain(
       "http://localhost:3000/set-password?token=",
     );
+  });
+
+  it("escapes invitation HTML fields", async () => {
+    const { db } = createDb();
+
+    await createUserInvitation(ctx(), db as never, {
+      email: "admin-a1@mail.shangjung.com",
+      name: '<Admin "A1">',
+      role: "ADMIN",
+      group: "A",
+    });
+
+    const html = sendMail.mock.calls[0][0].html as string;
+    expect(html).toContain("Hello &lt;Admin &quot;A1&quot;&gt;");
+    expect(html).not.toContain('Hello <Admin "A1">');
+  });
+
+  it("rolls back a pending user when invitation email delivery fails", async () => {
+    const { db, users, invitations } = createDb();
+    sendMail.mockRejectedValueOnce(new Error("mail failed"));
+
+    await expect(
+      createUserInvitation(ctx(), db as never, {
+        email: "admin-a1@mail.shangjung.com",
+        name: "Admin A1",
+        role: "ADMIN",
+        group: "A",
+      }),
+    ).rejects.toThrow("mail failed");
+
+    expect(
+      users.find((item) => item.email === "admin-a1@mail.shangjung.com"),
+    ).toBeUndefined();
+    expect(invitations).toHaveLength(0);
   });
 
   it("rejects non-superadmin invitations", async () => {
@@ -343,5 +416,26 @@ describe("invitation-service", () => {
     expect(invitations[0].revokedAt).toBeInstanceOf(Date);
     expect(invitations[1].revokedAt).toBeNull();
     expect(sendMail).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the previous invitation active when resend email delivery fails", async () => {
+    const { db, invitations, users } = createDb();
+    await createUserInvitation(ctx(), db as never, {
+      email: "admin-a1@mail.shangjung.com",
+      name: "Admin A1",
+      role: "ADMIN",
+      group: "A",
+    });
+    const user = users.find(
+      (item) => item.email === "admin-a1@mail.shangjung.com",
+    );
+    sendMail.mockRejectedValueOnce(new Error("mail failed"));
+
+    await expect(
+      resendUserInvitation(ctx(), db as never, String(user?.id)),
+    ).rejects.toThrow("mail failed");
+
+    expect(invitations).toHaveLength(1);
+    expect(invitations[0].revokedAt).toBeNull();
   });
 });
