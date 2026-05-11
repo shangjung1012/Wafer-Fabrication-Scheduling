@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
+import {
+  CsrfError,
+  requireAuth,
+  UnauthorizedError,
+} from "@/modules/auth/require-auth";
 import {
   ForbiddenError,
+  csrfResponse,
   forbiddenResponse,
   unauthorizedResponse,
 } from "@/modules/auth/rbac";
@@ -23,6 +28,7 @@ export async function POST(
   } catch (err) {
     if (err instanceof UnauthorizedError)
       return unauthorizedResponse(err.message);
+    if (err instanceof CsrfError) return csrfResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     if (err instanceof InvitationError) {
       return NextResponse.json(

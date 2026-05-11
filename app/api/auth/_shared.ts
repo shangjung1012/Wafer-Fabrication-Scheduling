@@ -7,6 +7,7 @@ import {
   InvalidRefreshTokenError,
   SelfRegistrationDisabledError,
 } from "@/modules/auth/auth-service";
+import { CsrfError } from "@/modules/auth/require-auth";
 import { badRequestResponse } from "@/modules/auth/rbac";
 
 export function parseJsonError(): Response {
@@ -21,6 +22,13 @@ export function validationErrorResponse(error: ZodError): Response {
 }
 
 export function authErrorResponse(err: unknown): Response | null {
+  if (err instanceof CsrfError) {
+    return NextResponse.json(
+      { code: err.code, message: err.message },
+      { status: err.status },
+    );
+  }
+
   if (
     err instanceof AuthConflictError ||
     err instanceof InvalidCredentialsError ||

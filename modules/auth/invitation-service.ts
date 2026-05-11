@@ -66,6 +66,25 @@ function setPasswordUrl(origin: string, token: string): string {
   return url.toString();
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      default:
+        return char;
+    }
+  });
+}
+
 function appBaseUrl(): string {
   const value = process.env.APP_BASE_URL?.trim();
   if (!value) {
@@ -83,6 +102,8 @@ async function sendInvitationMail(
   token: string,
 ): Promise<void> {
   const link = setPasswordUrl(appBaseUrl(), token);
+  const safeName = escapeHtml(user.name);
+  const safeLink = escapeHtml(link);
   await sendMail({
     to: [{ address: user.email, displayName: user.name }],
     subject: "Set your Wafer Scheduling password",
@@ -96,9 +117,9 @@ async function sendInvitationMail(
       "If the link expires, ask your superadmin to resend the invitation.",
     ].join("\n"),
     html: [
-      `<p>Hello ${user.name},</p>`,
+      `<p>Hello ${safeName},</p>`,
       "<p>You have been invited to Wafer Scheduling.</p>",
-      `<p><a href="${link}">Set your account ID and password</a></p>`,
+      `<p><a href="${safeLink}">Set your account ID and password</a></p>`,
       "<p>This link expires in 180 seconds. If it expires, ask your superadmin to resend the invitation.</p>",
     ].join(""),
   });
@@ -177,7 +198,15 @@ export async function createUserInvitation(
     return createdUser;
   });
 
-  await sendInvitationMail(user, token);
+  try {
+    await sendInvitationMail(user, token);
+  } catch (error) {
+    await db.user.delete({
+      where: { id: user.id },
+      select: { id: true },
+    });
+    throw error;
+  }
 
   return {
     ...user,
@@ -218,28 +247,35 @@ export async function resendUserInvitation(
   const token = issueInvitationToken();
   const expiresAt = invitationExpiresAt(now);
 
-  await db.$transaction(async (tx) => {
-    await tx.userInvitation.updateMany({
-      where: {
-        userId,
-        acceptedAt: null,
-        revokedAt: null,
-      },
-      data: { revokedAt: now },
-    });
-
-    await tx.userInvitation.create({
-      data: {
-        userId,
-        createdById: ctx.user.id,
-        tokenHash: hashInvitationToken(token),
-        expiresAt,
-      },
-      select: { id: true },
-    });
+  const invitation = await db.userInvitation.create({
+    data: {
+      userId,
+      createdById: ctx.user.id,
+      tokenHash: hashInvitationToken(token),
+      expiresAt,
+    },
+    select: { id: true },
   });
 
-  await sendInvitationMail(user, token);
+  try {
+    await sendInvitationMail(user, token);
+  } catch (error) {
+    await db.userInvitation.delete({
+      where: { id: invitation.id },
+      select: { id: true },
+    });
+    throw error;
+  }
+
+  await db.userInvitation.updateMany({
+    where: {
+      userId,
+      id: { not: invitation.id },
+      acceptedAt: null,
+      revokedAt: null,
+    },
+    data: { revokedAt: now },
+  });
 
   return {
     id: user.id,

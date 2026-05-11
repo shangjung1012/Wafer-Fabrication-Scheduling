@@ -89,13 +89,10 @@ export default function LoginPage() {
     setApiResult(null);
 
     try {
-      if (session?.refreshToken) {
-        await fetch("/api/auth/logout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken: session.refreshToken }),
-        });
-      }
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
       clearClientAuthSession();
       setMessage("Logged out. Local tokens were cleared.");
     } finally {
@@ -113,7 +110,7 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: session.refreshToken }),
+        credentials: "same-origin",
       });
       const result = await parseResponse(response);
       if (!response.ok) {
@@ -138,7 +135,7 @@ export default function LoginPage() {
 
     try {
       const response = await fetch("/api/users", {
-        headers: { Authorization: `Bearer ${session.accessToken}` },
+        credentials: "same-origin",
       });
       const result = await parseResponse(response);
       setApiResult(result);
@@ -385,7 +382,7 @@ export default function LoginPage() {
                       fontFamily: "var(--font-geist-mono), monospace",
                     }}
                   >
-                    {session.accessToken.slice(0, 28)}...
+                    Stored in HttpOnly cookie
                   </dd>
                 </dl>
 
@@ -420,6 +417,9 @@ export default function LoginPage() {
                   </a>
                   <a href="/visualization" style={linkButtonStyle}>
                     Visualization
+                  </a>
+                  <a href="/users" style={linkButtonStyle}>
+                    Users
                   </a>
                 </div>
               </div>

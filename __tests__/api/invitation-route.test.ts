@@ -32,16 +32,27 @@ function jsonRequest(url: string, body: unknown): Request {
   });
 }
 
+function cookieHeader(response: Response): string {
+  const setCookie = (
+    response.headers as Headers & { getSetCookie?: () => string[] }
+  ).getSetCookie?.() ?? [response.headers.get("set-cookie") ?? ""];
+  return setCookie
+    .filter(Boolean)
+    .map((cookie) => cookie.split(";")[0])
+    .join("; ");
+}
+
 function authedNextRequest(
   url: string,
-  accessToken: string,
+  cookie: string,
   body: unknown,
 ): NextRequest {
   return new NextRequest(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
+      Cookie: cookie,
+      Origin: "https://wafer.example.com",
     },
     body: JSON.stringify(body),
   });
@@ -54,8 +65,7 @@ async function login(accountId: string): Promise<string> {
       password: PASSWORD,
     }),
   );
-  const body = (await response.json()) as { accessToken: string };
-  return body.accessToken;
+  return cookieHeader(response);
 }
 
 function extractInviteToken(): string {
@@ -135,9 +145,9 @@ describe("invitation API routes", () => {
   });
 
   it("allows SUPERADMIN to invite and accept a SALES user", async () => {
-    const accessToken = await login("route-invite-sa");
+    const cookies = await login("route-invite-sa");
     const inviteResponse = await usersPost(
-      authedNextRequest("http://localhost/api/users", accessToken, {
+      authedNextRequest("http://localhost/api/users", cookies, {
         email: "route-invite-sales@mail.shangjung.com",
         name: "Route Invite Sales",
         role: "SALES",
@@ -182,9 +192,9 @@ describe("invitation API routes", () => {
   });
 
   it("rejects ADMIN invitations", async () => {
-    const accessToken = await login("route-invite-admin");
+    const cookies = await login("route-invite-admin");
     const response = await usersPost(
-      authedNextRequest("http://localhost/api/users", accessToken, {
+      authedNextRequest("http://localhost/api/users", cookies, {
         email: "route-invite-sales@mail.shangjung.com",
         name: "Route Invite Sales",
         role: "SALES",
@@ -199,9 +209,9 @@ describe("invitation API routes", () => {
   });
 
   it("resends invitations for pending users", async () => {
-    const accessToken = await login("route-invite-sa");
+    const cookies = await login("route-invite-sa");
     const inviteResponse = await usersPost(
-      authedNextRequest("http://localhost/api/users", accessToken, {
+      authedNextRequest("http://localhost/api/users", cookies, {
         email: "route-invite-sales@mail.shangjung.com",
         name: "Route Invite Sales",
         role: "SALES",
@@ -215,7 +225,7 @@ describe("invitation API routes", () => {
         `http://localhost/api/users/${inviteBody.id}/invitation/resend`,
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Cookie: cookies, Origin: "https://wafer.example.com" },
         },
       ),
       { params: Promise.resolve({ id: inviteBody.id }) },

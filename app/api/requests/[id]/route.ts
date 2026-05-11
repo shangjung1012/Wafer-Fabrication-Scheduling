@@ -6,9 +6,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
+import {
+  CsrfError,
+  requireAuth,
+  UnauthorizedError,
+} from "@/modules/auth/require-auth";
 import {
   ForbiddenError,
+  csrfResponse,
   forbiddenResponse,
   unauthorizedResponse,
   badRequestResponse,
@@ -70,6 +75,7 @@ export async function PUT(
   } catch (err) {
     if (err instanceof UnauthorizedError)
       return unauthorizedResponse(err.message);
+    if (err instanceof CsrfError) return csrfResponse(err.message);
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; code?: string; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);
