@@ -14,6 +14,7 @@ const LOGIN_LOCK_MS = 15 * 60 * 1000;
 export type SanitizedUser = {
   id: string;
   accountId: string;
+  email: string;
   name: string;
   role: UserRole;
   group: string | null;
@@ -77,6 +78,7 @@ export class InvalidRefreshTokenError extends Error {
 
 export type RegisterInput = {
   accountId: string;
+  email: string;
   name: string;
   password: string;
   role: UserRole;
@@ -106,6 +108,7 @@ function sanitizeUser(user: SanitizedUser): SanitizedUser {
   return {
     id: user.id,
     accountId: user.accountId,
+    email: user.email,
     name: user.name,
     role: user.role,
     group: user.group,
@@ -168,6 +171,7 @@ export async function register(
   const user = await db.user.create({
     data: {
       accountId: input.accountId,
+      email: input.email,
       name: input.name,
       password: passwordHash,
       role: input.role,
@@ -176,6 +180,7 @@ export async function register(
     select: {
       id: true,
       accountId: true,
+      email: true,
       name: true,
       role: true,
       group: true,
@@ -228,6 +233,7 @@ export async function login(
     select: {
       id: true,
       accountId: true,
+      email: true,
       name: true,
       password: true,
       role: true,
@@ -282,6 +288,7 @@ export async function refresh(
         select: {
           id: true,
           accountId: true,
+          email: true,
           name: true,
           role: true,
           group: true,

@@ -10,6 +10,7 @@ import {
 
 const RegisterBodySchema = z.object({
   accountId: z.string().trim().min(1, "accountId is required").max(80),
+  email: z.string().trim().email("email must be valid"),
   name: z.string().trim().min(1, "name is required").max(120),
   password: z
     .string()

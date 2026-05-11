@@ -14,6 +14,7 @@ import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
 export type UserRow = {
   id: string;
   accountId: string;
+  email: string;
   name: string;
   role: UserRole;
   group: string | null;
@@ -21,6 +22,7 @@ export type UserRow = {
 
 export type CreateUserInput = {
   accountId: string;
+  email: string;
   name: string;
   role: UserRole;
   group?: string | null;
@@ -29,6 +31,7 @@ export type CreateUserInput = {
 
 export type UpdateUserInput = {
   accountId?: string;
+  email?: string;
   name?: string;
   role?: UserRole;
   group?: string | null;
@@ -48,7 +51,14 @@ export async function findUsers(
       ...(filters.role ? { role: filters.role } : {}),
       ...(filters.group ? { group: filters.group } : {}),
     },
-    select: { id: true, accountId: true, name: true, role: true, group: true },
+    select: {
+      id: true,
+      accountId: true,
+      email: true,
+      name: true,
+      role: true,
+      group: true,
+    },
     orderBy: [{ role: "asc" }, { name: "asc" }],
   });
 }
@@ -59,7 +69,14 @@ export async function findUserById(
 ): Promise<UserRow | null> {
   return db.user.findUnique({
     where: { id },
-    select: { id: true, accountId: true, name: true, role: true, group: true },
+    select: {
+      id: true,
+      accountId: true,
+      email: true,
+      name: true,
+      role: true,
+      group: true,
+    },
   });
 }
 
@@ -74,6 +91,7 @@ export async function createUser(
   const user = await db.user.create({
     data: {
       accountId: input.accountId,
+      email: input.email,
       name: input.name,
       role: input.role,
       group: input.group ?? null,
@@ -99,6 +117,7 @@ export async function updateUser(
     where: { id },
     data: {
       ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+      ...(input.email !== undefined ? { email: input.email } : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
       ...(input.group !== undefined ? { group: input.group } : {}),

@@ -59,6 +59,7 @@ describe("Schedule Engine - Database Integration", () => {
       const applicant = await prisma.user.create({
         data: {
           accountId: "test-applicant-1",
+          email: "test-applicant-1@mail.shangjung.com",
           name: "Test Applicant",
           role: UserRole.SALES,
         },
@@ -134,6 +135,7 @@ describe("Schedule Engine - Database Integration", () => {
       const applicant = await prisma.user.create({
         data: {
           accountId: "test-applicant-2",
+          email: "test-applicant-2@mail.shangjung.com",
           name: "Test Applicant",
           role: UserRole.SALES,
         },

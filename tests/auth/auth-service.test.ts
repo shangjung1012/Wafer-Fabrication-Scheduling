@@ -152,6 +152,7 @@ describe("auth-service", () => {
 
     const user = await register(db as never, {
       accountId: "admin-A1",
+      email: "admin-a1@mail.shangjung.com",
       name: "Admin A1",
       password: "Password123!",
       role: "ADMIN",
@@ -161,6 +162,7 @@ describe("auth-service", () => {
     expect(user).toEqual({
       id: "user-1",
       accountId: "admin-A1",
+      email: "admin-a1@mail.shangjung.com",
       name: "Admin A1",
       role: "ADMIN",
       group: "A",
@@ -175,6 +177,7 @@ describe("auth-service", () => {
     await expect(
       register(db as never, {
         accountId: "sa-A",
+        email: "sa-a@mail.shangjung.com",
         name: "Super Admin A",
         password: "Password123!",
         role: "SUPERADMIN",
@@ -184,6 +187,7 @@ describe("auth-service", () => {
 
     await register(db as never, {
       accountId: "sales-A",
+      email: "sales-a@mail.shangjung.com",
       name: "Sales A",
       password: "Password123!",
       role: "SALES",
@@ -193,6 +197,7 @@ describe("auth-service", () => {
     await expect(
       register(db as never, {
         accountId: "sales-A",
+        email: "sales-a-copy@mail.shangjung.com",
         name: "Sales A Copy",
         password: "Password123!",
         role: "SALES",
@@ -205,6 +210,7 @@ describe("auth-service", () => {
     const { db, refreshTokens } = createDb();
     await register(db as never, {
       accountId: "admin-A1",
+      email: "admin-a1@mail.shangjung.com",
       name: "Admin A1",
       password: "Password123!",
       role: "ADMIN",
@@ -231,6 +237,7 @@ describe("auth-service", () => {
     const { db, users } = createDb();
     await register(db as never, {
       accountId: "sales-A",
+      email: "sales-a@mail.shangjung.com",
       name: "Sales A",
       password: "Password123!",
       role: "SALES",
@@ -261,6 +268,7 @@ describe("auth-service", () => {
     const { db } = createDb();
     await register(db as never, {
       accountId: "admin-A1",
+      email: "admin-a1@mail.shangjung.com",
       name: "Admin A1",
       password: "Password123!",
       role: "ADMIN",

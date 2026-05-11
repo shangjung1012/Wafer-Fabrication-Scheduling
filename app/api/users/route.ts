@@ -24,6 +24,7 @@ const ListUsersQuerySchema = z.object({
 
 const CreateUserBodySchema = z.object({
   accountId: z.string().min(1, "accountId is required"),
+  email: z.string().trim().email("email must be valid"),
   name: z.string().min(1, "name is required"),
   role: UserRoleSchema,
   group: z.string().min(1).optional().nullable(),
