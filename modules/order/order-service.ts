@@ -89,12 +89,6 @@ export async function createOrderService(
   requireRole(ctx, ["SALES"]);
   const scope = await resolveActorScope(ctx, db);
 
-  if (input.type !== getScopeGroup(scope)) {
-    throw new ForbiddenError(
-      "You can only create orders for your own production type.",
-    );
-  }
-
   return createOrder(db, {
     dueDate: input.dueDate,
     quantity: input.quantity,
