@@ -1,70 +1,51 @@
 # 工廠訂單管理排程系統
 
-Next.js + Prisma + PostgreSQL 的 wafer factory order scheduling system，包含訂單流程、RBAC、排程視覺化、SUPERADMIN 邀請註冊，以及 Azure Communication Services Email 發信。
+A Next.js + Prisma (PostgreSQL) wafer factory order scheduling system，包含訂單流程、RBAC、排程視覺化與 Azure Communication Services Email 邀請機制。
 
-## Architecture
+## Folder Structure
 
 ```text
 wafer-fabrication-scheduling/
-├── app/                         # Next.js App Router
-│   ├── (auth)/                  # Login / set-password pages
-│   ├── (dashboard)/             # Orders / visualization / users UI
-│   ├── api/                     # Route handlers
-│   │   ├── auth/                # Login, refresh, logout, invitations
-│   │   ├── orders/              # Orders API
-│   │   ├── requests/            # Order change request API
-│   │   ├── schedule/            # Schedule runner API
-│   │   └── users/               # User invitation/listing API
-│   └── docs/                    # Swagger UI
-├── modules/                     # Business logic
-│   ├── auth/                    # JWT, cookies, RBAC, invitation, username
-│   ├── mail/                    # Azure Email adapter
-│   ├── order/                   # Order/request services
-│   ├── schedule/                # Scheduling engine
-│   ├── users/                   # User listing/invitation service boundary
-│   └── visualization/           # Timeline/read model service
-├── infra/db/                    # Prisma repository layer
+├── app/                    # Presentation layer: UI + API route handlers
+│   ├── (auth)/             # Login / set-password pages
+│   ├── (dashboard)/        # Orders / visualization / users UI
+│   ├── api/                # API endpoints (Next.js App Router)
+│   │   ├── auth/           # Login, refresh, logout, invitations
+│   │   ├── docs/           # Swagger UI (http://localhost:3000/docs)
+│   │   ├── orders/
+│   │   ├── requests/       # Order change request API
+│   │   ├── schedule/       # Schedule runner API
+│   │   ├── users/          # User invitation/listing API
+│   │   └── visualization/  # Timeline data API
+├── modules/                # Business logic layer
+│   ├── auth/               # JWT auth, RBAC, invitations
+│   ├── mail/               # Azure Email adapter
+│   ├── order/              # Order/request services
+│   ├── schedule/           # Scheduling engine
+│   ├── users/              # User listing/invitation service
+│   └── visualization/      # Timeline/read model service
+├── infra/
+│   └── db/                 # DB access layer (repositories)
+├── lib/
+│   └── prisma.ts           # Prisma client singleton
 ├── prisma/
 │   ├── schema.prisma
-│   ├── seed.ts                  # Idempotent dev/test seed data
-│   └── migrations/              # Deployable DB migrations
-├── scripts/
-│   ├── benchmark.ts
-│   └── update-containerapp-env.ts
-├── .github/workflows/
-│   ├── ci.yml
-│   └── deploy-container-app.yml
-├── api_spec.yml                 # OpenAPI spec
+│   ├── seed.ts             # Dev seed data
+│   └── migrations/
+├── api_spec.yml            # OpenAPI 3.0 spec (source of truth)
 ├── Dockerfile
 └── docker-compose.yml
 ```
 
-The intended dependency direction is:
-
-```text
-app route/page
-  -> modules/*
-    -> infra/db/*
-      -> Prisma
-```
-
-Route handlers should stay thin. Authorization, scope checks, and workflow logic belong in `modules/*`; raw database access belongs in `infra/db/*`.
-
 ## Local Setup
 
-### 1. Install dependencies
-
-```bash
-pnpm install
-```
-
-### 2. Create environment file
+### 1. 環境變數
 
 ```bash
 cp .env.example .env
 ```
 
-Required local values include:
+`.env` 需包含：
 
 ```env
 DATABASE_URL="postgresql://wafer_user:wafer_password@localhost:5432/wafer_db?schema=public"
@@ -75,183 +56,89 @@ JWT_ISSUER="wafer-auth"
 JWT_AUDIENCE="wafer-api"
 ACCESS_TOKEN_EXPIRES_IN="15m"
 REFRESH_TOKEN_EXPIRES_IN="7d"
-```
-
-Mail sending uses Azure Communication Services Email:
-
-```env
 AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING="endpoint=...;accesskey=..."
 AZURE_COMMUNICATION_EMAIL_SENDER_ADDRESS="DoNotReply@example.com"
 ```
 
-Tests mock mail delivery, so GitHub CI does not need Azure mail secrets.
-
-### 3. Start local services
+### 2. 啟動資料庫與 Redis
 
 ```bash
 docker compose up -d
 ```
 
-### 4. Apply schema and seed data
+### 3. 執行 Migration
 
 ```bash
 pnpm db:migrate
+```
+
+### 4. 產生 Prisma client
+
+```bash
 pnpm db:generate
+```
+
+### 5. Seed 測試資料
+
+```bash
 pnpm db:seed
 ```
 
-Use `pnpm db:deploy` instead of `pnpm db:migrate` in deployed environments.
+Seed 會建立以下測試資料（idempotent，可重複執行）：
 
-### 5. Start the app
+```
+Type A：SUPERADMIN(sa-A)、Factory A1/A2/A3、ADMIN(admin-A1/A2/A3)、SALES(sales-A)
+Type B：SUPERADMIN(sa-B)、Factory B1/B2/B3、ADMIN(admin-B1/B2/B3)、SALES(sales-B)
+Type C：SUPERADMIN(sa-C)、Factory C1/C2/C3、ADMIN(admin-C1/C2/C3)、SALES(sales-C)
+```
+
+Seed 帳號使用 `username` 登入，開發用預設密碼皆為 `Password123!`。
+
+### 6. 啟動開發伺服器
 
 ```bash
 pnpm dev
 ```
 
-Open:
+---
 
-- App login: <http://localhost:3000/login>
-- Orders UI: <http://localhost:3000/orders>
-- Visualization UI: <http://localhost:3000/visualization>
-- User invitations UI: <http://localhost:3000/users>
-- API docs: <http://localhost:3000/docs>
+## 身份驗證
 
-## Seed Accounts
+公開註冊已停用。使用者透過 SUPERADMIN 邀請建立：
 
-Seed data is idempotent and creates three production groups: `A`, `B`, and `C`.
+1. `SUPERADMIN` 在 `/users` 頁面邀請使用者（填入 `email`、`role`、`group`）。
+2. 系統寄送 Azure Email，內含 180 秒有效的 `/set-password?token=...` 連結。
+3. 受邀者設定 `username` 與密碼後即可登入。
+4. `POST /api/auth/login` 使用 `username` 或 `email` / `password` 登入，取得 auth cookies。
+5. `POST /api/auth/refresh` 以 refresh token rotation 換發新 token。
+6. `POST /api/auth/logout` 撤銷 refresh token。
 
-```text
-Type A: SUPERADMIN(sa-A), ADMIN(admin-A1/admin-A2/admin-A3), SALES(sales-A)
-Type B: SUPERADMIN(sa-B), ADMIN(admin-B1/admin-B2/admin-B3), SALES(sales-B)
-Type C: SUPERADMIN(sa-C), ADMIN(admin-C1/admin-C2/admin-C3), SALES(sales-C)
-```
+---
 
-Default password:
+## API 文件
 
-```text
-Password123!
-```
+開啟 **[http://localhost:3000/docs](http://localhost:3000/docs)**
 
-Login supports either username or email. Username preserves case, so `admin-A1` and `admin-a1` are different values.
+1. 到 **[http://localhost:3000/login](http://localhost:3000/login)** 登入。
+2. 複製 login response 內的 `accessToken` cookie。
+3. 在 docs 頁右上角 **Authorize** 輸入 `Bearer <accessToken>`。
+4. 展開任一 endpoint → **Try it out** → **Execute**。
 
-## Auth And Users
+OpenAPI spec：[`api_spec.yml`](./api_spec.yml)
 
-Public registration is disabled:
-
-```text
-POST /api/auth/register -> 403 SELF_REGISTRATION_DISABLED
-```
-
-User creation is invitation based:
-
-1. `SUPERADMIN` opens `/users`.
-2. `SUPERADMIN` invites a user with `email`, `role`, and `group`.
-3. The backend creates a pending user with `username = null` and `password = null`.
-4. The backend sends an Azure Email invite with a 180-second `/set-password?token=...` link.
-5. The invited user sets `username` and password.
-6. Login accepts username or email with password.
-
-Security notes:
-
-- Access and refresh tokens are stored in HttpOnly cookies.
-- Cookie-auth unsafe methods require same-origin checks against `APP_BASE_URL`.
-- Invitation tokens are stored as SHA-256 hashes.
-- Pending users cannot log in until password and username are set.
-- Username is trimmed, must be 3-32 characters, and may contain letters, numbers, `.`, `_`, and `-`; it must start and end with a letter or number.
-
-## Database Workflow
-
-Local development:
-
-```bash
-pnpm db:migrate      # prisma migrate dev
-pnpm db:generate     # prisma generate
-pnpm db:seed         # prisma db seed
-```
-
-Production/deploy:
-
-```bash
-pnpm db:deploy       # prisma migrate deploy
-```
-
-Use `pnpm prisma migrate reset` only for local development. It drops and recreates the database, then reapplies migrations. Never run it against production.
-
-For column renames, review migration SQL manually. Prisma may generate drop/add operations instead of a data-preserving rename.
-
-## Azure Deployment
-
-Container deployment is handled by:
-
-```text
-.github/workflows/deploy-container-app.yml
-```
-
-It builds the Docker image, pushes to Azure Container Registry, and updates Azure Container App.
-
-Environment variables can be pushed manually from `.env.publish`:
-
-```bash
-pnpm azure:env:update -- --dry-run
-pnpm azure:env:update -- --file .env.publish --resource-group rg-wafer-dev --app waferdev-web
-```
-
-The script masks values in logs, but `.env.publish` still contains secrets and must not be committed if it includes real credentials.
-
-## CI
-
-Current CI runs on pull requests to `main` and pushes to `dev`:
-
-```text
-.github/workflows/ci.yml
-```
-
-It performs:
-
-```bash
-pnpm install --frozen-lockfile
-pnpm db:generate
-pnpm db:deploy
-pnpm db:seed
-pnpm lint
-pnpm test
-pnpm build
-docker build
-```
+---
 
 ## Scripts
 
-| Command                 | Description                              |
-| ----------------------- | ---------------------------------------- |
-| `pnpm dev`              | Start Next.js dev server                 |
-| `pnpm build`            | Build production app                     |
-| `pnpm start`            | Start production server                  |
-| `pnpm lint`             | Run ESLint                               |
-| `pnpm test`             | Run Vitest                               |
-| `pnpm format`           | Format files with Prettier               |
-| `pnpm format:check`     | Check formatting                         |
-| `pnpm db:migrate`       | Run `prisma migrate dev` for local dev   |
-| `pnpm db:deploy`        | Run deploy-safe Prisma migrations        |
-| `pnpm db:generate`      | Generate Prisma client                   |
-| `pnpm db:seed`          | Seed local/test data                     |
-| `pnpm db:studio`        | Open Prisma Studio                       |
-| `pnpm benchmark`        | Run scheduling benchmark                 |
-| `pnpm azure:env:update` | Update Azure Container App env variables |
-
-## Verification
-
-Before opening a PR or deploying:
-
-```bash
-pnpm db:generate
-pnpm lint
-pnpm test
-pnpm build
-```
-
-If RBAC tests fail with missing group or factory assignment errors, reseed the local database:
-
-```bash
-pnpm db:seed
-pnpm test
-```
+| 指令                    | 說明                               |
+| ----------------------- | ---------------------------------- |
+| `pnpm dev`              | 啟動 Next.js dev server            |
+| `pnpm build`            | 建置 production                    |
+| `pnpm lint`             | 執行 ESLint                        |
+| `pnpm test`             | 執行 Vitest                        |
+| `pnpm format`           | 格式化程式碼（Prettier）           |
+| `pnpm db:migrate`       | 執行 Prisma migration（local dev） |
+| `pnpm db:deploy`        | 套用 migration（CI/production）    |
+| `pnpm db:generate`      | 產生 Prisma client                 |
+| `pnpm db:seed`          | Seed 測試資料進 DB                 |
+| `pnpm db:studio`        | 開啟 Prisma Studio                 |
