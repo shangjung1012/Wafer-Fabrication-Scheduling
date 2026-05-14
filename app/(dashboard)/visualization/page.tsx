@@ -2,13 +2,20 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { format, eachDayOfInterval, parseISO } from "date-fns";
+import {
+  format,
+  eachDayOfInterval,
+  parseISO,
+  differenceInDays,
+} from "date-fns";
 import type {
   TimelineResponse,
   TimelineItem,
   ConflictInfo,
   DiffEntry,
   FactoryInfo,
+  PendingOrderInfo,
+  OrderRisk,
 } from "@/modules/visualization/types";
 import { logoutClientAuthSession } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
@@ -146,13 +153,19 @@ function DetailPanel({
   cell,
   factory,
   diffByOrderId,
+  myOrderIds,
+  etaByOrderId,
   onClose,
 }: {
   cell: CellData;
   factory: FactoryInfo;
   diffByOrderId: Map<string, DiffEntry>;
+  myOrderIds?: string[];
+  etaByOrderId?: Map<string, string>;
   onClose: () => void;
 }) {
+  const myOrderIdSet = new Set(myOrderIds ?? []);
+  const myOrderItems = cell.items.filter((i) => myOrderIdSet.has(i.orderId));
   const fillRatio =
     cell.maxCapacity > 0 ? cell.usedCapacity / cell.maxCapacity : 0;
   const isOverCapacity = fillRatio > 1;
@@ -303,6 +316,146 @@ function DetailPanel({
           );
         })}
       </div>
+
+      {/* My Orders section (SALES view) */}
+      {myOrderItems.length > 0 && (
+        <div className="px-5 py-4 border-t border-gray-100 space-y-2">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            My Orders
+          </p>
+          {myOrderItems.map((item) => {
+            const hasConflict = cell.conflicts.some(
+              (c) =>
+                c.conflictType === "DUE_DATE" &&
+                c.orderIds.includes(item.orderId),
+            );
+            const isOverdue = hasConflict || item.dueDate < item.productionDate;
+            const eta = etaByOrderId?.get(item.orderId) ?? item.productionDate;
+            return (
+              <div
+                key={item.orderId}
+                className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 text-xs space-y-1"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-gray-900">
+                    {item.orderName}
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold ${isOverdue ? "text-red-500" : "text-green-600"}`}
+                  >
+                    {isOverdue ? "⚠ At-risk" : "● On-track"}
+                  </span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>ETA</span>
+                  <span
+                    className={`font-medium ${isOverdue ? "text-red-600" : "text-gray-700"}`}
+                  >
+                    {eta}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pending orders sidebar (SALES only)
+// ---------------------------------------------------------------------------
+
+function PendingSidebar({ orders }: { orders: PendingOrderInfo[] }) {
+  const today = toDateStr(new Date());
+  const pending = orders.filter((o) => o.status === "PENDING");
+  const approved = orders.filter((o) => o.status === "APPROVED");
+
+  const riskDot = (risk: OrderRisk) => {
+    if (risk === "OVERDUE")
+      return <span className="text-red-500 text-[10px]">●</span>;
+    if (risk === "AT_RISK")
+      return <span className="text-orange-400 text-[10px]">●</span>;
+    return <span className="text-green-500 text-[10px]">●</span>;
+  };
+
+  const borderColor = (risk: OrderRisk) => {
+    if (risk === "OVERDUE") return "border-l-4 border-l-red-400";
+    if (risk === "AT_RISK") return "border-l-4 border-l-orange-400";
+    return "border-l-4 border-l-green-400";
+  };
+
+  const daysLabel = (dueDate: string) => {
+    const diff = differenceInDays(parseISO(dueDate), parseISO(today));
+    if (diff < 0) return `${Math.abs(diff)}d overdue`;
+    if (diff === 0) return "Due today";
+    return `${diff}d left`;
+  };
+
+  const renderOrders = (list: PendingOrderInfo[]) =>
+    list.map((o) => (
+      <div
+        key={o.id}
+        className={`bg-white rounded-lg p-3 text-xs space-y-1 shadow-sm ${borderColor(o.risk)}`}
+      >
+        <div className="flex items-start justify-between gap-1">
+          <span className="font-medium text-gray-900 leading-tight">
+            {o.name}
+          </span>
+          {riskDot(o.risk)}
+        </div>
+        <div className="flex justify-between text-gray-500">
+          <span>Qty</span>
+          <span className="font-medium text-gray-700">
+            {o.quantity.toLocaleString()}
+          </span>
+        </div>
+        <div className="flex justify-between text-gray-500">
+          <span>Due</span>
+          <span
+            className={`font-medium ${o.risk === "OVERDUE" ? "text-red-600" : o.risk === "AT_RISK" ? "text-orange-500" : "text-gray-700"}`}
+          >
+            {o.dueDate}
+          </span>
+        </div>
+        <div
+          className={`text-right text-[10px] font-semibold ${o.risk === "OVERDUE" ? "text-red-500" : o.risk === "AT_RISK" ? "text-orange-400" : "text-gray-400"}`}
+        >
+          {daysLabel(o.dueDate)}
+        </div>
+      </div>
+    ));
+
+  return (
+    <div className="flex-none w-64 border-r border-gray-200 bg-gray-50 flex flex-col overflow-hidden">
+      <div className="px-3 py-2 border-b border-gray-200 bg-white">
+        <p className="text-xs font-semibold text-gray-700">My Pending Orders</p>
+        <p className="text-[10px] text-gray-400">{orders.length} unscheduled</p>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        {orders.length === 0 && (
+          <p className="text-xs text-gray-400 text-center pt-4">
+            No pending orders
+          </p>
+        )}
+        {pending.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+              Awaiting Approval
+            </p>
+            {renderOrders(pending)}
+          </div>
+        )}
+        {approved.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+              Awaiting Schedule
+            </p>
+            {renderOrders(approved)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -314,10 +467,14 @@ function DetailPanel({
 function GanttCell({
   cell,
   hasRescheduled,
+  isMyOrder,
+  isSales,
   onClick,
 }: {
   cell: CellData;
   hasRescheduled: boolean;
+  isMyOrder: boolean;
+  isSales: boolean;
   onClick: () => void;
 }) {
   const { bg, barColor, fillRatio } = getCellStyle(cell);
@@ -336,7 +493,7 @@ function GanttCell({
     <td className="border border-gray-100 w-[72px] min-w-[72px] h-14 p-0">
       <button
         onClick={onClick}
-        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group`}
+        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""}`}
       >
         {/* Conflict marker */}
         {hasConflict && (
@@ -361,6 +518,13 @@ function GanttCell({
         {cell.items.length > 0 && (
           <span className="absolute top-1 left-1 text-[9px] font-bold text-gray-500">
             ×{cell.items.length}
+          </span>
+        )}
+
+        {/* My order indicator (SALES view) */}
+        {isMyOrder && (
+          <span className="absolute top-1 left-5 text-[8px] leading-none text-blue-600">
+            ●
           </span>
         )}
 
@@ -396,6 +560,7 @@ type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
 export default function SchedulePage() {
   const router = useRouter();
   const session = useClientAuthSession();
+  const isSales = session?.user.role === "SALES";
   const productionType = session?.user.group ?? "";
   const [startDate, setStartDate] = useState(DEFAULT_START);
   const [endDate, setEndDate] = useState(DEFAULT_END);
@@ -509,6 +674,25 @@ export default function SchedulePage() {
     return map;
   }, [data]);
 
+  // SALES: set of this user's order IDs visible in the Gantt
+  const myOrderIdSet = useMemo(
+    () => new Set(data?.salesContext?.myOrderIds ?? []),
+    [data],
+  );
+
+  // SALES: latest productionDate (ETA) per order across all assignments
+  const etaByOrderId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of data?.timeline ?? []) {
+      if (!myOrderIdSet.has(item.orderId)) continue;
+      const current = map.get(item.orderId);
+      if (!current || item.productionDate > current) {
+        map.set(item.orderId, item.productionDate);
+      }
+    }
+    return map;
+  }, [data, myOrderIdSet]);
+
   // Per-cell: does it contain any rescheduled order?
   const rescheduledCells = useMemo(() => {
     const set = new Set<string>();
@@ -615,35 +799,37 @@ export default function SchedulePage() {
           </button>
         </div>
 
-        {/* Run Schedule */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRunSchedule}
-            disabled={scheduleStatus === "running"}
-            className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
-              scheduleStatus === "running"
-                ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
-                : "bg-green-700 text-white border-green-700 hover:bg-green-800"
-            }`}
-          >
-            {scheduleStatus === "running"
-              ? "Running…"
-              : `▶ Run Schedule (Type ${productionType || "-"})`}
-          </button>
-          {scheduleStatus === "success" && (
-            <span className="text-xs text-green-600 font-medium">
-              Scheduled ✓
-            </span>
-          )}
-          {scheduleStatus === "conflict" && (
-            <span className="text-xs text-yellow-600 font-medium">
-              Already running
-            </span>
-          )}
-          {scheduleStatus === "error" && (
-            <span className="text-xs text-red-600 font-medium">Failed</span>
-          )}
-        </div>
+        {/* Run Schedule (admin/superadmin only) */}
+        {!isSales && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRunSchedule}
+              disabled={scheduleStatus === "running"}
+              className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
+                scheduleStatus === "running"
+                  ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
+                  : "bg-green-700 text-white border-green-700 hover:bg-green-800"
+              }`}
+            >
+              {scheduleStatus === "running"
+                ? "Running…"
+                : `▶ Run Schedule (Type ${productionType || "-"})`}
+            </button>
+            {scheduleStatus === "success" && (
+              <span className="text-xs text-green-600 font-medium">
+                Scheduled ✓
+              </span>
+            )}
+            {scheduleStatus === "conflict" && (
+              <span className="text-xs text-yellow-600 font-medium">
+                Already running
+              </span>
+            )}
+            {scheduleStatus === "error" && (
+              <span className="text-xs text-red-600 font-medium">Failed</span>
+            )}
+          </div>
+        )}
 
         {/* Date range */}
         <div className="flex items-center gap-2 ml-auto">
@@ -723,105 +909,122 @@ export default function SchedulePage() {
       </div>
 
       {/* Gantt body */}
-      <div className="flex-1 overflow-auto">
-        {loading && (
-          <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-            Loading…
-          </div>
+      <div className="flex-1 overflow-hidden flex">
+        {/* Pending sidebar (SALES only) */}
+        {isSales && data?.salesContext && !loading && !fetchError && (
+          <PendingSidebar orders={data.salesContext.pendingOrders} />
         )}
 
-        {!loading && fetchError && (
-          <div className="flex flex-col items-center justify-center h-full gap-2">
-            <span className="text-2xl">
-              {fetchError.status === 403 ? "🔒" : "⚠️"}
-            </span>
-            <p className="text-sm font-medium text-gray-700">
-              {fetchError.status === 401 &&
-                "Unauthorized — invalid or missing token"}
-              {fetchError.status === 403 &&
-                "Forbidden — this role cannot view the schedule"}
-              {fetchError.status === 0 &&
-                "Network error — is the server running?"}
-              {fetchError.status > 0 &&
-                fetchError.status !== 401 &&
-                fetchError.status !== 403 &&
-                `Error ${fetchError.status}: ${fetchError.message}`}
-            </p>
-          </div>
-        )}
+        <div className="flex-1 overflow-auto">
+          {loading && (
+            <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+              Loading…
+            </div>
+          )}
 
-        {!loading && !fetchError && data && (
-          <table
-            className="border-collapse text-xs"
-            style={{ tableLayout: "fixed" }}
-          >
-            <thead>
-              <tr>
-                {/* Factory label column */}
-                <th className="sticky left-0 top-0 z-30 bg-white border border-gray-200 w-36 min-w-36 px-3 py-2 text-left text-gray-500 font-medium">
-                  Factory
-                </th>
-                {/* Date columns */}
-                {dates.map((d) => {
-                  const day = parseISO(d);
-                  const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                  return (
-                    <th
-                      key={d}
-                      className={`sticky top-0 z-20 border border-gray-200 w-[72px] min-w-[72px] px-1 py-2 text-center font-medium ${isWeekend ? "bg-gray-50 text-gray-400" : "bg-white text-gray-600"}`}
-                    >
-                      <div>{format(day, "d")}</div>
-                      <div className="text-[9px] font-normal opacity-70">
-                        {format(day, "EEE")}
-                      </div>
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map(([type, factories]) => (
-                <React.Fragment key={type}>
-                  {/* Group header row */}
-                  <tr>
-                    <td
-                      colSpan={dates.length + 1}
-                      className="sticky left-0 bg-gray-100 border border-gray-200 px-3 py-1.5 font-semibold text-gray-600 text-[11px] uppercase tracking-wide"
-                    >
-                      Production Type {type}
-                    </td>
-                  </tr>
+          {!loading && fetchError && (
+            <div className="flex flex-col items-center justify-center h-full gap-2">
+              <span className="text-2xl">
+                {fetchError.status === 403 ? "🔒" : "⚠️"}
+              </span>
+              <p className="text-sm font-medium text-gray-700">
+                {fetchError.status === 401 &&
+                  "Unauthorized — invalid or missing token"}
+                {fetchError.status === 403 &&
+                  "Forbidden — this role cannot view the schedule"}
+                {fetchError.status === 0 &&
+                  "Network error — is the server running?"}
+                {fetchError.status > 0 &&
+                  fetchError.status !== 401 &&
+                  fetchError.status !== 403 &&
+                  `Error ${fetchError.status}: ${fetchError.message}`}
+              </p>
+            </div>
+          )}
 
-                  {/* Factory rows */}
-                  {factories.map((factory) => (
-                    <tr key={factory.id} className="hover:bg-gray-50/50">
-                      <td className="sticky left-0 z-10 bg-white border border-gray-200 px-3 py-2 font-medium text-gray-700 whitespace-nowrap">
-                        <div>{factory.label}</div>
-                        <div className="text-[9px] text-gray-400 font-normal">
-                          max {factory.maxCapacity.toLocaleString()}
+          {!loading && !fetchError && data && (
+            <table
+              className="border-collapse text-xs"
+              style={{ tableLayout: "fixed" }}
+            >
+              <thead>
+                <tr>
+                  {/* Factory label column */}
+                  <th className="sticky left-0 top-0 z-30 bg-white border border-gray-200 w-36 min-w-36 px-3 py-2 text-left text-gray-500 font-medium">
+                    Factory
+                  </th>
+                  {/* Date columns */}
+                  {dates.map((d) => {
+                    const day = parseISO(d);
+                    const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                    return (
+                      <th
+                        key={d}
+                        className={`sticky top-0 z-20 border border-gray-200 w-[72px] min-w-[72px] px-1 py-2 text-center font-medium ${isWeekend ? "bg-gray-50 text-gray-400" : "bg-white text-gray-600"}`}
+                      >
+                        <div>{format(day, "d")}</div>
+                        <div className="text-[9px] font-normal opacity-70">
+                          {format(day, "EEE")}
                         </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map(([type, factories]) => (
+                  <React.Fragment key={type}>
+                    {/* Group header row */}
+                    <tr>
+                      <td
+                        colSpan={dates.length + 1}
+                        className="sticky left-0 bg-gray-100 border border-gray-200 px-3 py-1.5 font-semibold text-gray-600 text-[11px] uppercase tracking-wide"
+                      >
+                        Production Type {type}
                       </td>
-                      {dates.map((date) => {
-                        const key = `${factory.id}__${date}`;
-                        const cell = cellMap.get(key)!;
-                        return (
-                          <GanttCell
-                            key={key}
-                            cell={cell}
-                            hasRescheduled={rescheduledCells.has(key)}
-                            onClick={() =>
-                              setSelectedCell({ factoryId: factory.id, date })
-                            }
-                          />
-                        );
-                      })}
                     </tr>
-                  ))}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        )}
+
+                    {/* Factory rows */}
+                    {factories.map((factory) => (
+                      <tr key={factory.id} className="hover:bg-gray-50/50">
+                        <td className="sticky left-0 z-10 bg-white border border-gray-200 px-3 py-2 font-medium text-gray-700 whitespace-nowrap">
+                          <div>{factory.label}</div>
+                          <div className="text-[9px] text-gray-400 font-normal">
+                            max {factory.maxCapacity.toLocaleString()}
+                          </div>
+                        </td>
+                        {dates.map((date) => {
+                          const key = `${factory.id}__${date}`;
+                          const cell = cellMap.get(key)!;
+                          const isMyOrder = isSales
+                            ? cell.items.some((i: TimelineItem) =>
+                                myOrderIdSet.has(i.orderId),
+                              )
+                            : false;
+                          return (
+                            <GanttCell
+                              key={key}
+                              cell={cell}
+                              hasRescheduled={rescheduledCells.has(key)}
+                              isMyOrder={isMyOrder}
+                              isSales={isSales}
+                              onClick={() =>
+                                setSelectedCell({
+                                  factoryId: factory.id,
+                                  date,
+                                })
+                              }
+                            />
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {/* Detail panel overlay */}
@@ -835,6 +1038,8 @@ export default function SchedulePage() {
             cell={selectedCellData}
             factory={selectedFactory}
             diffByOrderId={diffByOrderId}
+            myOrderIds={data?.salesContext?.myOrderIds}
+            etaByOrderId={etaByOrderId}
             onClose={() => setSelectedCell(null)}
           />
         </>
