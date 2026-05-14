@@ -363,7 +363,7 @@ describe("invitation-service", () => {
 
   it("rejects expired invitations and duplicate usernames", async () => {
     const { db } = createDb();
-    const now = new Date("2026-05-12T00:00:00.000Z");
+    const now = new Date();
     await createUserInvitation(
       ctx(),
       db as never,
