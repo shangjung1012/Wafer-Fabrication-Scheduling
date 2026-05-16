@@ -392,6 +392,14 @@ const DEFAULT_END = "2026-05-23";
 
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
+type NotifyStatus = "idle" | "sending" | "sent" | "error";
+
+type KickedOutOrder = {
+  id: string;
+  name: string;
+  applicantEmail: string;
+  applicantUsername: string | null;
+};
 
 export default function SchedulePage() {
   const router = useRouter();
@@ -408,6 +416,9 @@ export default function SchedulePage() {
   } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>("idle");
+  const [kickedOutOrders, setKickedOutOrders] = useState<KickedOutOrder[]>([]);
+  const [emailsAutoSent, setEmailsAutoSent] = useState(false);
+  const [notifyStatus, setNotifyStatus] = useState<NotifyStatus>("idle");
 
   // Fetch timeline data
   useEffect(() => {
@@ -444,6 +455,9 @@ export default function SchedulePage() {
   const handleRunSchedule = async () => {
     if (!productionType) return;
     setScheduleStatus("running");
+    setKickedOutOrders([]);
+    setEmailsAutoSent(false);
+    setNotifyStatus("idle");
     try {
       const res = await fetch("/api/schedule/run", {
         method: "POST",
@@ -456,6 +470,9 @@ export default function SchedulePage() {
       if (res.status === 409) {
         setScheduleStatus("conflict");
       } else if (res.ok) {
+        const body = await res.json();
+        setKickedOutOrders(body.kickedOutOrders ?? []);
+        setEmailsAutoSent(body.emailsSent === true);
         setScheduleStatus("success");
         setLoading(true);
         setFetchError(null);
@@ -467,6 +484,27 @@ export default function SchedulePage() {
       setScheduleStatus("error");
     }
     setTimeout(() => setScheduleStatus("idle"), 4000);
+  };
+
+  // Manual notify handler (preview mode)
+  const handleSendNotifications = async () => {
+    if (kickedOutOrders.length === 0) return;
+    setNotifyStatus("sending");
+    try {
+      const res = await fetch("/api/schedule/notify", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orders: kickedOutOrders }),
+      });
+      if (res.ok) {
+        setNotifyStatus("sent");
+      } else {
+        setNotifyStatus("error");
+      }
+    } catch {
+      setNotifyStatus("error");
+    }
   };
 
   const handleLogout = async () => {
@@ -689,6 +727,61 @@ export default function SchedulePage() {
           )}
         </div>
       </div>
+
+      {/* Kicked-out orders notification panel */}
+      {kickedOutOrders.length > 0 && (
+        <div
+          className={`flex-none px-6 py-3 border-b text-xs ${
+            emailsAutoSent || notifyStatus === "sent"
+              ? "bg-green-50 border-green-200"
+              : "bg-amber-50 border-amber-200"
+          }`}
+        >
+          {emailsAutoSent || notifyStatus === "sent" ? (
+            <span className="text-green-700 font-medium">
+              Notification emails sent to {kickedOutOrders.length} sales
+              person(s) whose order(s) could not be scheduled.
+            </span>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <span className="text-amber-800 font-semibold">
+                  {kickedOutOrders.length} order(s) could not be scheduled and
+                  were moved back to APPROVED:
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSendNotifications}
+                  disabled={notifyStatus === "sending"}
+                  className={`px-2.5 py-1 rounded border font-medium transition-colors ${
+                    notifyStatus === "sending"
+                      ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                      : "bg-amber-700 text-white border-amber-700 hover:bg-amber-800"
+                  }`}
+                >
+                  {notifyStatus === "sending"
+                    ? "Sending…"
+                    : "Send notifications"}
+                </button>
+                {notifyStatus === "error" && (
+                  <span className="text-red-600 font-medium">
+                    Some emails failed — check server logs.
+                  </span>
+                )}
+              </div>
+              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-amber-700">
+                {kickedOutOrders.map((o) => (
+                  <li key={o.id}>
+                    <span className="font-medium">{o.name}</span>
+                    {" — "}
+                    <span className="text-amber-600">{o.applicantEmail}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex-none px-6 py-2 flex items-center gap-4 text-xs text-gray-500 bg-white border-b border-gray-100">

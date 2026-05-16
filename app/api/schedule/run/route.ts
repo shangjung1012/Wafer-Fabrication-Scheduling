@@ -7,6 +7,8 @@ import {
 import { z } from "zod";
 import Redis from "ioredis";
 import { runSchedule } from "@/modules/schedule/engine";
+import { renderAndSend } from "@/modules/mail/mail-template";
+import { kickOutTemplate } from "@/modules/mail/templates/kick-out";
 
 let redis: Redis | undefined;
 
@@ -76,10 +78,35 @@ export async function POST(request: Request) {
     }
 
     try {
-      // Execute the actual scheduling engine logic
-      await runSchedule(type);
+      const result = await runSchedule(type);
 
-      return NextResponse.json({ message: "Schedule run successfully" });
+      // Auto-send mode: fire emails immediately without admin confirmation
+      const autoSend = process.env.KICK_OUT_EMAIL_AUTO_SEND === "true";
+      if (autoSend && result.kickedOutOrders.length > 0) {
+        const emailResults = await Promise.allSettled(
+          result.kickedOutOrders.map((o) =>
+            renderAndSend(kickOutTemplate, {
+              orderName: o.name,
+              applicantEmail: o.applicantEmail,
+              applicantUsername: o.applicantUsername,
+            }),
+          ),
+        );
+        emailResults.forEach((r, i) => {
+          if (r.status === "rejected") {
+            console.error(
+              `Kick-out email failed for order ${result.kickedOutOrders[i].id}:`,
+              r.reason,
+            );
+          }
+        });
+      }
+
+      return NextResponse.json({
+        message: "Schedule run successfully",
+        kickedOutOrders: result.kickedOutOrders,
+        emailsSent: autoSend,
+      });
     } finally {
       // Always release the lock when done
       await redis.del(lockKey);

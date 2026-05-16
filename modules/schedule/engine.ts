@@ -17,11 +17,36 @@ import {
   createDailyCapacities,
   updateDailyCapacityById,
 } from "@/infra/db/capacity-repository";
-import { AssignmentStatus } from "@/lib/generated/prisma";
+import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
 
-export async function runSchedule(type: string): Promise<void> {
+export type KickedOutOrder = {
+  id: string;
+  name: string;
+  applicantEmail: string;
+  applicantUsername: string | null;
+};
+
+export type RunScheduleResult = {
+  kickedOutOrders: KickedOutOrder[];
+};
+
+type OrderWithApplicant = {
+  id: string;
+  name: string;
+  status: string;
+  applicant?: { email: string; username: string | null } | null;
+};
+
+export async function runSchedule(type: string): Promise<RunScheduleResult> {
   const orders = await findOrdersForScheduling(prisma, type);
   const factories = await findFactoriesWithCapacities(prisma, type);
+
+  // Snapshot orders that were SCHEDULED before this run for kick-out detection
+  const previouslyScheduled = new Map<string, OrderWithApplicant>(
+    (orders as OrderWithApplicant[])
+      .filter((o) => o.status === OrderStatus.SCHEDULED)
+      .map((o) => [o.id, o]),
+  );
 
   // In-memory reset: restore capacity used by SCHEDULED assignments
   const capacities: SchedulingCapacityInput[] = [];
@@ -81,4 +106,25 @@ export async function runSchedule(type: string): Promise<void> {
 
     await createAssignments(db, strategyResult.newAssignments);
   });
+
+  // Detect kicked-out orders: were SCHEDULED before, now APPROVED after
+  const kickedOutOrders: KickedOutOrder[] = strategyResult.processedOrders
+    .filter(
+      (o) => previouslyScheduled.has(o.id) && o.status === OrderStatus.APPROVED,
+    )
+    .flatMap((o) => {
+      const src = previouslyScheduled.get(o.id)!;
+      const email = src.applicant?.email;
+      if (!email) return [];
+      return [
+        {
+          id: o.id,
+          name: src.name,
+          applicantEmail: email,
+          applicantUsername: src.applicant?.username ?? null,
+        },
+      ];
+    });
+
+  return { kickedOutOrders };
 }
