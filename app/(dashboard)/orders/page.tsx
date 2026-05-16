@@ -409,6 +409,7 @@ export default function OrdersPage() {
   const [updateId, setUpdateId] = useState("");
   const [updateName, setUpdateName] = useState("");
   const [updateQty, setUpdateQty] = useState("");
+  const [updateDueDate, setUpdateDueDate] = useState("");
   const [updateStatus2, setUpdateStatus2] = useState(""); // new status value
   const [updateResult, setUpdateResult] = useState<unknown>(null);
   const [updateHttpStatus, setUpdateHttpStatus] = useState("");
@@ -417,6 +418,7 @@ export default function OrdersPage() {
     const body: Record<string, unknown> = {};
     if (updateName) body.name = updateName;
     if (updateQty) body.quantity = Number(updateQty);
+    if (updateDueDate) body.dueDate = new Date(updateDueDate).toISOString();
     if (isAdminOrSuper && updateStatus2) body.status = updateStatus2;
     const res = await apiFetch(`/api/orders/${updateId}`, {
       method: "PUT",
@@ -424,7 +426,14 @@ export default function OrdersPage() {
     });
     setUpdateResult(await res.json());
     setUpdateHttpStatus(`${res.status}`);
-  }, [updateId, updateName, updateQty, updateStatus2, isAdminOrSuper]);
+  }, [
+    updateId,
+    updateName,
+    updateQty,
+    updateDueDate,
+    updateStatus2,
+    isAdminOrSuper,
+  ]);
 
   // ---- Delete Orders (ADMIN) ----
   const [deleteIds, setDeleteIds] = useState("");
@@ -790,6 +799,12 @@ export default function OrdersPage() {
             value={updateQty}
             onChange={(e) => setUpdateQty(e.target.value)}
             placeholder="new quantity (optional)"
+          />
+          <Input
+            label="Due Date"
+            type="date"
+            value={updateDueDate}
+            onChange={(e) => setUpdateDueDate(e.target.value)}
           />
           {isAdmin && (
             <label style={{ display: "block", marginBottom: 6, fontSize: 13 }}>
