@@ -501,17 +501,27 @@ export default function OrdersPage() {
   // ---- Update Request (SALES) ----
   const [updateReqId, setUpdateReqId] = useState("");
   const [updateReqMessage, setUpdateReqMessage] = useState("");
+  const [updateReqPayload, setUpdateReqPayload] = useState("");
   const [updateReqResult, setUpdateReqResult] = useState<unknown>(null);
   const [updateReqStatus, setUpdateReqStatus] = useState("");
 
   const doUpdateRequest = useCallback(async () => {
+    const body: Record<string, unknown> = {};
+    if (updateReqMessage) body.message = updateReqMessage;
+    if (updateReqPayload.trim()) {
+      try {
+        body.payload = JSON.parse(updateReqPayload);
+      } catch {
+        body.payload = updateReqPayload;
+      }
+    }
     const res = await apiFetch(`/api/requests/${updateReqId}`, {
       method: "PUT",
-      body: JSON.stringify({ message: updateReqMessage }),
+      body: JSON.stringify(body),
     });
     setUpdateReqResult(await res.json());
     setUpdateReqStatus(`${res.status}`);
-  }, [updateReqId, updateReqMessage]);
+  }, [updateReqId, updateReqMessage, updateReqPayload]);
 
   // ---- Approve Request (ADMIN + SUPERADMIN) ----
   const [approveReqId, setApproveReqId] = useState("");
@@ -601,6 +611,9 @@ export default function OrdersPage() {
         </a>
         <a href="/users" style={navLinkStyle}>
           Users
+        </a>
+        <a href="/profile" style={navLinkStyle}>
+          Profile
         </a>
       </nav>
 
@@ -940,8 +953,37 @@ export default function OrdersPage() {
             label="New Message"
             value={updateReqMessage}
             onChange={(e) => setUpdateReqMessage(e.target.value)}
-            placeholder="updated message"
+            placeholder="updated message (optional)"
           />
+          <label
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontSize: 13,
+              color: "#334155",
+              fontWeight: 650,
+            }}
+          >
+            Payload (JSON, optional)
+            <textarea
+              value={updateReqPayload}
+              onChange={(e) => setUpdateReqPayload(e.target.value)}
+              placeholder='{"field": "value"}'
+              rows={3}
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "4px 8px",
+                marginTop: 2,
+                border: "1px solid #cbd5e1",
+                borderRadius: 4,
+                fontSize: 12,
+                fontFamily: "monospace",
+                boxSizing: "border-box",
+                resize: "vertical",
+              }}
+            />
+          </label>
           <Btn onClick={doUpdateRequest}>Send</Btn>
           {updateReqStatus && (
             <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>

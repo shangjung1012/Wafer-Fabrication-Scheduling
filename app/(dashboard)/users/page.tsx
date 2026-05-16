@@ -126,6 +126,7 @@ export default function UsersPage() {
   const session = useClientAuthSession();
   const [items, setItems] = useState<UserRow[]>([]);
   const [form, setForm] = useState<InviteForm>(initialForm);
+  const [roleFilter, setRoleFilter] = useState<Role | "">("");
   const [loading, setLoading] = useState<
     "list" | "invite" | `resend:${string}` | "logout" | null
   >(null);
@@ -139,27 +140,33 @@ export default function UsersPage() {
     return ["SUPERADMIN", "ADMIN", "SALES"];
   }, []);
 
-  const loadUsers = useCallback(async () => {
-    if (!session) return;
+  const loadUsers = useCallback(
+    async (role?: Role | "") => {
+      if (!session) return;
 
-    setLoading((current) => current ?? "list");
-    setMessage(null);
+      setLoading((current) => current ?? "list");
+      setMessage(null);
 
-    try {
-      const response = await apiFetch("/api/users");
-      const result = await parseResponse(response);
-      setApiResult(result);
-      if (!response.ok) {
-        setMessage(`Unable to load users (${result.status})`);
-        return;
+      try {
+        const url = role
+          ? `/api/users?role=${encodeURIComponent(role)}`
+          : "/api/users";
+        const response = await apiFetch(url);
+        const result = await parseResponse(response);
+        setApiResult(result);
+        if (!response.ok) {
+          setMessage(`Unable to load users (${result.status})`);
+          return;
+        }
+
+        const body = result.body as { items?: UserRow[] };
+        setItems(body.items ?? []);
+      } finally {
+        setLoading((current) => (current === "list" ? null : current));
       }
-
-      const body = result.body as { items?: UserRow[] };
-      setItems(body.items ?? []);
-    } finally {
-      setLoading((current) => (current === "list" ? null : current));
-    }
-  }, [session]);
+    },
+    [session],
+  );
 
   useEffect(() => {
     if (session === undefined) return;
@@ -273,6 +280,9 @@ export default function UsersPage() {
           </a>
           <a href="/users" style={{ ...navLinkStyle, ...activeNavLinkStyle }}>
             Users
+          </a>
+          <a href="/profile" style={navLinkStyle}>
+            Profile
           </a>
         </nav>
       </header>
@@ -397,15 +407,38 @@ export default function UsersPage() {
               Pending means the recipient has not set a username and password.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={loadUsers}
-            disabled={loading === "list"}
-            style={secondaryButtonStyle}
-          >
-            <RefreshCw size={15} />
-            Refresh
-          </button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select
+              value={roleFilter}
+              onChange={(e) => {
+                const val = e.target.value as Role | "";
+                setRoleFilter(val);
+                void loadUsers(val);
+              }}
+              style={{
+                padding: "5px 8px",
+                fontSize: 13,
+                border: "1px solid #cbd5e1",
+                borderRadius: 6,
+                background: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              <option value="">All roles</option>
+              <option value="SUPERADMIN">SUPERADMIN</option>
+              <option value="ADMIN">ADMIN</option>
+              <option value="SALES">SALES</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => loadUsers(roleFilter)}
+              disabled={loading === "list"}
+              style={secondaryButtonStyle}
+            >
+              <RefreshCw size={15} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         <div style={{ overflowX: "auto" }}>
