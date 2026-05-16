@@ -60,7 +60,7 @@ describe("POST /api/schedule/run", () => {
     });
 
     // Default: engine success
-    vi.mocked(scheduleEngine.runSchedule).mockResolvedValue(undefined);
+    vi.mocked(scheduleEngine.runSchedule).mockResolvedValue([]);
   });
 
   afterEach(() => {

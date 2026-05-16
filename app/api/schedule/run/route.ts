@@ -77,9 +77,12 @@ export async function POST(request: Request) {
 
     try {
       // Execute the actual scheduling engine logic
-      await runSchedule(type);
+      const conflicts = await runSchedule(type);
 
-      return NextResponse.json({ message: "Schedule run successfully" });
+      return NextResponse.json({
+        message: "Schedule run successfully",
+        conflicts,
+      });
     } finally {
       // Always release the lock when done
       await redis.del(lockKey);

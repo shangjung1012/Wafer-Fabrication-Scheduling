@@ -18,12 +18,34 @@ import {
   updateDailyCapacityById,
 } from "@/infra/db/capacity-repository";
 import { AssignmentStatus } from "@/lib/generated/prisma";
+import { format } from "date-fns";
 
-export async function runSchedule(type: string): Promise<void> {
+export type ConflictOrderInfo = {
+  id: string;
+  name: string;
+  quantity: number;
+  dueDate: string; // YYYY-MM-DD
+};
+
+// Compare two dates by their LOCAL calendar day, ignoring timezone offset.
+// Needed because seed records use UTC midnight while the scheduling engine
+// uses local midnight — the same day but different getTime() values.
+function isSameLocalDay(a: Date | string, b: Date | string): boolean {
+  const da = new Date(a);
+  const db = new Date(b);
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  );
+}
+
+export async function runSchedule(type: string): Promise<ConflictOrderInfo[]> {
   const orders = await findOrdersForScheduling(prisma, type);
   const factories = await findFactoriesWithCapacities(prisma, type);
 
-  // In-memory reset: restore capacity used by SCHEDULED assignments
+  // In-memory reset: restore capacity used by SCHEDULED assignments.
+  // Uses isSameLocalDay to handle UTC vs local-midnight date mismatches.
   const capacities: SchedulingCapacityInput[] = [];
   for (const factory of factories) {
     if (factory.dailyCapacities) {
@@ -39,8 +61,7 @@ export async function runSchedule(type: string): Promise<void> {
           const cap = capacities.find(
             (c) =>
               c.factoryId === assignment.factoryId &&
-              new Date(c.date).getTime() ===
-                new Date(assignment.productionDate).getTime(),
+              isSameLocalDay(c.date, assignment.productionDate),
           );
           if (cap) cap.curCapacity += assignment.assignedQuantity;
         } else {
@@ -81,4 +102,28 @@ export async function runSchedule(type: string): Promise<void> {
 
     await createAssignments(db, strategyResult.newAssignments);
   });
+
+  if (strategyResult.conflictOrderIds.length === 0) return [];
+
+  return fetchConflictOrders(prisma, strategyResult.conflictOrderIds);
+}
+
+// ---------------------------------------------------------------------------
+// Conflict helpers
+// ---------------------------------------------------------------------------
+
+async function fetchConflictOrders(
+  db: PrismaClient,
+  ids: string[],
+): Promise<ConflictOrderInfo[]> {
+  const rows = await db.order.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, quantity: true, dueDate: true },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    quantity: r.quantity,
+    dueDate: format(r.dueDate, "yyyy-MM-dd"),
+  }));
 }
