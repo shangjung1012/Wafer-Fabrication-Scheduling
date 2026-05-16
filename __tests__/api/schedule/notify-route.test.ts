@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/schedule/notify/route";
 import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
+import type { UserRole } from "@/modules/auth/request-context";
 import * as mailTemplate from "@/modules/mail/mail-template";
 
 vi.mock("@/modules/auth/require-auth", () => ({
@@ -31,7 +32,7 @@ vi.mock("@/modules/mail/templates/kick-out", () => ({
 // Helpers
 // ------------------------------------------------------------------
 
-function adminCtx(role: string = "ADMIN") {
+function adminCtx(role: UserRole = "ADMIN") {
   return { requestId: "r1", user: { id: "u1", role } };
 }
 

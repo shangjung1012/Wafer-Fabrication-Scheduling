@@ -79,6 +79,8 @@ export async function POST(request: Request) {
 
     try {
       const conflicts = await runSchedule(type);
+      let emailsSent = false;
+      let emailFailures = 0;
 
       // Auto-send mode: fire emails immediately without admin confirmation
       const autoSend = process.env.CONFLICT_EMAIL_AUTO_SEND === "true";
@@ -109,14 +111,17 @@ export async function POST(request: Request) {
         emailResults.forEach((r, i) => {
           if (r.status === "rejected") {
             console.error(`Conflict email failed (job ${i}):`, r.reason);
+            emailFailures += 1;
           }
         });
+        emailsSent = emailJobs.length > 0 && emailFailures === 0;
       }
 
       return NextResponse.json({
         message: "Schedule run successfully",
         conflicts,
-        emailsSent: autoSend,
+        emailsSent,
+        emailFailures,
       });
     } finally {
       // Always release the lock when done

@@ -675,7 +675,10 @@ export default function SchedulePage() {
         body: JSON.stringify({ orders: scheduleConflicts }),
       });
       if (res.ok) {
-        setNotifyStatus("sent");
+        const body = await res.json().catch(() => ({}));
+        const failedCount = Array.isArray(body.failed) ? body.failed.length : 0;
+        const sentCount = Array.isArray(body.sent) ? body.sent.length : 0;
+        setNotifyStatus(failedCount === 0 && sentCount > 0 ? "sent" : "error");
       } else {
         setNotifyStatus("error");
       }

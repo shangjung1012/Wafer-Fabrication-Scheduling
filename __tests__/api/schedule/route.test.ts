@@ -11,6 +11,7 @@ import { POST } from "@/app/api/schedule/run/route";
 import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
 import Redis from "ioredis";
 import * as scheduleEngine from "@/modules/schedule/engine";
+import * as mailTemplate from "@/modules/mail/mail-template";
 
 // Mock requireAuth
 vi.mock("@/modules/auth/require-auth", () => ({
@@ -212,6 +213,59 @@ describe("POST /api/schedule/run", () => {
 
     // Released lock
     expect(redisDelMock).toHaveBeenCalledWith("schedule:lock:Type A");
+  });
+
+  it("reports auto-send success only when all conflict emails are sent", async () => {
+    vi.stubEnv("CONFLICT_EMAIL_AUTO_SEND", "true");
+    vi.mocked(scheduleEngine.runSchedule).mockResolvedValueOnce([
+      {
+        id: "O1",
+        name: "Order 1",
+        quantity: 10,
+        dueDate: "2026-05-20",
+        applicantEmail: "sales@example.com",
+        applicantUsername: "sales",
+        adminEmail: "admin@example.com",
+        adminUsername: "admin",
+      },
+    ]);
+    vi.mocked(mailTemplate.renderAndSend).mockResolvedValue(undefined);
+
+    const req = createRequest({ type: "Type A" });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.emailsSent).toBe(true);
+    expect(json.emailFailures).toBe(0);
+    expect(mailTemplate.renderAndSend).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not report auto-send success when any conflict email fails", async () => {
+    vi.stubEnv("CONFLICT_EMAIL_AUTO_SEND", "true");
+    vi.mocked(scheduleEngine.runSchedule).mockResolvedValueOnce([
+      {
+        id: "O1",
+        name: "Order 1",
+        quantity: 10,
+        dueDate: "2026-05-20",
+        applicantEmail: "sales@example.com",
+        applicantUsername: "sales",
+        adminEmail: "admin@example.com",
+        adminUsername: "admin",
+      },
+    ]);
+    vi.mocked(mailTemplate.renderAndSend)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("smtp error"));
+
+    const req = createRequest({ type: "Type A" });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.emailsSent).toBe(false);
+    expect(json.emailFailures).toBe(1);
   });
 
   it("should release lock even if engine throws an error", async () => {
