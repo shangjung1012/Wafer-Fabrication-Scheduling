@@ -23,6 +23,7 @@ function getRedis(): Redis {
 
 const RunScheduleSchema = z.object({
   type: z.string().min(1, "Type is required"),
+  algorithm: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { type } = parsed.data;
+    const { type, algorithm } = parsed.data;
     const lockKey = `schedule:lock:${type}`;
     const redis = getRedis();
 
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
 
     try {
       // Execute the actual scheduling engine logic
-      const conflicts = await runSchedule(type);
+      const conflicts = await runSchedule(type, algorithm);
 
       return NextResponse.json({
         message: "Schedule run successfully",

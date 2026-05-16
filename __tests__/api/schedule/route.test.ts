@@ -117,7 +117,10 @@ describe("POST /api/schedule/run", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(200);
-    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith("Type A");
+    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith(
+      "Type A",
+      undefined,
+    );
   });
 
   it("should reject execution if invalid CRON_SECRET is provided", async () => {
@@ -196,7 +199,10 @@ describe("POST /api/schedule/run", () => {
     );
 
     // Engine called
-    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith("Type A");
+    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith(
+      "Type A",
+      undefined,
+    );
 
     // Released lock
     expect(redisDelMock).toHaveBeenCalledWith("schedule:lock:Type A");

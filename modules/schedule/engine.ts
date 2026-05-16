@@ -1,9 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import type { PrismaClient } from "@/lib/generated/prisma";
-import {
-  greedyBestFitStrategy,
-  type SchedulingCapacityInput,
+import type {
+  SchedulingCapacityInput,
+  SchedulingOrderInput,
+  StrategyResult,
 } from "@/modules/schedule/strategy";
+import {
+  resolveAlgorithm,
+  type SchedulingAlgorithmId,
+} from "@/modules/schedule/algorithms";
 import {
   findOrdersForScheduling,
   bulkUpdateOrderStatus,
@@ -40,24 +45,50 @@ function isSameLocalDay(a: Date | string, b: Date | string): boolean {
   );
 }
 
-export async function runSchedule(type: string): Promise<ConflictOrderInfo[]> {
+export type PreviousScheduledAssignment = {
+  orderId: string;
+  factoryId: string;
+  productionDate: Date;
+  assignedQuantity: number;
+};
+
+export type SimulationResult = {
+  strategy: StrategyResult;
+  orders: SchedulingOrderInput[];
+  capacitiesBefore: SchedulingCapacityInput[];
+  previousScheduled: PreviousScheduledAssignment[];
+};
+
+export async function simulateSchedule(
+  type: string,
+  algorithmId?: SchedulingAlgorithmId | string,
+): Promise<SimulationResult> {
   const orders = await findOrdersForScheduling(prisma, type);
   const factories = await findFactoriesWithCapacities(prisma, type);
 
   // In-memory reset: restore capacity used by SCHEDULED assignments.
   // Uses isSameLocalDay to handle UTC vs local-midnight date mismatches.
-  const capacities: SchedulingCapacityInput[] = [];
+  const capacitiesBefore: SchedulingCapacityInput[] = [];
   for (const factory of factories) {
     if (factory.dailyCapacities) {
-      capacities.push(...factory.dailyCapacities);
+      capacitiesBefore.push(...factory.dailyCapacities.map((c) => ({ ...c })));
     }
   }
+  const capacities = capacitiesBefore.map((c) => ({ ...c }));
+
+  const previousScheduled: PreviousScheduledAssignment[] = [];
 
   for (const order of orders) {
     if (order.assignments) {
       const remainingAssignments = [];
       for (const assignment of order.assignments) {
         if (assignment.status === AssignmentStatus.SCHEDULED) {
+          previousScheduled.push({
+            orderId: order.id,
+            factoryId: assignment.factoryId!,
+            productionDate: new Date(assignment.productionDate!),
+            assignedQuantity: assignment.assignedQuantity,
+          });
           const cap = capacities.find(
             (c) =>
               c.factoryId === assignment.factoryId &&
@@ -72,14 +103,19 @@ export async function runSchedule(type: string): Promise<ConflictOrderInfo[]> {
     }
   }
 
+  const algorithm = resolveAlgorithm(algorithmId);
   const currentDate = new Date();
-  const strategyResult = greedyBestFitStrategy(
-    orders,
-    factories,
-    capacities,
-    currentDate,
-  );
-  const processedOrderIds = strategyResult.processedOrders.map((o) => o.id);
+  const strategy = algorithm.run(orders, factories, capacities, currentDate);
+
+  return { strategy, orders, capacitiesBefore, previousScheduled };
+}
+
+export async function runSchedule(
+  type: string,
+  algorithmId?: SchedulingAlgorithmId | string,
+): Promise<ConflictOrderInfo[]> {
+  const { strategy } = await simulateSchedule(type, algorithmId);
+  const processedOrderIds = strategy.processedOrders.map((o) => o.id);
 
   await prisma.$transaction(async (tx) => {
     const db = tx as unknown as PrismaClient;
@@ -88,31 +124,31 @@ export async function runSchedule(type: string): Promise<ConflictOrderInfo[]> {
 
     await bulkUpdateOrderStatus(
       db,
-      strategyResult.processedOrders.map((o) => ({
+      strategy.processedOrders.map((o) => ({
         id: o.id,
         status: o.status,
       })),
     );
 
-    await createDailyCapacities(db, strategyResult.newCapacities);
+    await createDailyCapacities(db, strategy.newCapacities);
 
-    for (const cap of strategyResult.updatedCapacities) {
+    for (const cap of strategy.updatedCapacities) {
       await updateDailyCapacityById(db, cap.id, cap.curCapacity);
     }
 
-    await createAssignments(db, strategyResult.newAssignments);
+    await createAssignments(db, strategy.newAssignments);
   });
 
-  if (strategyResult.conflictOrderIds.length === 0) return [];
+  if (strategy.conflictOrderIds.length === 0) return [];
 
-  return fetchConflictOrders(prisma, strategyResult.conflictOrderIds);
+  return fetchConflictOrders(prisma, strategy.conflictOrderIds);
 }
 
 // ---------------------------------------------------------------------------
 // Conflict helpers
 // ---------------------------------------------------------------------------
 
-async function fetchConflictOrders(
+export async function fetchConflictOrders(
   db: PrismaClient,
   ids: string[],
 ): Promise<ConflictOrderInfo[]> {
