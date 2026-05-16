@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Eye,
   EyeOff,
@@ -42,6 +43,7 @@ async function parseResponse(response: Response): Promise<ApiResult> {
 }
 
 export default function LoginPage() {
+  const router = useRouter();
   const [username, setUsername] = useState("sa-A");
   const [password, setPassword] = useState("Password123!");
   const [showPassword, setShowPassword] = useState(false);
@@ -85,7 +87,7 @@ export default function LoginPage() {
 
       const nextSession = result.body as ClientAuthSession;
       persistClientAuthSession(nextSession);
-      setMessage("Logged in. Bearer token is ready for protected APIs.");
+      router.replace("/visualization");
     } finally {
       setLoading(null);
     }

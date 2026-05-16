@@ -72,9 +72,7 @@ describe("POST /api/schedule/run", () => {
     });
 
     // Default: engine success
-    vi.mocked(scheduleEngine.runSchedule).mockResolvedValue({
-      kickedOutOrders: [],
-    });
+    vi.mocked(scheduleEngine.runSchedule).mockResolvedValue([]);
   });
 
   afterEach(() => {

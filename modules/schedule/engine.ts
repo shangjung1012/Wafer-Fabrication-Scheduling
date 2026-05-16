@@ -17,38 +17,39 @@ import {
   createDailyCapacities,
   updateDailyCapacityById,
 } from "@/infra/db/capacity-repository";
-import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
+import { AssignmentStatus } from "@/lib/generated/prisma";
+import { format } from "date-fns";
 
-export type KickedOutOrder = {
+export type ConflictOrderInfo = {
   id: string;
   name: string;
-  applicantEmail: string;
+  quantity: number;
+  dueDate: string; // YYYY-MM-DD
+  applicantEmail: string | null;
   applicantUsername: string | null;
+  adminEmail: string | null;
+  adminUsername: string | null;
 };
 
-export type RunScheduleResult = {
-  kickedOutOrders: KickedOutOrder[];
-};
+// Compare two dates by their LOCAL calendar day, ignoring timezone offset.
+// Needed because seed records use UTC midnight while the scheduling engine
+// uses local midnight — the same day but different getTime() values.
+function isSameLocalDay(a: Date | string, b: Date | string): boolean {
+  const da = new Date(a);
+  const db = new Date(b);
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  );
+}
 
-type OrderWithApplicant = {
-  id: string;
-  name: string;
-  status: string;
-  applicant?: { email: string; username: string | null } | null;
-};
-
-export async function runSchedule(type: string): Promise<RunScheduleResult> {
+export async function runSchedule(type: string): Promise<ConflictOrderInfo[]> {
   const orders = await findOrdersForScheduling(prisma, type);
   const factories = await findFactoriesWithCapacities(prisma, type);
 
-  // Snapshot orders that were SCHEDULED before this run for kick-out detection
-  const previouslyScheduled = new Map<string, OrderWithApplicant>(
-    (orders as OrderWithApplicant[])
-      .filter((o) => o.status === OrderStatus.SCHEDULED)
-      .map((o) => [o.id, o]),
-  );
-
-  // In-memory reset: restore capacity used by SCHEDULED assignments
+  // In-memory reset: restore capacity used by SCHEDULED assignments.
+  // Uses isSameLocalDay to handle UTC vs local-midnight date mismatches.
   const capacities: SchedulingCapacityInput[] = [];
   for (const factory of factories) {
     if (factory.dailyCapacities) {
@@ -64,8 +65,7 @@ export async function runSchedule(type: string): Promise<RunScheduleResult> {
           const cap = capacities.find(
             (c) =>
               c.factoryId === assignment.factoryId &&
-              new Date(c.date).getTime() ===
-                new Date(assignment.productionDate).getTime(),
+              isSameLocalDay(c.date, assignment.productionDate),
           );
           if (cap) cap.curCapacity += assignment.assignedQuantity;
         } else {
@@ -107,24 +107,38 @@ export async function runSchedule(type: string): Promise<RunScheduleResult> {
     await createAssignments(db, strategyResult.newAssignments);
   });
 
-  // Detect kicked-out orders: were SCHEDULED before, now APPROVED after
-  const kickedOutOrders: KickedOutOrder[] = strategyResult.processedOrders
-    .filter(
-      (o) => previouslyScheduled.has(o.id) && o.status === OrderStatus.APPROVED,
-    )
-    .flatMap((o) => {
-      const src = previouslyScheduled.get(o.id)!;
-      const email = src.applicant?.email;
-      if (!email) return [];
-      return [
-        {
-          id: o.id,
-          name: src.name,
-          applicantEmail: email,
-          applicantUsername: src.applicant?.username ?? null,
-        },
-      ];
-    });
+  if (strategyResult.conflictOrderIds.length === 0) return [];
 
-  return { kickedOutOrders };
+  return fetchConflictOrders(prisma, strategyResult.conflictOrderIds);
+}
+
+// ---------------------------------------------------------------------------
+// Conflict helpers
+// ---------------------------------------------------------------------------
+
+async function fetchConflictOrders(
+  db: PrismaClient,
+  ids: string[],
+): Promise<ConflictOrderInfo[]> {
+  const rows = await db.order.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      name: true,
+      quantity: true,
+      dueDate: true,
+      applicant: { select: { email: true, username: true } },
+      lastModifiedBy: { select: { email: true, username: true } },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    quantity: r.quantity,
+    dueDate: format(r.dueDate, "yyyy-MM-dd"),
+    applicantEmail: r.applicant?.email ?? null,
+    applicantUsername: r.applicant?.username ?? null,
+    adminEmail: r.lastModifiedBy?.email ?? null,
+    adminUsername: r.lastModifiedBy?.username ?? null,
+  }));
 }
