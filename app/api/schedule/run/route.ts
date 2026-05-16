@@ -78,34 +78,50 @@ export async function POST(request: Request) {
     }
 
     try {
-      const result = await runSchedule(type);
+      const conflicts = await runSchedule(type);
+      let emailsSent = false;
+      let emailFailures = 0;
 
       // Auto-send mode: fire emails immediately without admin confirmation
-      const autoSend = process.env.KICK_OUT_EMAIL_AUTO_SEND === "true";
-      if (autoSend && result.kickedOutOrders.length > 0) {
-        const emailResults = await Promise.allSettled(
-          result.kickedOutOrders.map((o) =>
-            renderAndSend(kickOutTemplate, {
-              orderName: o.name,
-              applicantEmail: o.applicantEmail,
-              applicantUsername: o.applicantUsername,
-            }),
-          ),
-        );
-        emailResults.forEach((r, i) => {
-          if (r.status === "rejected") {
-            console.error(
-              `Kick-out email failed for order ${result.kickedOutOrders[i].id}:`,
-              r.reason,
+      const autoSend = process.env.CONFLICT_EMAIL_AUTO_SEND === "true";
+      if (autoSend && conflicts.length > 0) {
+        const emailJobs = conflicts.flatMap((o) => {
+          const jobs = [];
+          if (o.applicantEmail) {
+            jobs.push(
+              renderAndSend(kickOutTemplate, {
+                orderName: o.name,
+                applicantEmail: o.applicantEmail,
+                applicantUsername: o.applicantUsername,
+              }),
             );
           }
+          if (o.adminEmail) {
+            jobs.push(
+              renderAndSend(kickOutTemplate, {
+                orderName: o.name,
+                applicantEmail: o.adminEmail,
+                applicantUsername: o.adminUsername,
+              }),
+            );
+          }
+          return jobs;
         });
+        const emailResults = await Promise.allSettled(emailJobs);
+        emailResults.forEach((r, i) => {
+          if (r.status === "rejected") {
+            console.error(`Conflict email failed (job ${i}):`, r.reason);
+            emailFailures += 1;
+          }
+        });
+        emailsSent = emailJobs.length > 0 && emailFailures === 0;
       }
 
       return NextResponse.json({
         message: "Schedule run successfully",
-        kickedOutOrders: result.kickedOutOrders,
-        emailsSent: autoSend,
+        conflicts,
+        emailsSent,
+        emailFailures,
       });
     } finally {
       // Always release the lock when done

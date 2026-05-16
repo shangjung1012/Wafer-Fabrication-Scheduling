@@ -64,6 +64,7 @@ export interface StrategyResult {
   newAssignments: OrderAssignmentDraft[];
   updatedCapacities: ExistingCapacityDraft[];
   newCapacities: CapacityDraft[];
+  conflictOrderIds: string[];
 }
 
 // Helper to get YYYY-MM-DD string robustly
@@ -86,6 +87,7 @@ export function greedyBestFitStrategy(
     newAssignments: [],
     updatedCapacities: [],
     newCapacities: [],
+    conflictOrderIds: [],
   };
 
   // 1. Sort orders: dueDate (asc) > quantity (desc) > createdAt (asc)
@@ -250,6 +252,22 @@ export function greedyBestFitStrategy(
         }
       }
 
+      // Detect true conflict: after restoring capacity, check if the total
+      // remaining capacity in the window (across all factories and dates)
+      // is still insufficient for this order. If so, no future scheduling
+      // run can help — higher-priority orders will always claim the same slots.
+      if (startingRemainingQty > 0) {
+        const totalAvailable = computeTotalAvailableCapacity(
+          windowStart,
+          windowEnd,
+          factories,
+          capacityMap,
+        );
+        if (totalAvailable < startingRemainingQty) {
+          result.conflictOrderIds.push(order.id);
+        }
+      }
+
       let finalStatus = order.status;
       if (
         order.status !== OrderStatus.IN_PRODUCTION &&
@@ -275,4 +293,31 @@ export function greedyBestFitStrategy(
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// Sum available capacity across all factories for every date in [windowStart, windowEnd].
+// Called after a rollback to determine if the shortage is permanent (true conflict)
+// or temporary (higher-priority orders consumed capacity that may shift in a future run).
+// Dates with no capacity record in the map are treated as fully available (maxCapacity).
+function computeTotalAvailableCapacity(
+  windowStart: Date,
+  windowEnd: Date,
+  factories: SchedulingFactoryInput[],
+  capacityMap: Map<string, CapacityDraft>,
+): number {
+  let total = 0;
+  const iter = new Date(windowStart);
+  while (iter.getTime() <= windowEnd.getTime()) {
+    const dateKey = toDateString(iter);
+    for (const factory of factories) {
+      const cap = capacityMap.get(`${factory.id}_${dateKey}`);
+      total += cap ? Math.max(0, cap.curCapacity) : factory.maxCapacity;
+    }
+    iter.setDate(iter.getDate() + 1);
+  }
+  return total;
 }

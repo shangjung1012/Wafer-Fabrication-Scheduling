@@ -63,8 +63,20 @@ describe("Schedule Engine", () => {
 
     const mockStrategyResult = {
       processedOrders: [
-        { id: "O1", status: OrderStatus.SCHEDULED },
-        { id: "O2", status: OrderStatus.APPROVED },
+        {
+          id: "O1",
+          status: OrderStatus.SCHEDULED,
+          dueDate: new Date(),
+          quantity: 100,
+          createdAt: new Date(),
+        },
+        {
+          id: "O2",
+          status: OrderStatus.APPROVED,
+          dueDate: new Date(),
+          quantity: 50,
+          createdAt: new Date(),
+        },
       ],
       newAssignments: [
         {
@@ -92,6 +104,7 @@ describe("Schedule Engine", () => {
           curCapacity: 100,
         },
       ],
+      conflictOrderIds: [],
     };
     vi.mocked(greedyBestFitStrategy).mockReturnValue(mockStrategyResult);
 
@@ -155,6 +168,7 @@ describe("Schedule Engine", () => {
       newAssignments: [],
       updatedCapacities: [],
       newCapacities: [],
+      conflictOrderIds: [],
     });
 
     await runSchedule("Type B");

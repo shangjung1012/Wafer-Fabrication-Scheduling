@@ -50,10 +50,28 @@ export type DiffEntry = {
   reason: string;
 };
 
+export type OrderRisk = "ON_TRACK" | "AT_RISK" | "OVERDUE";
+
+export type PendingOrderInfo = {
+  id: string;
+  name: string;
+  status: "PENDING" | "APPROVED";
+  quantity: number;
+  dueDate: string; // YYYY-MM-DD
+  createdAt: string; // YYYY-MM-DD
+  risk: OrderRisk;
+};
+
+export type SalesContext = {
+  myOrderIds: string[];
+  pendingOrders: PendingOrderInfo[];
+};
+
 export type TimelineResponse = {
   factories: FactoryInfo[];
   timeline: TimelineItem[];
   conflicts: ConflictInfo[];
   dailyCapacities: DailyCapacityInfo[];
   diffs: DiffEntry[];
+  salesContext?: SalesContext;
 };

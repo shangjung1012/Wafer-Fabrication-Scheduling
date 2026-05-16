@@ -8,9 +8,19 @@
  *   - 9 Factory    (3 per type, maxCapacity: 1000)
  *   - 9 ADMIN      (one per factory)
  *   - 3 SALES      (one per type)
- *   - 12 Order     (spread across types, various statuses)
- *   - 22 OrderAssignment (with capacity & due-date conflict scenarios)
- *   - 18 DailyCapacity   (computed from assignments)
+ *   - 13 Order     (spread across types, various statuses)
+ *   - 25 OrderAssignment
+ *   - 21 DailyCapacity   (computed from assignments)
+ *
+ * Type A is pre-configured for conflict_testcase.md Case 4:
+ *   - factory-A1 2026-05-17: 900 IN_PRODUCTION → only 100 free
+ *   - factory-A2 2026-05-17: 1000 IN_PRODUCTION → 0 free
+ *   - factory-A3 2026-05-17: 1000 IN_PRODUCTION → 0 free
+ *   - ord-seed-013 (Wafer-CF4-Base): APPROVED, qty=80, dueDate=May 17
+ *     → on schedule run, takes the 100 free slots on A1, leaves 20
+ *   - ord-seed-016 (Wafer-CF4-New):  PENDING,  qty=30, dueDate=May 17
+ *     → admin approves it, then a single schedule run produces the conflict
+ *       (20 remaining < 30 required → CONFLICT)
  *
  * All records use stable IDs so the seed is idempotent (safe to re-run).
  */
@@ -153,13 +163,13 @@ function buildOrders(): SeedOrder[] {
       applicantId: "sales-A",
       status: "COMPLETED",
     },
-    // ord-seed-002: split across A1 + A2, still scheduled
+    // ord-seed-002: split across A1 + A2, scheduled for June
     {
       id: "ord-seed-002",
       name: "Wafer-Beta",
       type: "A",
       quantity: 800,
-      dueDate: d("2026-05-17"),
+      dueDate: d("2026-06-15"),
       applicantId: "sales-A",
       status: "SCHEDULED",
     },
@@ -173,25 +183,36 @@ function buildOrders(): SeedOrder[] {
       applicantId: "sales-A",
       status: "IN_PRODUCTION",
     },
-    // ord-seed-004: dueDate conflict — production on 5/13 but dueDate 5/12
+    // ord-seed-004: scheduled for June (moved from past conflict scenario)
     {
       id: "ord-seed-004",
       name: "Wafer-Delta",
       type: "A",
       quantity: 350,
-      dueDate: d("2026-05-12"),
+      dueDate: d("2026-06-20"),
       applicantId: "sales-A",
       status: "SCHEDULED",
     },
-    // ord-seed-005: normal, split across A1 + A3
+    // ord-seed-005: scheduled for late June
     {
       id: "ord-seed-005",
       name: "Wafer-Eta",
       type: "A",
       quantity: 800,
-      dueDate: d("2026-05-20"),
+      dueDate: d("2026-06-25"),
       applicantId: "sales-A",
       status: "SCHEDULED",
+    },
+    // ord-seed-cf4: locks factory-A1(900) + A2(1000) + A3(1000) on May 17
+    // IN_PRODUCTION so its assignments are never freed by the scheduler
+    {
+      id: "ord-seed-cf4",
+      name: "Wafer-CF4-Lock",
+      type: "A",
+      quantity: 2900,
+      dueDate: d("2026-05-25"),
+      applicantId: "sales-A",
+      status: "IN_PRODUCTION",
     },
 
     // --- Type B ---
@@ -269,12 +290,14 @@ function buildOrders(): SeedOrder[] {
     },
 
     // --- APPROVED (no assignments — ready for schedule engine) ---
+    // Case 4 base order: on schedule run, takes the 100 free slots on
+    // factory-A1 May 17 (80 used, 20 remaining).
     {
       id: "ord-seed-013",
-      name: "Wafer-Pending-A",
+      name: "Wafer-CF4-Base",
       type: "A",
-      quantity: 500,
-      dueDate: d("2026-06-10"),
+      quantity: 80,
+      dueDate: d("2026-05-17"),
       applicantId: "sales-A",
       status: "APPROVED",
     },
@@ -295,6 +318,21 @@ function buildOrders(): SeedOrder[] {
       dueDate: d("2026-06-12"),
       applicantId: "sales-C",
       status: "APPROVED",
+    },
+
+    // --- PENDING (awaiting admin approval) ---
+    // Case 4 trigger order: same dueDate as ord-seed-013 but lower quantity,
+    // so it gets lower priority. After ord-seed-013 takes 80 of the 100 free
+    // slots on factory-A1 May 17, only 20 remain — this 30-qty order cannot
+    // fit, triggering a true conflict (window total 20 < required 30).
+    {
+      id: "ord-seed-016",
+      name: "Wafer-CF4-New",
+      type: "A",
+      quantity: 30,
+      dueDate: d("2026-05-17"),
+      applicantId: "sales-A",
+      status: "PENDING",
     },
   ];
 }
@@ -381,6 +419,37 @@ function buildAssignments(): SeedAssignment[] {
       productionDate: d("2026-05-19"),
       assignedQuantity: 400,
       status: "SCHEDULED",
+    },
+
+    // -----------------------------------------------------------------------
+    // Case 4 capacity locks — IN_PRODUCTION on 2026-05-17
+    // factory-A1: 900/1000 locked → 100 free (ord-seed-013 will use 80)
+    // factory-A2: 1000/1000 locked → 0 free
+    // factory-A3: 1000/1000 locked → 0 free
+    // -----------------------------------------------------------------------
+    {
+      id: "asgn-cf4-01",
+      orderId: "ord-seed-cf4",
+      factoryId: "factory-A1",
+      productionDate: d("2026-05-17"),
+      assignedQuantity: 900,
+      status: "IN_PRODUCTION",
+    },
+    {
+      id: "asgn-cf4-02",
+      orderId: "ord-seed-cf4",
+      factoryId: "factory-A2",
+      productionDate: d("2026-05-17"),
+      assignedQuantity: 1000,
+      status: "IN_PRODUCTION",
+    },
+    {
+      id: "asgn-cf4-03",
+      orderId: "ord-seed-cf4",
+      factoryId: "factory-A3",
+      productionDate: d("2026-05-17"),
+      assignedQuantity: 1000,
+      status: "IN_PRODUCTION",
     },
 
     // -----------------------------------------------------------------------
@@ -691,29 +760,25 @@ async function main() {
   console.log("");
   console.log("✅ Seed complete.");
   console.log("");
-  console.log("Conflict scenarios seeded:");
+  console.log("Case 4 conflict demo (Type A):");
+  console.log("  factory-A1 2026-05-17: 900 IN_PRODUCTION → 100 free");
+  console.log("  factory-A2 2026-05-17: 1000 IN_PRODUCTION → 0 free");
+  console.log("  factory-A3 2026-05-17: 1000 IN_PRODUCTION → 0 free");
   console.log(
-    "  CAPACITY  factory-A1  2026-05-13  (400+350+350 = 1100 > 1000)",
+    "  ord-seed-013 Wafer-CF4-Base  APPROVED  qty=80  due 2026-05-17",
   );
   console.log(
-    "  DUE_DATE  ord-seed-004 Wafer-Delta  production 5/13 > dueDate 5/12",
-  );
-  console.log(
-    "  CAPACITY  factory-B1  2026-05-15  (400+350+300 = 1050 > 1000)",
-  );
-  console.log(
-    "  DUE_DATE  ord-seed-007 B-Lot-02    production 5/15 > dueDate 5/14",
+    "  ord-seed-016 Wafer-CF4-New   PENDING   qty=30  due 2026-05-17",
   );
   console.log("");
-  console.log("APPROVED orders (ready for schedule engine):");
+  console.log("Steps to trigger conflict:");
+  console.log("  1. admin-A1 approves ord-seed-016 (Wafer-CF4-New) → APPROVED");
+  console.log("  2. admin-A1 runs schedule:");
   console.log(
-    "  ord-seed-013  Wafer-Pending-A  type A  qty 500  due 2026-06-10",
+    "       - Wafer-CF4-Base (qty 80, higher priority) scheduled on A1 → 20 left",
   );
   console.log(
-    "  ord-seed-014  B-Pending-01     type B  qty 400  due 2026-06-08",
-  );
-  console.log(
-    "  ord-seed-015  C-Pending-01     type C  qty 700  due 2026-06-12",
+    "       - Wafer-CF4-New  (qty 30) cannot fit (window total 20 < 30) → CONFLICT",
   );
   console.log("");
   console.log("Login examples:");

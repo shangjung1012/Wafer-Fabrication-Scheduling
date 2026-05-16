@@ -19,7 +19,6 @@ import { ForbiddenError } from "@/modules/auth/rbac";
 export type SalesScope = {
   role: "SALES";
   userId: string;
-  group: string;
 };
 
 export type AdminScope = {
@@ -43,6 +42,11 @@ export type ActorScope = SalesScope | AdminScope | SuperAdminScope;
  * Avoids role-branching in service code — use this instead of scope.group / scope.productionType.
  */
 export function getScopeGroup(scope: ActorScope): string {
+  if (scope.role === "SALES") {
+    throw new ForbiddenError(
+      "SALES users do not have a production type group.",
+    );
+  }
   return scope.group;
 }
 
@@ -53,7 +57,7 @@ export function getScopeGroup(scope: ActorScope): string {
 /**
  * Resolves the caller's data-access scope by looking up their DB record.
  *
- * - SALES      → { userId, group }
+ * - SALES      → { userId }  (no group — order access is applicantId-based)
  * - ADMIN      → { userId, factoryIds, productionType }  (via _FactoryAdmins N-to-N)
  * - SUPERADMIN → { userId, group }
  *
@@ -66,16 +70,7 @@ export async function resolveActorScope(
 ): Promise<ActorScope> {
   switch (ctx.user.role) {
     case "SALES": {
-      const user = await db.user.findUnique({
-        where: { id: ctx.user.id },
-        select: { group: true },
-      });
-      if (!user?.group) {
-        throw new ForbiddenError(
-          "Your account does not have a production type assigned.",
-        );
-      }
-      return { role: "SALES", userId: ctx.user.id, group: user.group };
+      return { role: "SALES", userId: ctx.user.id };
     }
 
     case "ADMIN": {

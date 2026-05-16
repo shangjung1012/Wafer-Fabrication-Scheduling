@@ -11,8 +11,6 @@ import * as capacityRepo from "@/infra/db/capacity-repository";
 // Mocks
 // ------------------------------------------------------------------
 
-const mockTx = {};
-
 vi.mock("@/lib/generated/prisma", () => ({
   AssignmentStatus: {
     SCHEDULED: "SCHEDULED",
@@ -32,7 +30,14 @@ vi.mock("@/lib/generated/prisma", () => ({
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    $transaction: vi.fn(async (cb) => cb(mockTx)),
+    $transaction: vi.fn(async (cb) =>
+      cb({
+        order: { findMany: vi.fn() },
+      }),
+    ),
+    order: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -68,15 +73,28 @@ const emptyStrategyResult = {
   newAssignments: [],
   updatedCapacities: [],
   newCapacities: [],
+  conflictOrderIds: [],
 };
 
 function makeOrder(overrides: object) {
   return {
     id: "O1",
     name: "Test Order",
-    status: "SCHEDULED",
+    status: "APPROVED",
     assignments: [],
     applicant: { email: "sales@example.com", username: "salesperson" },
+    ...overrides,
+  };
+}
+
+function makeDbRow(overrides: object) {
+  return {
+    id: "O1",
+    name: "Test Order",
+    quantity: 100,
+    dueDate: new Date("2026-06-01"),
+    applicant: { email: "sales@example.com", username: "salesperson" },
+    lastModifiedBy: { email: "admin@example.com", username: "admin1" },
     ...overrides,
   };
 }
@@ -85,7 +103,7 @@ function makeOrder(overrides: object) {
 // Tests
 // ------------------------------------------------------------------
 
-describe("runSchedule — kicked-out detection", () => {
+describe("runSchedule — conflict detection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(factoryRepo.findFactoriesWithCapacities).mockResolvedValue([]);
@@ -104,129 +122,125 @@ describe("runSchedule — kicked-out detection", () => {
     vi.mocked(capacityRepo.updateDailyCapacityById).mockResolvedValue(
       undefined as never,
     );
+    vi.mocked(prisma.order.findMany).mockResolvedValue([]);
   });
 
-  it("returns empty kickedOutOrders when no orders change from SCHEDULED to APPROVED", async () => {
-    const order = makeOrder({ status: "SCHEDULED" });
+  it("returns empty array when strategy reports no conflicts", async () => {
     vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue([
-      order,
+      makeOrder({}),
     ] as never);
     vi.mocked(greedyBestFitStrategy).mockReturnValue({
       ...emptyStrategyResult,
-      // Order stays SCHEDULED — not kicked out
-      processedOrders: [{ id: "O1", status: "SCHEDULED" }],
+      conflictOrderIds: [],
     });
 
     const result = await runSchedule("A");
 
-    expect(result.kickedOutOrders).toEqual([]);
+    expect(result).toEqual([]);
+    expect(prisma.order.findMany).not.toHaveBeenCalled();
   });
 
-  it("returns kicked-out order when SCHEDULED order becomes APPROVED", async () => {
-    const order = makeOrder({ status: "SCHEDULED" });
+  it("returns ConflictOrderInfo with email fields when strategy reports conflicts", async () => {
     vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue([
-      order,
+      makeOrder({ id: "O1" }),
     ] as never);
     vi.mocked(greedyBestFitStrategy).mockReturnValue({
       ...emptyStrategyResult,
-      // Order demoted back to APPROVED — kicked out
-      processedOrders: [{ id: "O1", status: "APPROVED" }],
+      conflictOrderIds: ["O1"],
     });
+    vi.mocked(prisma.order.findMany).mockResolvedValue([
+      makeDbRow({ id: "O1" }),
+    ] as never);
 
     const result = await runSchedule("A");
 
-    expect(result.kickedOutOrders).toHaveLength(1);
-    expect(result.kickedOutOrders[0]).toMatchObject({
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
       id: "O1",
       name: "Test Order",
+      quantity: 100,
       applicantEmail: "sales@example.com",
       applicantUsername: "salesperson",
+      adminEmail: "admin@example.com",
+      adminUsername: "admin1",
     });
   });
 
-  it("does not include APPROVED orders that were already APPROVED before the run", async () => {
-    // This order starts as APPROVED (not SCHEDULED) — it failed to schedule but was never in
-    const order = makeOrder({ status: "APPROVED" });
+  it("formats dueDate as YYYY-MM-DD string", async () => {
     vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue([
-      order,
+      makeOrder({}),
     ] as never);
     vi.mocked(greedyBestFitStrategy).mockReturnValue({
       ...emptyStrategyResult,
-      processedOrders: [{ id: "O1", status: "APPROVED" }],
+      conflictOrderIds: ["O1"],
     });
+    vi.mocked(prisma.order.findMany).mockResolvedValue([
+      makeDbRow({ dueDate: new Date("2026-06-15") }),
+    ] as never);
 
     const result = await runSchedule("A");
 
-    expect(result.kickedOutOrders).toEqual([]);
+    expect(result[0].dueDate).toBe("2026-06-15");
   });
 
-  it("does not include IN_PRODUCTION orders that stay in APPROVED (edge case — should never happen)", async () => {
-    const order = makeOrder({ status: "IN_PRODUCTION" });
+  it("returns null adminEmail when order has no lastModifiedBy", async () => {
     vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue([
-      order,
+      makeOrder({}),
     ] as never);
     vi.mocked(greedyBestFitStrategy).mockReturnValue({
       ...emptyStrategyResult,
-      processedOrders: [{ id: "O1", status: "IN_PRODUCTION" }],
+      conflictOrderIds: ["O1"],
     });
+    vi.mocked(prisma.order.findMany).mockResolvedValue([
+      makeDbRow({ lastModifiedBy: null }),
+    ] as never);
 
     const result = await runSchedule("A");
 
-    expect(result.kickedOutOrders).toEqual([]);
+    expect(result[0].adminEmail).toBeNull();
+    expect(result[0].adminUsername).toBeNull();
   });
 
-  it("handles multiple orders and correctly identifies only the kicked-out ones", async () => {
-    const orders = [
-      makeOrder({
-        id: "O1",
-        name: "Stays Scheduled",
-        status: "SCHEDULED",
-        applicant: { email: "a@e.com", username: "a" },
-      }),
-      makeOrder({
-        id: "O2",
-        name: "Kicked Out",
-        status: "SCHEDULED",
-        applicant: { email: "b@e.com", username: "b" },
-      }),
-      makeOrder({
-        id: "O3",
-        name: "Was Approved",
-        status: "APPROVED",
-        applicant: { email: "c@e.com", username: "c" },
-      }),
-    ];
-    vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue(
-      orders as never,
+  it("handles multiple conflict orders correctly", async () => {
+    vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue([
+      makeOrder({ id: "O1" }),
+      makeOrder({ id: "O2" }),
+    ] as never);
+    vi.mocked(greedyBestFitStrategy).mockReturnValue({
+      ...emptyStrategyResult,
+      conflictOrderIds: ["O1", "O2"],
+    });
+    vi.mocked(prisma.order.findMany).mockResolvedValue([
+      makeDbRow({ id: "O1" }),
+      makeDbRow({ id: "O2" }),
+    ] as never);
+
+    const result = await runSchedule("A");
+
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.id)).toEqual(
+      expect.arrayContaining(["O1", "O2"]),
     );
-    vi.mocked(greedyBestFitStrategy).mockReturnValue({
-      ...emptyStrategyResult,
-      processedOrders: [
-        { id: "O1", status: "SCHEDULED" },
-        { id: "O2", status: "APPROVED" }, // kicked out
-        { id: "O3", status: "APPROVED" }, // was already APPROVED — not kicked out
-      ],
-    });
-
-    const result = await runSchedule("A");
-
-    expect(result.kickedOutOrders).toHaveLength(1);
-    expect(result.kickedOutOrders[0].id).toBe("O2");
-    expect(result.kickedOutOrders[0].applicantEmail).toBe("b@e.com");
   });
 
-  it("skips kicked-out orders where applicant has no email", async () => {
-    const order = makeOrder({ status: "SCHEDULED", applicant: null });
+  it("queries only the conflict order IDs from the database", async () => {
     vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue([
-      order,
+      makeOrder({}),
     ] as never);
     vi.mocked(greedyBestFitStrategy).mockReturnValue({
       ...emptyStrategyResult,
-      processedOrders: [{ id: "O1", status: "APPROVED" }],
+      conflictOrderIds: ["O1"],
     });
+    vi.mocked(prisma.order.findMany).mockResolvedValue([
+      makeDbRow({}),
+    ] as never);
 
-    const result = await runSchedule("A");
+    await runSchedule("A");
 
-    expect(result.kickedOutOrders).toEqual([]);
+    expect(prisma.order.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ["O1"] } },
+      }),
+    );
   });
 });

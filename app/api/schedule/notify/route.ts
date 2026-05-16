@@ -8,17 +8,19 @@ import { z } from "zod";
 import { renderAndSend } from "@/modules/mail/mail-template";
 import { kickOutTemplate } from "@/modules/mail/templates/kick-out";
 
-const KickedOutOrderSchema = z.object({
+const ConflictOrderSchema = z.object({
   id: z.string(),
   name: z.string(),
-  applicantEmail: z.string().email(),
+  quantity: z.number().optional(),
+  dueDate: z.string().optional(),
+  applicantEmail: z.string().email().nullable(),
   applicantUsername: z.string().nullable(),
+  adminEmail: z.string().email().nullable().optional(),
+  adminUsername: z.string().nullable().optional(),
 });
 
 const NotifySchema = z.object({
-  orders: z
-    .array(KickedOutOrderSchema)
-    .min(1, "At least one order is required"),
+  orders: z.array(ConflictOrderSchema).min(1, "At least one order is required"),
 });
 
 export async function POST(request: Request) {
@@ -50,25 +52,60 @@ export async function POST(request: Request) {
     const sent: string[] = [];
     const failed: string[] = [];
 
-    const results = await Promise.allSettled(
-      orders.map((o) =>
-        renderAndSend(kickOutTemplate, {
+    // Build one email job per recipient (applicant + admin) per order
+    type EmailJob = {
+      orderId: string;
+      email: string;
+      username: string | null;
+      orderName: string;
+    };
+    const emailJobs: EmailJob[] = orders.flatMap((o) => {
+      const jobs: EmailJob[] = [];
+      if (o.applicantEmail) {
+        jobs.push({
+          orderId: o.id,
+          email: o.applicantEmail,
+          username: o.applicantUsername,
           orderName: o.name,
-          applicantEmail: o.applicantEmail,
-          applicantUsername: o.applicantUsername,
+        });
+      }
+      if (o.adminEmail) {
+        jobs.push({
+          orderId: o.id,
+          email: o.adminEmail,
+          username: o.adminUsername ?? null,
+          orderName: o.name,
+        });
+      }
+      return jobs;
+    });
+
+    const results = await Promise.allSettled(
+      emailJobs.map((j) =>
+        renderAndSend(kickOutTemplate, {
+          orderName: j.orderName,
+          applicantEmail: j.email,
+          applicantUsername: j.username,
         }),
       ),
     );
 
+    const orderFailedSet = new Set<string>();
     results.forEach((result, i) => {
-      if (result.status === "fulfilled") {
-        sent.push(orders[i].id);
-      } else {
+      if (result.status === "rejected") {
         console.error(
-          `Kick-out email failed for order ${orders[i].id}:`,
+          `Conflict email failed for order ${emailJobs[i].orderId} → ${emailJobs[i].email}:`,
           result.reason,
         );
-        failed.push(orders[i].id);
+        orderFailedSet.add(emailJobs[i].orderId);
+      }
+    });
+
+    orders.forEach((o) => {
+      if (orderFailedSet.has(o.id)) {
+        failed.push(o.id);
+      } else if (emailJobs.some((j) => j.orderId === o.id)) {
+        sent.push(o.id);
       }
     });
 
@@ -87,7 +124,7 @@ export async function POST(request: Request) {
       );
     }
 
-    console.error("Error sending kick-out notifications:", error);
+    console.error("Error sending conflict notifications:", error);
     return NextResponse.json(
       {
         code: "INTERNAL_SERVER_ERROR",
