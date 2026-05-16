@@ -43,6 +43,9 @@ export interface SchedulingOrderInput {
   quantity: number;
   createdAt: Date;
   assignments?: SchedulingAssignmentInput[];
+  name?: string;
+  applicantEmail?: string;
+  applicantUsername?: string | null;
 }
 
 export interface SchedulingFactoryInput {

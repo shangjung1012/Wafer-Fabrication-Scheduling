@@ -619,6 +619,18 @@ const DEFAULT_END = "2026-05-23";
 
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
+type NotifyStatus = "idle" | "sending" | "sent" | "error";
+
+type ConflictOrderInfo = {
+  id: string;
+  name: string;
+  quantity: number;
+  dueDate: string;
+  applicantEmail: string | null;
+  applicantUsername: string | null;
+  adminEmail: string | null;
+  adminUsername: string | null;
+};
 
 type AssignmentMove = {
   factoryId: string;
@@ -643,8 +655,10 @@ export default function SchedulePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>("idle");
   const [scheduleConflicts, setScheduleConflicts] = useState<
-    { id: string; name: string; quantity: number; dueDate: string }[]
+    ConflictOrderInfo[]
   >([]);
+  const [emailsAutoSent, setEmailsAutoSent] = useState(false);
+  const [notifyStatus, setNotifyStatus] = useState<NotifyStatus>("idle");
 
   // Algorithm selector + preview state
   const [algorithms, setAlgorithms] = useState<AlgorithmInfo[]>([]);
@@ -716,6 +730,8 @@ export default function SchedulePage() {
     const algorithm = algorithmOverride ?? selectedAlgorithm;
     setScheduleStatus("running");
     setScheduleConflicts([]);
+    setEmailsAutoSent(false);
+    setNotifyStatus("idle");
     try {
       const res = await fetch("/api/schedule/run", {
         method: "POST",
@@ -729,6 +745,7 @@ export default function SchedulePage() {
         setScheduleStatus("conflict");
       } else if (res.ok) {
         const body = await res.json().catch(() => ({}));
+        setEmailsAutoSent(body.emailsSent === true);
         if (Array.isArray(body.conflicts) && body.conflicts.length > 0) {
           setScheduleConflicts(body.conflicts);
           setScheduleStatus("idle");
@@ -903,6 +920,30 @@ export default function SchedulePage() {
       }
       return next;
     });
+  };
+
+  // Manual notify handler (preview mode)
+  const handleSendNotifications = async () => {
+    if (scheduleConflicts.length === 0) return;
+    setNotifyStatus("sending");
+    try {
+      const res = await fetch("/api/schedule/notify", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orders: scheduleConflicts }),
+      });
+      if (res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const failedCount = Array.isArray(body.failed) ? body.failed.length : 0;
+        const sentCount = Array.isArray(body.sent) ? body.sent.length : 0;
+        setNotifyStatus(failedCount === 0 && sentCount > 0 ? "sent" : "error");
+      } else {
+        setNotifyStatus("error");
+      }
+    } catch {
+      setNotifyStatus("error");
+    }
   };
 
   const handleLogout = async () => {
@@ -1179,6 +1220,12 @@ export default function SchedulePage() {
           >
             Users
           </a>
+          <a
+            href="/profile"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Profile
+          </a>
         </nav>
 
         <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
@@ -1424,28 +1471,86 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* Scheduling conflict banner */}
+      {/* Scheduling conflict notification panel */}
       {scheduleConflicts.length > 0 && (
-        <div className="flex-none px-6 py-2 bg-red-50 border-b border-red-200 flex items-start justify-between gap-4">
-          <div className="flex items-start gap-2 text-xs text-red-700">
-            <span className="font-semibold shrink-0">⚠ 排程衝突</span>
-            <span>
-              以下訂單因交期視窗內產能已滿，無法完成排程，管理員與申請人已收到通知：
-              <span className="font-medium ml-1">
-                {scheduleConflicts
-                  .map(
-                    (o) => `${o.name}（qty ${o.quantity}，due ${o.dueDate}）`,
-                  )
-                  .join("、")}
+        <div
+          className={`flex-none px-6 py-3 border-b text-xs ${
+            emailsAutoSent || notifyStatus === "sent"
+              ? "bg-green-50 border-green-200"
+              : "bg-amber-50 border-amber-200"
+          }`}
+        >
+          {emailsAutoSent || notifyStatus === "sent" ? (
+            <div className="flex items-center justify-between">
+              <span className="text-green-700 font-medium">
+                Notification emails sent for {scheduleConflicts.length} order(s)
+                that could not be scheduled.
               </span>
-            </span>
-          </div>
-          <button
-            onClick={() => setScheduleConflicts([])}
-            className="text-red-400 hover:text-red-600 text-xs shrink-0"
-          >
-            ✕
-          </button>
+              <button
+                type="button"
+                onClick={() => setScheduleConflicts([])}
+                className="text-green-400 hover:text-green-600 shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-amber-800 font-semibold">
+                    {scheduleConflicts.length} order(s) could not be scheduled:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleSendNotifications}
+                    disabled={notifyStatus === "sending"}
+                    className={`px-2.5 py-1 rounded border font-medium transition-colors ${
+                      notifyStatus === "sending"
+                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                        : "bg-amber-700 text-white border-amber-700 hover:bg-amber-800"
+                    }`}
+                  >
+                    {notifyStatus === "sending"
+                      ? "Sending…"
+                      : "Send notifications"}
+                  </button>
+                  {notifyStatus === "error" && (
+                    <span className="text-red-600 font-medium">
+                      Some emails failed — check server logs.
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScheduleConflicts([])}
+                  className="text-amber-400 hover:text-amber-600 shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-amber-700">
+                {scheduleConflicts.map((o) => (
+                  <li key={o.id}>
+                    <span className="font-medium">{o.name}</span>
+                    {" — qty "}
+                    <span>{o.quantity}</span>
+                    {", due "}
+                    <span>{o.dueDate}</span>
+                    {o.applicantEmail && (
+                      <>
+                        {" ("}
+                        <span className="text-amber-600">
+                          {o.applicantEmail}
+                        </span>
+                        {")"}
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

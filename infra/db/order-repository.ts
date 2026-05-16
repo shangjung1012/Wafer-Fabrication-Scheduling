@@ -196,6 +196,7 @@ export async function findOrdersForScheduling(db: PrismaClient, type: string) {
     },
     include: {
       assignments: true,
+      applicant: { select: { email: true, username: true } },
     },
   });
 }

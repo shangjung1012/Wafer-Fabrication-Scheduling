@@ -30,6 +30,10 @@ export type ConflictOrderInfo = {
   name: string;
   quantity: number;
   dueDate: string; // YYYY-MM-DD
+  applicantEmail: string | null;
+  applicantUsername: string | null;
+  adminEmail: string | null;
+  adminUsername: string | null;
 };
 
 // Compare two dates by their LOCAL calendar day, ignoring timezone offset.
@@ -154,12 +158,23 @@ export async function fetchConflictOrders(
 ): Promise<ConflictOrderInfo[]> {
   const rows = await db.order.findMany({
     where: { id: { in: ids } },
-    select: { id: true, name: true, quantity: true, dueDate: true },
+    select: {
+      id: true,
+      name: true,
+      quantity: true,
+      dueDate: true,
+      applicant: { select: { email: true, username: true } },
+      lastModifiedBy: { select: { email: true, username: true } },
+    },
   });
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     quantity: r.quantity,
     dueDate: format(r.dueDate, "yyyy-MM-dd"),
+    applicantEmail: r.applicant?.email ?? null,
+    applicantUsername: r.applicant?.username ?? null,
+    adminEmail: r.lastModifiedBy?.email ?? null,
+    adminUsername: r.lastModifiedBy?.username ?? null,
   }));
 }
