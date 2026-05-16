@@ -14,6 +14,7 @@ export type FactoryInfo = {
 };
 
 export type TimelineItem = {
+  assignmentId: string;
   orderId: string;
   orderName: string;
   factoryId: string;
@@ -74,4 +75,25 @@ export type TimelineResponse = {
   dailyCapacities: DailyCapacityInfo[];
   diffs: DiffEntry[];
   salesContext?: SalesContext;
+};
+
+export type SchedulePreviewResponse = {
+  algorithm: string;
+  factories: FactoryInfo[];
+  timeline: TimelineItem[];
+  dailyCapacities: DailyCapacityInfo[];
+  conflicts: ConflictInfo[];
+  diffs: DiffEntry[];
+  unscheduledOrders: {
+    id: string;
+    name: string;
+    quantity: number;
+    dueDate: string;
+  }[];
+};
+
+export type AlgorithmInfo = {
+  id: string;
+  label: string;
+  description: string;
 };
