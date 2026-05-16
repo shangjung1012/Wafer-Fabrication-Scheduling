@@ -29,3 +29,30 @@ export async function createAssignments(
   if (assignments.length === 0) return;
   await db.orderAssignment.createMany({ data: assignments });
 }
+
+export async function findAssignmentsByIds(db: PrismaClient, ids: string[]) {
+  if (ids.length === 0) return [];
+  return db.orderAssignment.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      orderId: true,
+      factoryId: true,
+      productionDate: true,
+      assignedQuantity: true,
+      status: true,
+    },
+  });
+}
+
+export async function updateAssignmentSlot(
+  db: PrismaClient,
+  id: string,
+  factoryId: string,
+  productionDate: Date,
+): Promise<void> {
+  await db.orderAssignment.update({
+    where: { id },
+    data: { factoryId, productionDate },
+  });
+}
