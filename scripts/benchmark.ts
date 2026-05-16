@@ -3,6 +3,7 @@ import {
   type SchedulingCapacityInput,
   type SchedulingFactoryInput,
   type SchedulingOrderInput,
+  type SchedulingConfig,
 } from "../modules/schedule/strategy";
 import { OrderStatus } from "../lib/generated/prisma/client";
 
@@ -75,10 +76,19 @@ console.log("\n✅ Data Generation Complete. Running strategy...");
 // Measure performance
 const startTime = performance.now();
 
-const strategyResult = greedyBestFitStrategy(
+const strategyResult = greedyBestFitStrategy.execute(
   mockOrders,
   mockFactories,
   mockCapacities,
+  {
+    startDate: addDays(TODAY, 1),
+    frozenDays: 0,
+    productionDays: 1,
+    bufferDays: 0,
+    reschedulePolicy: "GAP_FILLING",
+    algorithm: "GREEDY_BEST_FIT",
+    splittable: true,
+  } as SchedulingConfig,
   TODAY,
 );
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { runSchedule } from "@/modules/schedule/engine";
+import { type SchedulingConfig } from "@/modules/schedule/strategy";
 import {
   OrderStatus,
   AssignmentStatus,
@@ -94,7 +95,16 @@ describe("Schedule Engine - Database Integration", () => {
       });
 
       // 2. Execute runSchedule
-      await runSchedule("IntegrationType");
+      const dummyConfig: SchedulingConfig = {
+        startDate: addDays(today, 1),
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GLOBAL_OPTIMIZE", // Changed from GAP_FILLING so it gets rescheduled
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+      await runSchedule("IntegrationType", dummyConfig, today);
 
       // 3. Assert Database State
       const updatedOrder = await prisma.order.findUnique({
@@ -180,7 +190,16 @@ describe("Schedule Engine - Database Integration", () => {
       });
 
       // 2. Execute
-      await runSchedule("IntegrationType");
+      const dummyConfig: SchedulingConfig = {
+        startDate: addDays(today, 1),
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GLOBAL_OPTIMIZE",
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+      await runSchedule("IntegrationType", dummyConfig, today);
 
       // 3. Assert DB State
       // The capacity should be reset to 100, then order scheduled again.

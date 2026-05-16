@@ -7,12 +7,18 @@ import {
 import { z } from "zod";
 import Redis from "ioredis";
 import { runSchedule } from "@/modules/schedule/engine";
+import { type SchedulingConfig } from "@/modules/schedule/strategy";
 
 let redis: Redis | undefined;
 
 function getRedis(): Redis {
   if (!redis) {
-    redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+    const redisUrl = process.env.REDIS_URL;
+    if (!redisUrl) {
+      throw new Error("REDIS_URL environment variable is not defined");
+    }
+
+    redis = new Redis(redisUrl);
     redis.on?.("error", (error) => {
       console.error("Redis connection error:", error);
     });
@@ -21,8 +27,31 @@ function getRedis(): Redis {
   return redis;
 }
 
+const SchedulingConfigSchema = z
+  .object({
+    startDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
+    frozenDays: z.number().int().min(0).default(0),
+    productionDays: z.number().int().min(1).default(1),
+    bufferDays: z.number().int().min(0).default(0),
+    reschedulePolicy: z
+      .enum(["GLOBAL_OPTIMIZE", "PRIORITY_RETAIN", "GAP_FILLING"])
+      .default("GAP_FILLING"),
+    algorithm: z.enum(["GREEDY_BEST_FIT"]).default("GREEDY_BEST_FIT"),
+    splittable: z.boolean().default(true),
+  })
+  .default({
+    frozenDays: 0,
+    productionDays: 1,
+    bufferDays: 0,
+    reschedulePolicy: "GAP_FILLING",
+    algorithm: "GREEDY_BEST_FIT",
+    splittable: true,
+  });
+
 const RunScheduleSchema = z.object({
   type: z.string().min(1, "Type is required"),
+  config: SchedulingConfigSchema,
 });
 
 export async function POST(request: Request) {
@@ -59,7 +88,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const { type } = parsed.data;
+    const { type, config } = parsed.data;
+
+    // Handle the dynamic default for startDate (today + 1)
+    const currentDate = new Date();
+    currentDate.setHours(0, 0, 0, 0);
+
+    if (!config.startDate) {
+      const defaultStartDate = new Date(currentDate);
+      defaultStartDate.setDate(defaultStartDate.getDate() + 1);
+      config.startDate = defaultStartDate;
+    }
+
     const lockKey = `schedule:lock:${type}`;
     const redis = getRedis();
 
@@ -77,7 +117,7 @@ export async function POST(request: Request) {
 
     try {
       // Execute the actual scheduling engine logic
-      await runSchedule(type);
+      await runSchedule(type, config as SchedulingConfig, currentDate);
 
       return NextResponse.json({ message: "Schedule run successfully" });
     } finally {

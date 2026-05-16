@@ -419,7 +419,7 @@ paths:
   /schedule/run:
     post:
       summary: 執行排程引擎
-      description: 手動或透過 Cron Job 觸發排程引擎。此操作具有分散式鎖定保護以避免併發衝突。
+      description: 手動或透過 Cron Job 觸發排程引擎。此操作具有分散式鎖定保護以避免併發衝突。支援傳入排程設定參數。
       tags:
         - Schedule
       requestBody:
@@ -433,6 +433,8 @@ paths:
                 type:
                   type: string
                   description: 要執行排程的產品類型 (例如 'Type A')
+                config:
+                  $ref: "#/components/schemas/SchedulingConfig"
       responses:
         "200":
           description: 排程執行成功
@@ -710,6 +712,45 @@ components:
       bearerFormat: JWT
 
   schemas:
+    SchedulingConfig:
+      type: object
+      description: 排程引擎的設定參數
+      properties:
+        startDate:
+          type: string
+          format: date-time
+          description: 排程起始日 (預設為 today + 1)
+        endDate:
+          type: string
+          format: date-time
+          description: 排程結束日 (預設無限制)
+        frozenDays:
+          type: integer
+          description: 凍結天數 (預設 0)
+          default: 0
+        productionDays:
+          type: integer
+          description: 生產所需天數 (預設 1)
+          default: 1
+        bufferDays:
+          type: integer
+          description: 緩衝天數 (預設 0)
+          default: 0
+        reschedulePolicy:
+          type: string
+          enum: [GLOBAL_OPTIMIZE, PRIORITY_RETAIN, GAP_FILLING]
+          description: 重排策略 (預設 GAP_FILLING)
+          default: GAP_FILLING
+        algorithm:
+          type: string
+          enum: [GREEDY_BEST_FIT]
+          description: 排程演算法 (預設 GREEDY_BEST_FIT)
+          default: GREEDY_BEST_FIT
+        splittable:
+          type: boolean
+          description: 是否允許拆單 (預設 true)
+          default: true
+
     UserRole:
       type: string
       enum: [SUPERADMIN, ADMIN, SALES]

@@ -117,7 +117,11 @@ describe("POST /api/schedule/run", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(200);
-    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith("Type A");
+    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith(
+      "Type A",
+      expect.any(Object),
+      expect.any(Date),
+    );
   });
 
   it("should reject execution if invalid CRON_SECRET is provided", async () => {
@@ -152,6 +156,41 @@ describe("POST /api/schedule/run", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(400);
+  });
+
+  it("should parse configuration parameters safely via Zod", async () => {
+    const req = createRequest({
+      type: "Type B",
+      config: {
+        frozenDays: "invalid-string",
+      },
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.details.config.frozenDays).toBeDefined();
+  });
+
+  it("should apply default configurations, notably injecting startDate if omitted", async () => {
+    const req = createRequest({ type: "Type C" });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+
+    const callArgs = vi.mocked(scheduleEngine.runSchedule).mock.calls[0];
+    const passedConfig = callArgs[1];
+
+    expect(passedConfig).toMatchObject({
+      frozenDays: 0,
+      productionDays: 1,
+      bufferDays: 0,
+      reschedulePolicy: "GAP_FILLING",
+      algorithm: "GREEDY_BEST_FIT",
+      splittable: true,
+    });
+    // startDate defaults to tomorrow (currentDate + 1 day)
+    expect(passedConfig.startDate).toBeInstanceOf(Date);
   });
 
   it("should return 409 if redis lock cannot be acquired", async () => {
@@ -196,7 +235,11 @@ describe("POST /api/schedule/run", () => {
     );
 
     // Engine called
-    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith("Type A");
+    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith(
+      "Type A",
+      expect.any(Object),
+      expect.any(Date),
+    );
 
     // Released lock
     expect(redisDelMock).toHaveBeenCalledWith("schedule:lock:Type A");

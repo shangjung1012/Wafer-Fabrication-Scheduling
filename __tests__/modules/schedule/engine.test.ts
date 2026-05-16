@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { runSchedule } from "@/modules/schedule/engine";
 import { prisma } from "@/lib/prisma";
-import { greedyBestFitStrategy } from "@/modules/schedule/strategy";
+import {
+  greedyBestFitStrategy,
+  type StrategyResult,
+  type SchedulingConfig,
+} from "@/modules/schedule/strategy";
 import * as orderRepo from "@/infra/db/order-repository";
 import * as factoryRepo from "@/infra/db/factory-repository";
 import * as assignmentRepo from "@/infra/db/assignment-repository";
@@ -17,7 +21,9 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 vi.mock("@/modules/schedule/strategy", () => ({
-  greedyBestFitStrategy: vi.fn(),
+  greedyBestFitStrategy: {
+    execute: vi.fn(),
+  },
 }));
 
 vi.mock("@/infra/db/order-repository", () => ({
@@ -93,9 +99,20 @@ describe("Schedule Engine", () => {
         },
       ],
     };
-    vi.mocked(greedyBestFitStrategy).mockReturnValue(mockStrategyResult);
+    vi.mocked(greedyBestFitStrategy.execute).mockReturnValue(
+      mockStrategyResult as unknown as StrategyResult,
+    );
 
-    await runSchedule("Type A");
+    const dummyConfig: SchedulingConfig = {
+      startDate: new Date(),
+      frozenDays: 0,
+      productionDays: 1,
+      bufferDays: 0,
+      reschedulePolicy: "GLOBAL_OPTIMIZE",
+      algorithm: "GREEDY_BEST_FIT",
+      splittable: true,
+    };
+    await runSchedule("Type A", dummyConfig, new Date());
 
     // Data retrieval
     expect(orderRepo.findOrdersForScheduling).toHaveBeenCalledWith(
@@ -108,10 +125,11 @@ describe("Schedule Engine", () => {
     );
 
     // Strategy
-    expect(greedyBestFitStrategy).toHaveBeenCalledWith(
+    expect(greedyBestFitStrategy.execute).toHaveBeenCalledWith(
       mockOrders,
       mockFactories,
       expect.any(Array),
+      dummyConfig,
       expect.any(Date),
     );
 
@@ -122,6 +140,8 @@ describe("Schedule Engine", () => {
     expect(assignmentRepo.deleteScheduledAssignments).toHaveBeenCalledWith(
       mockTx,
       ["O1", "O2"],
+      dummyConfig.startDate,
+      dummyConfig.endDate,
     );
 
     expect(orderRepo.bulkUpdateOrderStatus).toHaveBeenCalledWith(mockTx, [
@@ -150,22 +170,60 @@ describe("Schedule Engine", () => {
   it("should handle cases where strategy returns no new entities", async () => {
     vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue([]);
     vi.mocked(factoryRepo.findFactoriesWithCapacities).mockResolvedValue([]);
-    vi.mocked(greedyBestFitStrategy).mockReturnValue({
+    vi.mocked(greedyBestFitStrategy.execute).mockReturnValue({
       processedOrders: [],
       newAssignments: [],
       updatedCapacities: [],
       newCapacities: [],
-    });
+    } as unknown as StrategyResult);
 
-    await runSchedule("Type B");
+    const dummyConfig: SchedulingConfig = {
+      startDate: new Date(),
+      frozenDays: 0,
+      productionDays: 1,
+      bufferDays: 0,
+      reschedulePolicy: "GLOBAL_OPTIMIZE",
+      algorithm: "GREEDY_BEST_FIT",
+      splittable: true,
+    };
+    await runSchedule("Type B", dummyConfig, new Date());
 
     expect(assignmentRepo.deleteScheduledAssignments).toHaveBeenCalledWith(
       mockTx,
       [],
+      dummyConfig.startDate,
+      dummyConfig.endDate,
     );
     expect(orderRepo.bulkUpdateOrderStatus).toHaveBeenCalledWith(mockTx, []);
     expect(capacityRepo.createDailyCapacities).toHaveBeenCalledWith(mockTx, []);
     expect(capacityRepo.updateDailyCapacityById).not.toHaveBeenCalled();
     expect(assignmentRepo.createAssignments).toHaveBeenCalledWith(mockTx, []);
+  });
+
+  it("should NOT call deleteScheduledAssignments when reschedulePolicy is GAP_FILLING", async () => {
+    vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue([]);
+    vi.mocked(factoryRepo.findFactoriesWithCapacities).mockResolvedValue([]);
+    vi.mocked(greedyBestFitStrategy.execute).mockReturnValue({
+      processedOrders: [{ id: "O1", status: OrderStatus.SCHEDULED }],
+      newAssignments: [],
+      updatedCapacities: [],
+      newCapacities: [],
+    } as unknown as StrategyResult);
+
+    const dummyConfig: SchedulingConfig = {
+      startDate: new Date(),
+      frozenDays: 0,
+      productionDays: 1,
+      bufferDays: 0,
+      reschedulePolicy: "GAP_FILLING",
+      algorithm: "GREEDY_BEST_FIT",
+      splittable: true,
+    };
+    await runSchedule("Type C", dummyConfig, new Date());
+
+    expect(assignmentRepo.deleteScheduledAssignments).not.toHaveBeenCalled();
+    expect(orderRepo.bulkUpdateOrderStatus).toHaveBeenCalledWith(mockTx, [
+      { id: "O1", status: OrderStatus.SCHEDULED },
+    ]);
   });
 });
