@@ -8,6 +8,15 @@ import {
   parseISO,
   differenceInDays,
 } from "date-fns";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import type {
   TimelineResponse,
   TimelineItem,
@@ -16,9 +25,16 @@ import type {
   FactoryInfo,
   PendingOrderInfo,
   OrderRisk,
+  SchedulePreviewResponse,
+  AlgorithmInfo,
+  DailyCapacityInfo,
 } from "@/modules/visualization/types";
 import { logoutClientAuthSession } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
+import {
+  DraggableAssignmentChip,
+  DroppableCell,
+} from "./_components/edit-cell";
 
 // ---------------------------------------------------------------------------
 // Date helpers
@@ -469,17 +485,64 @@ function GanttCell({
   hasRescheduled,
   isMyOrder,
   isSales,
+  editMode,
+  movedAssignmentIds,
   onClick,
 }: {
   cell: CellData;
   hasRescheduled: boolean;
   isMyOrder: boolean;
   isSales: boolean;
+  editMode: boolean;
+  movedAssignmentIds: Set<string>;
   onClick: () => void;
 }) {
   const { bg, barColor, fillRatio } = getCellStyle(cell);
   const hasConflict = cell.conflicts.length > 0;
   const pct = Math.round(fillRatio * 100);
+  const cellId = `${cell.factoryId}|${cell.date}`;
+
+  // Edit-mode cell: shows draggable chips + drop target, no click handler.
+  if (editMode) {
+    return (
+      <td className="border border-gray-100 w-[72px] min-w-[72px] p-0 align-top">
+        <DroppableCell
+          cellId={cellId}
+          className={`w-full min-h-14 relative ${bg}`}
+        >
+          {hasConflict && (
+            <span className="absolute top-0.5 right-0.5 text-[9px] leading-none z-10">
+              ⚠️
+            </span>
+          )}
+          <div className="flex flex-col gap-0.5 p-0.5">
+            {cell.items.map((item) => (
+              <DraggableAssignmentChip
+                key={item.assignmentId}
+                item={item}
+                isMoved={movedAssignmentIds.has(item.assignmentId)}
+              />
+            ))}
+          </div>
+          {cell.items.length > 0 && (
+            <div className="w-full px-1 pb-1">
+              <div className="w-full h-1 bg-white/60 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${barColor}`}
+                  style={{ width: `${Math.min(pct, 100)}%` }}
+                />
+              </div>
+              <p
+                className={`text-[9px] font-semibold text-center mt-0.5 ${pct > 100 ? "text-red-600" : "text-gray-500"}`}
+              >
+                {pct}%
+              </p>
+            </div>
+          )}
+        </DroppableCell>
+      </td>
+    );
+  }
 
   if (cell.items.length === 0) {
     return (
@@ -557,6 +620,12 @@ const DEFAULT_END = "2026-05-23";
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
 
+type AssignmentMove = {
+  factoryId: string;
+  productionDate: string;
+  original: { factoryId: string; productionDate: string };
+};
+
 export default function SchedulePage() {
   const router = useRouter();
   const session = useClientAuthSession();
@@ -576,6 +645,39 @@ export default function SchedulePage() {
   const [scheduleConflicts, setScheduleConflicts] = useState<
     { id: string; name: string; quantity: number; dueDate: string }[]
   >([]);
+
+  // Algorithm selector + preview state
+  const [algorithms, setAlgorithms] = useState<AlgorithmInfo[]>([]);
+  const [selectedAlgorithm, setSelectedAlgorithm] =
+    useState<string>("greedy-best-fit");
+  const [previewData, setPreviewData] =
+    useState<SchedulePreviewResponse | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  // Edit-mode state
+  const [editMode, setEditMode] = useState(false);
+  // Map<assignmentId, AssignmentMove>
+  const [pendingMoves, setPendingMoves] = useState<Map<string, AssignmentMove>>(
+    () => new Map(),
+  );
+  const [draggingAssignment, setDraggingAssignment] =
+    useState<TimelineItem | null>(null);
+  const [saveStatus, setSaveStatus] = useState<
+    "idle" | "saving" | "success" | "error"
+  >("idle");
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
+
+  // Fetch algorithm list (admin/superadmin only)
+  useEffect(() => {
+    if (!session || session.user.role === "SALES") return;
+    fetch("/api/schedule/algorithms", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (body?.algorithms) setAlgorithms(body.algorithms);
+      })
+      .catch(() => {});
+  }, [session]);
 
   // Fetch timeline data
   useEffect(() => {
@@ -608,9 +710,10 @@ export default function SchedulePage() {
       });
   }, [router, session, startDate, endDate, refreshKey]);
 
-  // Run schedule handler
-  const handleRunSchedule = async () => {
+  // Run schedule handler (applies the selected algorithm directly)
+  const handleRunSchedule = async (algorithmOverride?: string) => {
     if (!productionType) return;
+    const algorithm = algorithmOverride ?? selectedAlgorithm;
     setScheduleStatus("running");
     setScheduleConflicts([]);
     try {
@@ -620,7 +723,7 @@ export default function SchedulePage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ type: productionType }),
+        body: JSON.stringify({ type: productionType, algorithm }),
       });
       if (res.status === 409) {
         setScheduleStatus("conflict");
@@ -635,6 +738,7 @@ export default function SchedulePage() {
         }
         setLoading(true);
         setFetchError(null);
+        setPreviewData(null);
         setRefreshKey((k) => k + 1);
       } else {
         setScheduleStatus("error");
@@ -646,10 +750,272 @@ export default function SchedulePage() {
     }
   };
 
+  const handlePreviewSchedule = async () => {
+    if (!productionType) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const res = await fetch("/api/schedule/preview", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: productionType,
+          algorithm: selectedAlgorithm,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setPreviewError(body.message ?? `HTTP ${res.status}`);
+        return;
+      }
+      const body: SchedulePreviewResponse = await res.json();
+      setPreviewData(body);
+    } catch {
+      setPreviewError("Network error");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleApplyPreview = async () => {
+    if (!previewData) return;
+    await handleRunSchedule(previewData.algorithm);
+    setPreviewData(null);
+  };
+
+  const handleDiscardPreview = () => {
+    setPreviewData(null);
+    setPreviewError(null);
+  };
+
+  // Edit-mode handlers
+  const handleEnterEditMode = () => {
+    setEditMode(true);
+    setPendingMoves(new Map());
+    setSaveStatus("idle");
+    setSelectedCell(null);
+    setPreviewData(null);
+  };
+
+  const handleDiscardEdits = () => {
+    setEditMode(false);
+    setPendingMoves(new Map());
+    setSaveStatus("idle");
+  };
+
+  const handleSaveEdits = async () => {
+    if (pendingMoves.size === 0) {
+      setEditMode(false);
+      return;
+    }
+    setSaveStatus("saving");
+    setSaveErrorMsg(null);
+    try {
+      const moves = Array.from(pendingMoves.entries()).map(([id, m]) => ({
+        assignmentId: id,
+        factoryId: m.factoryId,
+        productionDate: m.productionDate,
+      }));
+      const res = await fetch("/api/assignments/bulk", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moves }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveStatus("error");
+        setSaveErrorMsg(body.message ?? `HTTP ${res.status}`);
+        setTimeout(() => setSaveStatus("idle"), 6000);
+        return;
+      }
+      const applied = typeof body.applied === "number" ? body.applied : 0;
+      const errors: { assignmentId: string; reason: string }[] = Array.isArray(
+        body.errors,
+      )
+        ? body.errors
+        : [];
+      if (applied === 0 && errors.length > 0) {
+        setSaveStatus("error");
+        setSaveErrorMsg(
+          `0 / ${moves.length} moves saved. ${errors[0].reason}${errors.length > 1 ? ` (+${errors.length - 1} more)` : ""}`,
+        );
+        setTimeout(() => setSaveStatus("idle"), 6000);
+        return;
+      }
+      setSaveStatus("success");
+      setSaveErrorMsg(
+        errors.length > 0
+          ? `${applied} saved, ${errors.length} rejected: ${errors[0].reason}`
+          : null,
+      );
+      setEditMode(false);
+      setPendingMoves(new Map());
+      setLoading(true);
+      setRefreshKey((k) => k + 1);
+      setTimeout(() => {
+        setSaveStatus("idle");
+        setSaveErrorMsg(null);
+      }, 4000);
+    } catch {
+      setSaveStatus("error");
+      setSaveErrorMsg("Network error");
+      setTimeout(() => setSaveStatus("idle"), 6000);
+    }
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const assignmentId = String(event.active.id);
+    const baseTimeline = data?.timeline ?? [];
+    const item = baseTimeline.find((t) => t.assignmentId === assignmentId);
+    if (item) setDraggingAssignment(item);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setDraggingAssignment(null);
+    if (!event.over) return;
+    const assignmentId = String(event.active.id);
+    const [factoryId, date] = String(event.over.id).split("|");
+    if (!factoryId || !date) return;
+    const item = data?.timeline.find((t) => t.assignmentId === assignmentId);
+    if (!item) return;
+    // No-op if dropping onto current slot, account for pending move
+    const current = pendingMoves.get(assignmentId);
+    const currFactory = current?.factoryId ?? item.factoryId;
+    const currDate = current?.productionDate ?? item.productionDate;
+    if (currFactory === factoryId && currDate === date) return;
+
+    setPendingMoves((prev) => {
+      const next = new Map(prev);
+      // If dropping back to original, remove the pending move
+      if (factoryId === item.factoryId && date === item.productionDate) {
+        next.delete(assignmentId);
+      } else {
+        next.set(assignmentId, {
+          factoryId,
+          productionDate: date,
+          original: {
+            factoryId: item.factoryId,
+            productionDate: item.productionDate,
+          },
+        });
+      }
+      return next;
+    });
+  };
+
   const handleLogout = async () => {
     await logoutClientAuthSession();
     router.replace("/login");
   };
+
+  // Effective timeline/capacities/conflicts/factories/diffs:
+  // - previewData wins
+  // - else if editMode + pendingMoves, apply moves locally
+  // - else use server data
+  const effective = useMemo(() => {
+    if (previewData) {
+      return {
+        factories: previewData.factories,
+        timeline: previewData.timeline,
+        dailyCapacities: previewData.dailyCapacities,
+        conflicts: previewData.conflicts,
+        diffs: previewData.diffs,
+      };
+    }
+    if (!data) return null;
+    if (editMode && pendingMoves.size > 0) {
+      const movedTimeline: TimelineItem[] = data.timeline.map((t) => {
+        const move = pendingMoves.get(t.assignmentId);
+        if (!move) return t;
+        return {
+          ...t,
+          factoryId: move.factoryId,
+          productionDate: move.productionDate,
+        };
+      });
+      // Recompute daily capacities from moved timeline
+      const usedByCell = new Map<string, number>();
+      for (const t of movedTimeline) {
+        const key = `${t.factoryId}__${t.productionDate}`;
+        usedByCell.set(key, (usedByCell.get(key) ?? 0) + t.assignedQuantity);
+      }
+      const factoryMaxById = new Map(
+        data.factories.map((f) => [f.id, f.maxCapacity]),
+      );
+      const dailyCapMap = new Map<string, DailyCapacityInfo>();
+      for (const dc of data.dailyCapacities) {
+        dailyCapMap.set(`${dc.factoryId}__${dc.date}`, { ...dc });
+      }
+      for (const [key, used] of usedByCell.entries()) {
+        const existing = dailyCapMap.get(key);
+        const [factoryId, date] = key.split("__");
+        if (existing) {
+          existing.usedCapacity = used;
+        } else {
+          dailyCapMap.set(key, {
+            factoryId,
+            date,
+            maxCapacity: factoryMaxById.get(factoryId) ?? 0,
+            usedCapacity: used,
+          });
+        }
+      }
+      // Also clear used capacity for cells now empty
+      for (const [key, dc] of dailyCapMap.entries()) {
+        if (!usedByCell.has(key)) {
+          dc.usedCapacity = 0;
+        }
+      }
+      // Recompute conflicts locally
+      const conflicts: ConflictInfo[] = [];
+      for (const dc of dailyCapMap.values()) {
+        if (dc.usedCapacity > dc.maxCapacity) {
+          const affected = movedTimeline
+            .filter(
+              (t) =>
+                t.factoryId === dc.factoryId && t.productionDate === dc.date,
+            )
+            .map((t) => t.orderId);
+          conflicts.push({
+            conflictType: "CAPACITY",
+            severity: "ERROR",
+            factoryId: dc.factoryId,
+            date: dc.date,
+            orderIds: affected,
+            message: `Total ${dc.usedCapacity.toLocaleString()} exceeds max capacity ${dc.maxCapacity.toLocaleString()}`,
+          });
+        }
+      }
+      for (const t of movedTimeline) {
+        if (t.productionDate > t.dueDate) {
+          conflicts.push({
+            conflictType: "DUE_DATE",
+            severity: "ERROR",
+            factoryId: t.factoryId,
+            date: t.productionDate,
+            orderIds: [t.orderId],
+            message: `${t.orderName} production date ${t.productionDate} is after due date ${t.dueDate}`,
+          });
+        }
+      }
+      return {
+        factories: data.factories,
+        timeline: movedTimeline,
+        dailyCapacities: Array.from(dailyCapMap.values()),
+        conflicts,
+        diffs: data.diffs,
+      };
+    }
+    return {
+      factories: data.factories,
+      timeline: data.timeline,
+      dailyCapacities: data.dailyCapacities,
+      conflicts: data.conflicts,
+      diffs: data.diffs,
+    };
+  }, [data, previewData, editMode, pendingMoves]);
 
   // Build date columns
   const dates = useMemo(() => {
@@ -660,31 +1026,44 @@ export default function SchedulePage() {
     return eachDayOfInterval({ start, end }).map((d) => toDateStr(d));
   }, [startDate, endDate]);
 
-  // Cell map
+  // Cell map (uses effective data so preview/edit overlays render correctly)
   const cellMap = useMemo(
-    () => (data ? buildCellMap(data, dates) : new Map()),
-    [data, dates],
+    () =>
+      effective
+        ? buildCellMap(
+            {
+              factories: effective.factories,
+              timeline: effective.timeline,
+              conflicts: effective.conflicts,
+              dailyCapacities: effective.dailyCapacities,
+              diffs: effective.diffs,
+              salesContext: data?.salesContext,
+            },
+            dates,
+          )
+        : new Map(),
+    [effective, dates, data?.salesContext],
   );
 
   // Group factories by productionType
   const groups = useMemo(() => {
-    if (!data) return [];
+    if (!effective) return [];
     const map = new Map<string, FactoryInfo[]>();
-    for (const f of data.factories) {
+    for (const f of effective.factories) {
       const existing = map.get(f.productionType) ?? [];
       map.set(f.productionType, [...existing, f]);
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [data]);
+  }, [effective]);
 
   // Diff lookup: orderId → DiffEntry
   const diffByOrderId = useMemo(() => {
     const map = new Map<string, DiffEntry>();
-    for (const d of data?.diffs ?? []) {
+    for (const d of effective?.diffs ?? []) {
       map.set(d.orderId, d);
     }
     return map;
-  }, [data]);
+  }, [effective]);
 
   // SALES: set of this user's order IDs visible in the Gantt
   const myOrderIdSet = useMemo(
@@ -695,7 +1074,7 @@ export default function SchedulePage() {
   // SALES: latest productionDate (ETA) per order across all assignments
   const etaByOrderId = useMemo(() => {
     const map = new Map<string, string>();
-    for (const item of data?.timeline ?? []) {
+    for (const item of effective?.timeline ?? []) {
       if (!myOrderIdSet.has(item.orderId)) continue;
       const current = map.get(item.orderId);
       if (!current || item.productionDate > current) {
@@ -703,37 +1082,51 @@ export default function SchedulePage() {
       }
     }
     return map;
-  }, [data, myOrderIdSet]);
+  }, [effective, myOrderIdSet]);
 
   // Per-cell: does it contain any rescheduled order?
   const rescheduledCells = useMemo(() => {
     const set = new Set<string>();
-    for (const item of data?.timeline ?? []) {
+    for (const item of effective?.timeline ?? []) {
       if (diffByOrderId.has(item.orderId)) {
         set.add(`${item.factoryId}__${item.productionDate}`);
       }
     }
     return set;
-  }, [data, diffByOrderId]);
+  }, [effective, diffByOrderId]);
+
+  // Set of assignmentIds that have a pending edit-mode move
+  const movedAssignmentIds = useMemo(
+    () => new Set(pendingMoves.keys()),
+    [pendingMoves],
+  );
 
   // Selected cell detail
   const selectedCellData = useMemo(() => {
-    if (!selectedCell || !data) return null;
+    if (!selectedCell || !effective) return null;
     const key = `${selectedCell.factoryId}__${selectedCell.date}`;
     return cellMap.get(key) ?? null;
-  }, [selectedCell, cellMap, data]);
+  }, [selectedCell, cellMap, effective]);
 
   const selectedFactory = useMemo(() => {
-    if (!selectedCell || !data) return null;
-    return data.factories.find((f) => f.id === selectedCell.factoryId) ?? null;
-  }, [selectedCell, data]);
+    if (!selectedCell || !effective) return null;
+    return (
+      effective.factories.find((f) => f.id === selectedCell.factoryId) ?? null
+    );
+  }, [selectedCell, effective]);
 
   // Summary counts
   const capacityConflicts =
-    data?.conflicts.filter((c) => c.conflictType === "CAPACITY").length ?? 0;
+    effective?.conflicts.filter((c) => c.conflictType === "CAPACITY").length ??
+    0;
   const dueDateConflicts =
-    data?.conflicts.filter((c) => c.conflictType === "DUE_DATE").length ?? 0;
-  const rescheduledCount = data?.diffs.length ?? 0;
+    effective?.conflicts.filter((c) => c.conflictType === "DUE_DATE").length ??
+    0;
+  const rescheduledCount = effective?.diffs.length ?? 0;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
 
   if (session === undefined) {
     return (
@@ -811,22 +1204,72 @@ export default function SchedulePage() {
           </button>
         </div>
 
-        {/* Run Schedule (admin/superadmin only) */}
+        {/* Schedule controls (admin/superadmin only) */}
         {!isSales && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Algorithm dropdown */}
+            <label className="flex items-center gap-1 text-xs text-gray-600">
+              <span className="text-gray-500">Algorithm</span>
+              <select
+                value={selectedAlgorithm}
+                onChange={(e) => setSelectedAlgorithm(e.target.value)}
+                disabled={editMode || previewLoading}
+                className="text-xs border border-gray-200 rounded px-2 py-1 bg-white disabled:bg-gray-100 disabled:text-gray-400"
+                title={
+                  algorithms.find((a) => a.id === selectedAlgorithm)
+                    ?.description ?? ""
+                }
+              >
+                {algorithms.length === 0 && (
+                  <option value="greedy-best-fit">Greedy Best-Fit</option>
+                )}
+                {algorithms.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <button
-              onClick={handleRunSchedule}
-              disabled={scheduleStatus === "running"}
+              onClick={handlePreviewSchedule}
+              disabled={
+                previewLoading || editMode || scheduleStatus === "running"
+              }
               className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
-                scheduleStatus === "running"
+                previewLoading || editMode
+                  ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
+                  : "bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50"
+              }`}
+            >
+              {previewLoading ? "Previewing…" : "🔍 Preview"}
+            </button>
+
+            <button
+              onClick={() => handleRunSchedule()}
+              disabled={
+                scheduleStatus === "running" || editMode || previewLoading
+              }
+              className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
+                scheduleStatus === "running" || editMode
                   ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
                   : "bg-green-700 text-white border-green-700 hover:bg-green-800"
               }`}
             >
               {scheduleStatus === "running"
                 ? "Running…"
-                : `▶ Run Schedule (Type ${productionType || "-"})`}
+                : `▶ Run (Type ${productionType || "-"})`}
             </button>
+
+            {!editMode && !previewData && (
+              <button
+                onClick={handleEnterEditMode}
+                className="text-xs font-medium px-3 py-1.5 rounded border bg-white text-purple-700 border-purple-300 hover:bg-purple-50"
+              >
+                ✏️ Edit
+              </button>
+            )}
+
             {scheduleStatus === "success" && (
               <span className="text-xs text-green-600 font-medium">
                 Scheduled ✓
@@ -839,6 +1282,19 @@ export default function SchedulePage() {
             )}
             {scheduleStatus === "error" && (
               <span className="text-xs text-red-600 font-medium">Failed</span>
+            )}
+            {saveStatus === "success" && (
+              <span className="text-xs text-green-600 font-medium">
+                {saveErrorMsg ? `Saved ✓ (${saveErrorMsg})` : "Saved ✓"}
+              </span>
+            )}
+            {saveStatus === "error" && (
+              <span
+                className="text-xs text-red-600 font-medium"
+                title={saveErrorMsg ?? ""}
+              >
+                Save failed: {saveErrorMsg ?? "unknown"}
+              </span>
             )}
           </div>
         )}
@@ -887,6 +1343,86 @@ export default function SchedulePage() {
           )}
         </div>
       </div>
+
+      {/* Preview banner */}
+      {previewData && (
+        <div className="flex-none px-6 py-2 bg-indigo-50 border-b border-indigo-200 flex items-center gap-3">
+          <span className="text-xs font-semibold text-indigo-700 shrink-0">
+            🔍 Preview · {previewData.algorithm}
+          </span>
+          <span className="text-xs text-indigo-700">
+            {previewData.diffs.length} order(s) would be rescheduled
+            {previewData.unscheduledOrders.length > 0 &&
+              `, ${previewData.unscheduledOrders.length} cannot fit`}
+            . Capacity conflicts:{" "}
+            {
+              previewData.conflicts.filter((c) => c.conflictType === "CAPACITY")
+                .length
+            }
+            , due-date conflicts:{" "}
+            {
+              previewData.conflicts.filter((c) => c.conflictType === "DUE_DATE")
+                .length
+            }
+            .
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={handleApplyPreview}
+              disabled={scheduleStatus === "running"}
+              className="text-xs font-medium px-3 py-1.5 rounded border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:border-gray-300"
+            >
+              ✓ Apply
+            </button>
+            <button
+              onClick={handleDiscardPreview}
+              className="text-xs font-medium px-3 py-1.5 rounded border bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+      {previewError && (
+        <div className="flex-none px-6 py-2 bg-red-50 border-b border-red-200 text-xs text-red-700">
+          Preview failed: {previewError}
+          <button
+            onClick={() => setPreviewError(null)}
+            className="ml-2 text-red-400 hover:text-red-600"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Edit-mode banner */}
+      {editMode && (
+        <div className="flex-none px-6 py-2 bg-purple-50 border-b border-purple-200 flex items-center gap-3">
+          <span className="text-xs font-semibold text-purple-700 shrink-0">
+            ✏️ Edit mode
+          </span>
+          <span className="text-xs text-purple-700">
+            Drag assignment chips between cells.{" "}
+            <span className="font-semibold">{pendingMoves.size}</span> pending
+            move(s).
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={handleSaveEdits}
+              disabled={saveStatus === "saving"}
+              className="text-xs font-medium px-3 py-1.5 rounded border bg-purple-600 text-white border-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:border-gray-300"
+            >
+              {saveStatus === "saving" ? "Saving…" : "💾 Save Changes"}
+            </button>
+            <button
+              onClick={handleDiscardEdits}
+              className="text-xs font-medium px-3 py-1.5 rounded border bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Scheduling conflict banner */}
       {scheduleConflicts.length > 0 && (
@@ -980,86 +1516,109 @@ export default function SchedulePage() {
           )}
 
           {!loading && !fetchError && data && (
-            <table
-              className="border-collapse text-xs"
-              style={{ tableLayout: "fixed" }}
+            <DndContext
+              sensors={sensors}
+              onDragStart={editMode ? handleDragStart : undefined}
+              onDragEnd={
+                editMode ? handleDragEnd : () => setDraggingAssignment(null)
+              }
             >
-              <thead>
-                <tr>
-                  {/* Factory label column */}
-                  <th className="sticky left-0 top-0 z-30 bg-white border border-gray-200 w-36 min-w-36 px-3 py-2 text-left text-gray-500 font-medium">
-                    Factory
-                  </th>
-                  {/* Date columns */}
-                  {dates.map((d) => {
-                    const day = parseISO(d);
-                    const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                    return (
-                      <th
-                        key={d}
-                        className={`sticky top-0 z-20 border border-gray-200 w-[72px] min-w-[72px] px-1 py-2 text-center font-medium ${isWeekend ? "bg-gray-50 text-gray-400" : "bg-white text-gray-600"}`}
-                      >
-                        <div>{format(day, "d")}</div>
-                        <div className="text-[9px] font-normal opacity-70">
-                          {format(day, "EEE")}
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {groups.map(([type, factories]) => (
-                  <React.Fragment key={type}>
-                    {/* Group header row */}
-                    <tr>
-                      <td
-                        colSpan={dates.length + 1}
-                        className="sticky left-0 bg-gray-100 border border-gray-200 px-3 py-1.5 font-semibold text-gray-600 text-[11px] uppercase tracking-wide"
-                      >
-                        Production Type {type}
-                      </td>
-                    </tr>
-
-                    {/* Factory rows */}
-                    {factories.map((factory) => (
-                      <tr key={factory.id} className="hover:bg-gray-50/50">
-                        <td className="sticky left-0 z-10 bg-white border border-gray-200 px-3 py-2 font-medium text-gray-700 whitespace-nowrap">
-                          <div>{factory.label}</div>
-                          <div className="text-[9px] text-gray-400 font-normal">
-                            max {factory.maxCapacity.toLocaleString()}
+              <table
+                className="border-collapse text-xs"
+                style={{ tableLayout: "fixed" }}
+              >
+                <thead>
+                  <tr>
+                    {/* Factory label column */}
+                    <th className="sticky left-0 top-0 z-30 bg-white border border-gray-200 w-36 min-w-36 px-3 py-2 text-left text-gray-500 font-medium">
+                      Factory
+                    </th>
+                    {/* Date columns */}
+                    {dates.map((d) => {
+                      const day = parseISO(d);
+                      const isWeekend =
+                        day.getDay() === 0 || day.getDay() === 6;
+                      return (
+                        <th
+                          key={d}
+                          className={`sticky top-0 z-20 border border-gray-200 w-[72px] min-w-[72px] px-1 py-2 text-center font-medium ${isWeekend ? "bg-gray-50 text-gray-400" : "bg-white text-gray-600"}`}
+                        >
+                          <div>{format(day, "d")}</div>
+                          <div className="text-[9px] font-normal opacity-70">
+                            {format(day, "EEE")}
                           </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map(([type, factories]) => (
+                    <React.Fragment key={type}>
+                      {/* Group header row */}
+                      <tr>
+                        <td
+                          colSpan={dates.length + 1}
+                          className="sticky left-0 bg-gray-100 border border-gray-200 px-3 py-1.5 font-semibold text-gray-600 text-[11px] uppercase tracking-wide"
+                        >
+                          Production Type {type}
                         </td>
-                        {dates.map((date) => {
-                          const key = `${factory.id}__${date}`;
-                          const cell = cellMap.get(key)!;
-                          const isMyOrder = isSales
-                            ? cell.items.some((i: TimelineItem) =>
-                                myOrderIdSet.has(i.orderId),
-                              )
-                            : false;
-                          return (
-                            <GanttCell
-                              key={key}
-                              cell={cell}
-                              hasRescheduled={rescheduledCells.has(key)}
-                              isMyOrder={isMyOrder}
-                              isSales={isSales}
-                              onClick={() =>
-                                setSelectedCell({
-                                  factoryId: factory.id,
-                                  date,
-                                })
-                              }
-                            />
-                          );
-                        })}
                       </tr>
-                    ))}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+
+                      {/* Factory rows */}
+                      {factories.map((factory) => (
+                        <tr key={factory.id} className="hover:bg-gray-50/50">
+                          <td className="sticky left-0 z-10 bg-white border border-gray-200 px-3 py-2 font-medium text-gray-700 whitespace-nowrap">
+                            <div>{factory.label}</div>
+                            <div className="text-[9px] text-gray-400 font-normal">
+                              max {factory.maxCapacity.toLocaleString()}
+                            </div>
+                          </td>
+                          {dates.map((date) => {
+                            const key = `${factory.id}__${date}`;
+                            const cell = cellMap.get(key)!;
+                            const isMyOrder = isSales
+                              ? cell.items.some((i: TimelineItem) =>
+                                  myOrderIdSet.has(i.orderId),
+                                )
+                              : false;
+                            return (
+                              <GanttCell
+                                key={key}
+                                cell={cell}
+                                hasRescheduled={rescheduledCells.has(key)}
+                                isMyOrder={isMyOrder}
+                                isSales={isSales}
+                                editMode={editMode}
+                                movedAssignmentIds={movedAssignmentIds}
+                                onClick={() =>
+                                  setSelectedCell({
+                                    factoryId: factory.id,
+                                    date,
+                                  })
+                                }
+                              />
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+              <DragOverlay>
+                {draggingAssignment && (
+                  <div className="text-[9px] leading-tight rounded px-1 py-0.5 bg-blue-100 border border-blue-400 text-blue-800 shadow-lg">
+                    <span className="font-semibold truncate block max-w-[80px]">
+                      {draggingAssignment.orderName}
+                    </span>
+                    <span className="text-[8px] opacity-70">
+                      ×{draggingAssignment.assignedQuantity}
+                    </span>
+                  </div>
+                )}
+              </DragOverlay>
+            </DndContext>
           )}
         </div>
       </div>
