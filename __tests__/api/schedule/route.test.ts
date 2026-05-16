@@ -38,6 +38,18 @@ vi.mock("@/modules/schedule/engine", () => ({
   runSchedule: vi.fn(),
 }));
 
+// Mock mail modules so azure SDK is never loaded in tests
+vi.mock("@/modules/mail/mail-template", () => ({
+  renderAndSend: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/modules/mail/templates/kick-out", () => ({
+  kickOutTemplate: {
+    id: "kick-out-notification",
+    name: "mock",
+    build: vi.fn(),
+  },
+}));
+
 describe("POST /api/schedule/run", () => {
   let redisSetMock: Mock;
   let redisDelMock: Mock;
@@ -60,7 +72,9 @@ describe("POST /api/schedule/run", () => {
     });
 
     // Default: engine success
-    vi.mocked(scheduleEngine.runSchedule).mockResolvedValue(undefined);
+    vi.mocked(scheduleEngine.runSchedule).mockResolvedValue({
+      kickedOutOrders: [],
+    });
   });
 
   afterEach(() => {
