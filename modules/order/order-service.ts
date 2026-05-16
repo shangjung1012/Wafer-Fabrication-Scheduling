@@ -133,6 +133,7 @@ export async function updateOrderService(
       dueDate: input.dueDate,
       quantity: input.quantity,
       name: input.name,
+      lastModifiedById: scope.userId,
     };
     const result = await updateOrder(db, id, salesInput);
     if (!result) orderNotFound();
