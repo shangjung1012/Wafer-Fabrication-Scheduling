@@ -573,6 +573,9 @@ export default function SchedulePage() {
   } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>("idle");
+  const [scheduleConflicts, setScheduleConflicts] = useState<
+    { id: string; name: string; quantity: number; dueDate: string }[]
+  >([]);
 
   // Fetch timeline data
   useEffect(() => {
@@ -609,6 +612,7 @@ export default function SchedulePage() {
   const handleRunSchedule = async () => {
     if (!productionType) return;
     setScheduleStatus("running");
+    setScheduleConflicts([]);
     try {
       const res = await fetch("/api/schedule/run", {
         method: "POST",
@@ -621,17 +625,25 @@ export default function SchedulePage() {
       if (res.status === 409) {
         setScheduleStatus("conflict");
       } else if (res.ok) {
-        setScheduleStatus("success");
+        const body = await res.json().catch(() => ({}));
+        if (Array.isArray(body.conflicts) && body.conflicts.length > 0) {
+          setScheduleConflicts(body.conflicts);
+          setScheduleStatus("idle");
+        } else {
+          setScheduleStatus("success");
+          setTimeout(() => setScheduleStatus("idle"), 4000);
+        }
         setLoading(true);
         setFetchError(null);
         setRefreshKey((k) => k + 1);
       } else {
         setScheduleStatus("error");
+        setTimeout(() => setScheduleStatus("idle"), 4000);
       }
     } catch {
       setScheduleStatus("error");
+      setTimeout(() => setScheduleStatus("idle"), 4000);
     }
-    setTimeout(() => setScheduleStatus("idle"), 4000);
   };
 
   const handleLogout = async () => {
@@ -875,6 +887,31 @@ export default function SchedulePage() {
           )}
         </div>
       </div>
+
+      {/* Scheduling conflict banner */}
+      {scheduleConflicts.length > 0 && (
+        <div className="flex-none px-6 py-2 bg-red-50 border-b border-red-200 flex items-start justify-between gap-4">
+          <div className="flex items-start gap-2 text-xs text-red-700">
+            <span className="font-semibold shrink-0">⚠ 排程衝突</span>
+            <span>
+              以下訂單因交期視窗內產能已滿，無法完成排程，管理員與申請人已收到通知：
+              <span className="font-medium ml-1">
+                {scheduleConflicts
+                  .map(
+                    (o) => `${o.name}（qty ${o.quantity}，due ${o.dueDate}）`,
+                  )
+                  .join("、")}
+              </span>
+            </span>
+          </div>
+          <button
+            onClick={() => setScheduleConflicts([])}
+            className="text-red-400 hover:text-red-600 text-xs shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex-none px-6 py-2 flex items-center gap-4 text-xs text-gray-500 bg-white border-b border-gray-100">
