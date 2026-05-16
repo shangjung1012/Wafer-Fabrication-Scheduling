@@ -827,6 +827,12 @@ export default function SchedulePage() {
           >
             Users
           </a>
+          <a
+            href="/profile"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Profile
+          </a>
         </nav>
 
         <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
