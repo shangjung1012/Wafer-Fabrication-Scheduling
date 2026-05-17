@@ -1,13 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import type { PrismaClient } from "@/lib/generated/prisma";
 import {
-  greedyBestFitStrategy,
   type SchedulingCapacityInput,
   type SchedulingConfig,
+  type StrategyResult,
 } from "@/modules/schedule/strategy";
 import {
   findOrdersForScheduling,
-  bulkUpdateOrderStatus,
+  applyScheduleOrdersUpdate,
 } from "@/infra/db/order-repository";
 import { findFactoriesWithCapacities } from "@/infra/db/factory-repository";
 import {
@@ -18,14 +18,17 @@ import {
   createDailyCapacities,
   updateDailyCapacityById,
 } from "@/infra/db/capacity-repository";
-import { AssignmentStatus } from "@/lib/generated/prisma";
+import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
 
-export async function runSchedule(
+export async function prepareSchedulingData(
   type: string,
   config: SchedulingConfig,
-  currentDate: Date = new Date(),
-): Promise<void> {
-  const orders = await findOrdersForScheduling(prisma, type);
+) {
+  const orders = await findOrdersForScheduling(
+    prisma,
+    type,
+    config.targetOrderIds,
+  );
   const factories = await findFactoriesWithCapacities(prisma, type);
 
   // In-memory reset: restore capacity used by SCHEDULED assignments
@@ -68,14 +71,23 @@ export async function runSchedule(
     }
   }
 
-  const strategyResult = greedyBestFitStrategy.execute(
-    orders,
-    factories,
-    capacities,
-    config,
-    currentDate,
-  );
+  return { orders, factories, capacities };
+}
+
+export async function applyScheduleTransaction(
+  type: string,
+  config: SchedulingConfig,
+  strategyResult: StrategyResult,
+) {
   const processedOrderIds = strategyResult.processedOrders.map((o) => o.id);
+
+  const scheduledIds = strategyResult.processedOrders
+    .filter((o) => o.status === OrderStatus.SCHEDULED)
+    .map((o) => o.id);
+
+  const approvedIds = strategyResult.processedOrders
+    .filter((o) => o.status === OrderStatus.APPROVED)
+    .map((o) => o.id);
 
   await prisma.$transaction(async (tx) => {
     const db = tx as unknown as PrismaClient;
@@ -89,13 +101,7 @@ export async function runSchedule(
       );
     }
 
-    await bulkUpdateOrderStatus(
-      db,
-      strategyResult.processedOrders.map((o) => ({
-        id: o.id,
-        status: o.status,
-      })),
-    );
+    await applyScheduleOrdersUpdate(db, scheduledIds, approvedIds);
 
     await createDailyCapacities(db, strategyResult.newCapacities);
 

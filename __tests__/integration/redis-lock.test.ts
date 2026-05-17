@@ -10,11 +10,11 @@ import {
 import { POST } from "@/app/api/schedule/run/route";
 import Redis from "ioredis";
 import { requireAuth } from "@/modules/auth/require-auth";
-import * as scheduleEngine from "@/modules/schedule/engine";
+import * as scheduleEngine from "@/modules/schedule/run";
 
 // Mock the schedule engine so we don't actually hit the DB,
 // and we can artificially delay it to guarantee the lock is held.
-vi.mock("@/modules/schedule/engine", () => ({
+vi.mock("@/modules/schedule/run", () => ({
   runSchedule: vi.fn().mockImplementation(async () => {
     // Simulate 100ms of work
     await new Promise((r) => setTimeout(r, 100));

@@ -750,6 +750,11 @@ components:
           type: boolean
           description: 是否允許拆單 (預設 true)
           default: true
+        targetOrderIds:
+          type: array
+          items:
+            type: string
+          description: 只針對這些訂單進行排程 (Targeted Scheduling)
 
     UserRole:
       type: string
@@ -912,6 +917,11 @@ components:
           items:
             type: string
             description: 受到影響的訂單 ID
+        failedOrderIds:
+          type: array
+          items:
+            type: string
+            description: 未能排入排程的訂單 ID
         conflictWarnings:
           type: array
           items:

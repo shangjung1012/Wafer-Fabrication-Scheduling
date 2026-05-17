@@ -7,4 +7,5 @@ export interface SchedulingConfig {
   reschedulePolicy: "GLOBAL_OPTIMIZE" | "PRIORITY_RETAIN" | "GAP_FILLING";
   algorithm: "GREEDY_BEST_FIT";
   splittable: boolean; // Global flag for this scheduling run
+  targetOrderIds?: string[];
 }

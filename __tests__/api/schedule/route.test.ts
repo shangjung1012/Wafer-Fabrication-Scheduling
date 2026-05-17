@@ -10,7 +10,7 @@ import {
 import { POST } from "@/app/api/schedule/run/route";
 import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
 import Redis from "ioredis";
-import * as scheduleEngine from "@/modules/schedule/engine";
+import * as scheduleEngine from "@/modules/schedule/run";
 
 // Mock requireAuth
 vi.mock("@/modules/auth/require-auth", () => ({
@@ -34,7 +34,7 @@ vi.mock("ioredis", () => {
 });
 
 // Mock schedule engine
-vi.mock("@/modules/schedule/engine", () => ({
+vi.mock("@/modules/schedule/run", () => ({
   runSchedule: vi.fn(),
 }));
 

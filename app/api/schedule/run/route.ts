@@ -5,27 +5,9 @@ import {
   UnauthorizedError,
 } from "@/modules/auth/require-auth";
 import { z } from "zod";
-import Redis from "ioredis";
-import { runSchedule } from "@/modules/schedule/engine";
+import { getRedis } from "@/lib/redis";
+import { runSchedule } from "@/modules/schedule/run";
 import { type SchedulingConfig } from "@/modules/schedule/strategy";
-
-let redis: Redis | undefined;
-
-function getRedis(): Redis {
-  if (!redis) {
-    const redisUrl = process.env.REDIS_URL;
-    if (!redisUrl) {
-      throw new Error("REDIS_URL environment variable is not defined");
-    }
-
-    redis = new Redis(redisUrl);
-    redis.on?.("error", (error) => {
-      console.error("Redis connection error:", error);
-    });
-  }
-
-  return redis;
-}
 
 const SchedulingConfigSchema = z
   .object({
@@ -39,6 +21,7 @@ const SchedulingConfigSchema = z
       .default("GAP_FILLING"),
     algorithm: z.enum(["GREEDY_BEST_FIT"]).default("GREEDY_BEST_FIT"),
     splittable: z.boolean().default(true),
+    targetOrderIds: z.array(z.string()).optional(),
   })
   .default({
     frozenDays: 0,
