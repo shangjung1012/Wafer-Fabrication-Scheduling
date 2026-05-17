@@ -367,8 +367,13 @@ function DetailPanel({
 // Pending orders sidebar (SALES only)
 // ---------------------------------------------------------------------------
 
-function PendingSidebar({ orders }: { orders: PendingOrderInfo[] }) {
-  const today = toDateStr(new Date());
+function PendingSidebar({
+  orders,
+  today,
+}: {
+  orders: PendingOrderInfo[];
+  today: string;
+}) {
   const pending = orders.filter((o) => o.status === "PENDING");
   const approved = orders.filter((o) => o.status === "APPROVED");
 
@@ -1182,7 +1187,10 @@ export default function SchedulePage() {
       <div className="flex-1 overflow-hidden flex">
         {/* Pending sidebar (SALES only) */}
         {isSales && data?.salesContext && !loading && !fetchError && (
-          <PendingSidebar orders={data.salesContext.pendingOrders} />
+          <PendingSidebar
+            orders={data.salesContext.pendingOrders}
+            today={data.today}
+          />
         )}
 
         <div className="flex-1 overflow-auto">
