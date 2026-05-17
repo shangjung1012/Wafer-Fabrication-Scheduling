@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   logoutClientAuthSession,
+  persistClientAuthSession,
   type ClientAuthSession,
 } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
@@ -72,6 +73,15 @@ const inputStyle: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
+const EMAIL_ERROR_MESSAGES: Record<string, string> = {
+  missing_token: "Verification link is invalid (missing token).",
+  invalid_token: "Verification link is invalid or has already been used.",
+  already_used: "This verification link has already been used.",
+  expired: "Verification link has expired. Please request a new one.",
+  email_taken:
+    "That email address was taken by another account before you could confirm. Please try again.",
+};
+
 function roleBadge(role: Role): React.CSSProperties {
   return {
     fontSize: 12,
@@ -88,6 +98,8 @@ function roleBadge(role: Role): React.CSSProperties {
 export default function ProfilePage() {
   const session = useClientAuthSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sessionRefreshed = useRef(false);
 
   const [newEmail, setNewEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -96,6 +108,42 @@ export default function ProfilePage() {
     message: string;
   } | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [pendingVerification, setPendingVerification] = useState(false);
+
+  // On mount: handle ?emailUpdated=true and ?emailError=* from the verify redirect
+  useEffect(() => {
+    if (sessionRefreshed.current) return;
+
+    const emailUpdated = searchParams.get("emailUpdated");
+    const emailError = searchParams.get("emailError");
+
+    if (emailUpdated === "true") {
+      sessionRefreshed.current = true;
+      // Fetch fresh user data from DB and update localStorage so UI reflects new email
+      apiFetch("/api/users/me")
+        .then((res) => res.json())
+        .then((data: { user?: ClientAuthSession["user"] }) => {
+          if (data.user) {
+            persistClientAuthSession({ user: data.user });
+          }
+          setEmailStatus({ ok: true, message: "Email updated successfully." });
+        })
+        .catch(() => {
+          setEmailStatus({ ok: true, message: "Email updated successfully." });
+        });
+      // Clean up the query param without a full navigation
+      const url = new URL(window.location.href);
+      url.searchParams.delete("emailUpdated");
+      window.history.replaceState({}, "", url.toString());
+    } else if (emailError) {
+      const msg =
+        EMAIL_ERROR_MESSAGES[emailError] ?? "Email verification failed.";
+      setEmailStatus({ ok: false, message: msg });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("emailError");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (session === undefined) return;
@@ -108,18 +156,21 @@ export default function ProfilePage() {
       setEmailLoading(true);
       setEmailStatus(null);
       try {
-        const res = await apiFetch("/api/users/me", {
-          method: "PATCH",
-          body: JSON.stringify({ email: newEmail, currentPassword }),
+        const res = await apiFetch("/api/users/me/request-email-change", {
+          method: "POST",
+          body: JSON.stringify({ newEmail, currentPassword }),
         });
         const json = (await res.json()) as { message?: string; code?: string };
         if (res.ok) {
-          setEmailStatus({
-            ok: true,
-            message: json.message ?? "Email updated.",
-          });
+          setPendingVerification(true);
           setNewEmail("");
           setCurrentPassword("");
+          setEmailStatus({
+            ok: true,
+            message:
+              json.message ??
+              "Verification email sent. Check your new inbox — the link expires in 3 minutes.",
+          });
         } else {
           setEmailStatus({
             ok: false,
@@ -229,47 +280,83 @@ export default function ProfilePage() {
         <p style={{ fontSize: 13, color: "#475569", margin: "0 0 14px" }}>
           Current email: <strong>{user.email}</strong>
         </p>
-        <form onSubmit={handleEmailChange}>
-          <label style={labelStyle}>
-            New Email
-            <input
-              style={inputStyle}
-              type="email"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              placeholder="new@example.com"
-              required
-            />
-          </label>
-          <label style={{ ...labelStyle, marginTop: 10 }}>
-            Current Password
-            <input
-              style={inputStyle}
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="your current password"
-              required
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={emailLoading}
+
+        {pendingVerification ? (
+          <div
             style={{
-              marginTop: 14,
-              padding: "7px 18px",
               fontSize: 13,
-              fontWeight: 600,
+              color: "#1e40af",
+              background: "#dbeafe",
+              padding: "10px 14px",
               borderRadius: 6,
-              border: "none",
-              background: emailLoading ? "#94a3b8" : "#2563eb",
-              color: "#fff",
-              cursor: emailLoading ? "not-allowed" : "pointer",
             }}
           >
-            {emailLoading ? "Saving…" : "Update Email"}
-          </button>
-        </form>
+            <strong>Check your new inbox.</strong> We sent a verification link
+            to <strong>{newEmail || "your new address"}</strong>. The link
+            expires in <strong>3 minutes</strong>.{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setPendingVerification(false);
+                setEmailStatus(null);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#1e40af",
+                textDecoration: "underline",
+                cursor: "pointer",
+                fontSize: 13,
+                padding: 0,
+              }}
+            >
+              Request a new link
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleEmailChange}>
+            <label style={labelStyle}>
+              New Email
+              <input
+                style={inputStyle}
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="new@example.com"
+                required
+              />
+            </label>
+            <label style={{ ...labelStyle, marginTop: 10 }}>
+              Current Password
+              <input
+                style={inputStyle}
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="your current password"
+                required
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={emailLoading}
+              style={{
+                marginTop: 14,
+                padding: "7px 18px",
+                fontSize: 13,
+                fontWeight: 600,
+                borderRadius: 6,
+                border: "none",
+                background: emailLoading ? "#94a3b8" : "#2563eb",
+                color: "#fff",
+                cursor: emailLoading ? "not-allowed" : "pointer",
+              }}
+            >
+              {emailLoading ? "Sending…" : "Request Email Change"}
+            </button>
+          </form>
+        )}
+
         {emailStatus && (
           <p
             style={{
