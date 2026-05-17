@@ -200,3 +200,12 @@ model OrderRequest {
 
   @@map("order_request")
 }
+
+// Singleton row (id = "global") for system-wide settings
+model SystemState {
+  id               String    @id @default("global")
+  isSimulationMode Boolean   @default(false)
+  simulationDate   DateTime?
+
+  @@map("system_state")
+}

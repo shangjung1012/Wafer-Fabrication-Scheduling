@@ -64,6 +64,10 @@ vi.mock("@/infra/db/capacity-repository", () => ({
   updateDailyCapacityById: vi.fn(),
 }));
 
+vi.mock("@/lib/get-time", () => ({
+  getTime: vi.fn().mockResolvedValue(new Date("2026-05-17T00:00:00.000Z")),
+}));
+
 // ------------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------------

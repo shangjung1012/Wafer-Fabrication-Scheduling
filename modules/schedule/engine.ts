@@ -9,6 +9,7 @@ import {
   bulkUpdateOrderStatus,
 } from "@/infra/db/order-repository";
 import { findFactoriesWithCapacities } from "@/infra/db/factory-repository";
+import { getTime } from "@/lib/get-time";
 import {
   deleteScheduledAssignments,
   createAssignments,
@@ -45,8 +46,13 @@ function isSameLocalDay(a: Date | string, b: Date | string): boolean {
 }
 
 export async function runSchedule(type: string): Promise<ConflictOrderInfo[]> {
+  const currentDate = await getTime();
   const orders = await findOrdersForScheduling(prisma, type);
-  const factories = await findFactoriesWithCapacities(prisma, type);
+  const factories = await findFactoriesWithCapacities(
+    prisma,
+    type,
+    currentDate,
+  );
 
   // In-memory reset: restore capacity used by SCHEDULED assignments.
   // Uses isSameLocalDay to handle UTC vs local-midnight date mismatches.
@@ -76,7 +82,6 @@ export async function runSchedule(type: string): Promise<ConflictOrderInfo[]> {
     }
   }
 
-  const currentDate = new Date();
   const strategyResult = greedyBestFitStrategy(
     orders,
     factories,

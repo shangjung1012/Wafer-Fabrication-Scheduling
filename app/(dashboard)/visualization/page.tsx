@@ -591,6 +591,11 @@ export default function SchedulePage() {
   const [emailsAutoSent, setEmailsAutoSent] = useState(false);
   const [notifyStatus, setNotifyStatus] = useState<NotifyStatus>("idle");
 
+  // Simulation mode state
+  const [simMode, setSimMode] = useState(false);
+  const [simDate, setSimDate] = useState("");
+  const [simLoading, setSimLoading] = useState(false);
+
   // Fetch timeline data
   useEffect(() => {
     if (session === null) {
@@ -690,6 +695,73 @@ export default function SchedulePage() {
   const handleLogout = async () => {
     await logoutClientAuthSession();
     router.replace("/login");
+  };
+
+  // Load simulation state on mount
+  useEffect(() => {
+    if (!session) return;
+    fetch("/api/system/simulation", { credentials: "same-origin" })
+      .then((r) => r.json())
+      .then((body) => {
+        setSimMode(!!body.isSimulationMode);
+        if (body.simulationDate) {
+          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+        }
+      })
+      .catch(() => {});
+  }, [session]);
+
+  const patchSim = async (patch: {
+    isSimulationMode?: boolean;
+    simulationDate?: string | null;
+  }) => {
+    setSimLoading(true);
+    try {
+      const res = await fetch("/api/system/simulation", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        setSimMode(!!body.isSimulationMode);
+        if (body.simulationDate) {
+          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+        } else {
+          setSimDate("");
+        }
+      }
+    } finally {
+      setSimLoading(false);
+    }
+  };
+
+  const handleSimToggle = () => {
+    const next = !simMode;
+    const patch: { isSimulationMode: boolean; simulationDate?: string } = {
+      isSimulationMode: next,
+    };
+    if (next && !simDate) {
+      patch.simulationDate = new Date().toISOString();
+    }
+    patchSim(patch);
+  };
+
+  const handleSimDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSimDate(val);
+    if (val) {
+      patchSim({ simulationDate: new Date(val).toISOString() });
+    }
+  };
+
+  const stepSimDate = (days: number) => {
+    const base = simDate ? new Date(simDate) : new Date();
+    base.setDate(base.getDate() + days);
+    const next = format(base, "yyyy-MM-dd");
+    setSimDate(next);
+    patchSim({ simulationDate: new Date(next).toISOString() });
   };
 
   // Build date columns
@@ -933,6 +1005,62 @@ export default function SchedulePage() {
             </span>
           )}
         </div>
+      </div>
+
+      {/* Simulation mode bar */}
+      <div
+        className={`flex-none px-6 py-2 flex items-center gap-3 flex-wrap border-b text-xs ${
+          simMode ? "bg-amber-50 border-amber-200" : "bg-white border-gray-100"
+        }`}
+      >
+        <span className="font-medium text-gray-700">Simulation Mode</span>
+        <button
+          type="button"
+          onClick={handleSimToggle}
+          disabled={simLoading}
+          className={`px-2.5 py-1 rounded border font-semibold transition-colors ${
+            simMode
+              ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
+              : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+          }`}
+        >
+          {simMode ? "ON" : "OFF"}
+        </button>
+        {simMode && (
+          <>
+            <button
+              type="button"
+              onClick={() => stepSimDate(-1)}
+              disabled={simLoading}
+              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium"
+            >
+              ← -1d
+            </button>
+            <input
+              type="date"
+              value={simDate}
+              onChange={handleSimDateChange}
+              disabled={simLoading}
+              className="border border-amber-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+            />
+            <button
+              type="button"
+              onClick={() => stepSimDate(1)}
+              disabled={simLoading}
+              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium"
+            >
+              +1d →
+            </button>
+            <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
+              Simulating: {simDate || "—"}
+            </span>
+          </>
+        )}
+        {!simMode && (
+          <span className="text-green-700 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
+            ● Live
+          </span>
+        )}
       </div>
 
       {/* Scheduling conflict notification panel */}
