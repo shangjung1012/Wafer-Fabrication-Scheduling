@@ -33,9 +33,24 @@ export type DailyCapacityRow = {
 
 export type VisualizationFilters = {
   factoryId?: string;
+  factoryIds?: string[]; // takes precedence over factoryId; used for SALES scope
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
   productionType?: string; // scope-enforced by service layer
+};
+
+export type SalesAssignmentRow = {
+  orderId: string;
+  factoryId: string;
+};
+
+export type PendingOrderRow = {
+  id: string;
+  name: string;
+  status: string;
+  quantity: number;
+  dueDate: string; // YYYY-MM-DD
+  createdAt: string; // YYYY-MM-DD
 };
 
 // ---------------------------------------------------------------------------
@@ -49,8 +64,12 @@ export async function findFactoriesForVisualization(
   return db.factory.findMany({
     where: {
       status: "ACTIVE",
-      ...(filters.factoryId ? { id: filters.factoryId } : {}),
-      ...(filters.productionType
+      ...(filters.factoryIds
+        ? { id: { in: filters.factoryIds } }
+        : filters.factoryId
+          ? { id: filters.factoryId }
+          : {}),
+      ...(filters.productionType && !filters.factoryIds
         ? { productionType: filters.productionType }
         : {}),
     },
@@ -67,8 +86,12 @@ export async function findAssignmentsForVisualization(
 
   const rows = await db.orderAssignment.findMany({
     where: {
-      ...(filters.factoryId ? { factoryId: filters.factoryId } : {}),
-      ...(filters.productionType
+      ...(filters.factoryIds
+        ? { factoryId: { in: filters.factoryIds } }
+        : filters.factoryId
+          ? { factoryId: filters.factoryId }
+          : {}),
+      ...(filters.productionType && !filters.factoryIds
         ? { factory: { productionType: filters.productionType } }
         : {}),
       ...(dateWhere ? { productionDate: dateWhere } : {}),
@@ -114,8 +137,12 @@ export async function findDailyCapacitiesForVisualization(
 
   const rows = await db.dailyCapacity.findMany({
     where: {
-      ...(filters.factoryId ? { factoryId: filters.factoryId } : {}),
-      ...(filters.productionType
+      ...(filters.factoryIds
+        ? { factoryId: { in: filters.factoryIds } }
+        : filters.factoryId
+          ? { factoryId: filters.factoryId }
+          : {}),
+      ...(filters.productionType && !filters.factoryIds
         ? { factory: { productionType: filters.productionType } }
         : {}),
       ...(dateWhere ? { date: dateWhere } : {}),
@@ -134,6 +161,52 @@ export async function findDailyCapacitiesForVisualization(
     date: format(r.date, "yyyy-MM-dd"),
     maxCapacity: r.maxCapacity,
     curCapacity: r.curCapacity,
+  }));
+}
+
+export async function findSalesAssignments(
+  db: PrismaClient,
+  applicantId: string,
+  filters: Pick<VisualizationFilters, "startDate" | "endDate">,
+): Promise<SalesAssignmentRow[]> {
+  const dateWhere = buildDateWhere(filters.startDate, filters.endDate);
+
+  return db.orderAssignment.findMany({
+    where: {
+      order: { applicantId },
+      ...(dateWhere ? { productionDate: dateWhere } : {}),
+    },
+    select: { orderId: true, factoryId: true },
+  });
+}
+
+export async function findPendingOrdersForSales(
+  db: PrismaClient,
+  applicantId: string,
+): Promise<PendingOrderRow[]> {
+  const rows = await db.order.findMany({
+    where: {
+      applicantId,
+      status: { in: ["PENDING", "APPROVED"] },
+    },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      quantity: true,
+      dueDate: true,
+      createdAt: true,
+    },
+    orderBy: { dueDate: "asc" },
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    status: r.status,
+    quantity: r.quantity,
+    dueDate: format(r.dueDate, "yyyy-MM-dd"),
+    createdAt: format(r.createdAt, "yyyy-MM-dd"),
   }));
 }
 

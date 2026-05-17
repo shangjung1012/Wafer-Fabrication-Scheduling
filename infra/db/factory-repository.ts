@@ -33,7 +33,9 @@ export async function updateFactory(
 export async function findFactoriesWithCapacities(
   db: PrismaClient,
   type: string,
+  currentDate: Date,
 ) {
+  const todayMidnight = new Date(new Date(currentDate).setHours(0, 0, 0, 0));
   return db.factory.findMany({
     where: {
       productionType: type,
@@ -43,7 +45,7 @@ export async function findFactoriesWithCapacities(
       dailyCapacities: {
         where: {
           date: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+            gte: todayMidnight,
           },
         },
       },

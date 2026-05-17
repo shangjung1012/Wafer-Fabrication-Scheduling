@@ -409,6 +409,7 @@ export default function OrdersPage() {
   const [updateId, setUpdateId] = useState("");
   const [updateName, setUpdateName] = useState("");
   const [updateQty, setUpdateQty] = useState("");
+  const [updateDueDate, setUpdateDueDate] = useState("");
   const [updateStatus2, setUpdateStatus2] = useState(""); // new status value
   const [updateResult, setUpdateResult] = useState<unknown>(null);
   const [updateHttpStatus, setUpdateHttpStatus] = useState("");
@@ -417,6 +418,7 @@ export default function OrdersPage() {
     const body: Record<string, unknown> = {};
     if (updateName) body.name = updateName;
     if (updateQty) body.quantity = Number(updateQty);
+    if (updateDueDate) body.dueDate = new Date(updateDueDate).toISOString();
     if (isAdminOrSuper && updateStatus2) body.status = updateStatus2;
     const res = await apiFetch(`/api/orders/${updateId}`, {
       method: "PUT",
@@ -424,7 +426,14 @@ export default function OrdersPage() {
     });
     setUpdateResult(await res.json());
     setUpdateHttpStatus(`${res.status}`);
-  }, [updateId, updateName, updateQty, updateStatus2, isAdminOrSuper]);
+  }, [
+    updateId,
+    updateName,
+    updateQty,
+    updateDueDate,
+    updateStatus2,
+    isAdminOrSuper,
+  ]);
 
   // ---- Delete Orders (ADMIN) ----
   const [deleteIds, setDeleteIds] = useState("");
@@ -501,17 +510,27 @@ export default function OrdersPage() {
   // ---- Update Request (SALES) ----
   const [updateReqId, setUpdateReqId] = useState("");
   const [updateReqMessage, setUpdateReqMessage] = useState("");
+  const [updateReqPayload, setUpdateReqPayload] = useState("");
   const [updateReqResult, setUpdateReqResult] = useState<unknown>(null);
   const [updateReqStatus, setUpdateReqStatus] = useState("");
 
   const doUpdateRequest = useCallback(async () => {
+    const body: Record<string, unknown> = {};
+    if (updateReqMessage) body.message = updateReqMessage;
+    if (updateReqPayload.trim()) {
+      try {
+        body.payload = JSON.parse(updateReqPayload);
+      } catch {
+        body.payload = updateReqPayload;
+      }
+    }
     const res = await apiFetch(`/api/requests/${updateReqId}`, {
       method: "PUT",
-      body: JSON.stringify({ message: updateReqMessage }),
+      body: JSON.stringify(body),
     });
     setUpdateReqResult(await res.json());
     setUpdateReqStatus(`${res.status}`);
-  }, [updateReqId, updateReqMessage]);
+  }, [updateReqId, updateReqMessage, updateReqPayload]);
 
   // ---- Approve Request (ADMIN + SUPERADMIN) ----
   const [approveReqId, setApproveReqId] = useState("");
@@ -601,6 +620,9 @@ export default function OrdersPage() {
         </a>
         <a href="/users" style={navLinkStyle}>
           Users
+        </a>
+        <a href="/profile" style={navLinkStyle}>
+          Profile
         </a>
       </nav>
 
@@ -778,6 +800,12 @@ export default function OrdersPage() {
             onChange={(e) => setUpdateQty(e.target.value)}
             placeholder="new quantity (optional)"
           />
+          <Input
+            label="Due Date"
+            type="date"
+            value={updateDueDate}
+            onChange={(e) => setUpdateDueDate(e.target.value)}
+          />
           {isAdmin && (
             <label style={{ display: "block", marginBottom: 6, fontSize: 13 }}>
               Status (ADMIN only)
@@ -940,8 +968,37 @@ export default function OrdersPage() {
             label="New Message"
             value={updateReqMessage}
             onChange={(e) => setUpdateReqMessage(e.target.value)}
-            placeholder="updated message"
+            placeholder="updated message (optional)"
           />
+          <label
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontSize: 13,
+              color: "#334155",
+              fontWeight: 650,
+            }}
+          >
+            Payload (JSON, optional)
+            <textarea
+              value={updateReqPayload}
+              onChange={(e) => setUpdateReqPayload(e.target.value)}
+              placeholder='{"field": "value"}'
+              rows={3}
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "4px 8px",
+                marginTop: 2,
+                border: "1px solid #cbd5e1",
+                borderRadius: 4,
+                fontSize: 12,
+                fontFamily: "monospace",
+                boxSizing: "border-box",
+                resize: "vertical",
+              }}
+            />
+          </label>
           <Btn onClick={doUpdateRequest}>Send</Btn>
           {updateReqStatus && (
             <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>

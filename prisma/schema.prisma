@@ -63,11 +63,27 @@ model User {
   modifiedOrders   Order[]           @relation("OrderModifier")
   managedFactories Factory[]         @relation("FactoryAdmins")
   requests         OrderRequest[]    @relation("RequestApplicant")
-  refreshTokens    RefreshToken[]
-  invitations      UserInvitation[]  @relation("InvitationUser")
-  createdInvitations UserInvitation[] @relation("InvitationCreator")
+  refreshTokens      RefreshToken[]
+  invitations        UserInvitation[]   @relation("InvitationUser")
+  createdInvitations UserInvitation[]   @relation("InvitationCreator")
+  emailChangeTokens  EmailChangeToken[]
 
   @@map("user")
+}
+
+model EmailChangeToken {
+  id        String    @id @default(cuid())
+  userId    String
+  newEmail  String
+  token     String    @unique @default(cuid())
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_change_token")
 }
 
 model UserInvitation {
@@ -185,4 +201,13 @@ model OrderRequest {
   order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("order_request")
+}
+
+// Singleton row (id = "global") for system-wide settings
+model SystemState {
+  id               String    @id @default("global")
+  isSimulationMode Boolean   @default(false)
+  simulationDate   DateTime?
+
+  @@map("system_state")
 }

@@ -281,6 +281,7 @@ export async function findOrdersForScheduling(
     },
     include: {
       assignments: true,
+      applicant: { select: { email: true, username: true } },
     },
   });
 }
