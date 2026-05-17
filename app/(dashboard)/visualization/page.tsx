@@ -44,6 +44,10 @@ function toDateStr(d: Date) {
   return format(d, "yyyy-MM-dd");
 }
 
+function dateInputToIso(value: string) {
+  return new Date(`${value}T00:00:00`).toISOString();
+}
+
 // ---------------------------------------------------------------------------
 // Cell computation
 // ---------------------------------------------------------------------------
@@ -407,14 +411,15 @@ function DetailPanel({
 
 function PendingSidebar({
   orders,
+  today,
   onEditOrder,
   onCreate,
 }: {
   orders: PendingOrderInfo[];
+  today: string;
   onEditOrder: (order: OrderEditorValues) => void;
   onCreate?: () => void;
 }) {
-  const today = toDateStr(new Date());
   const pending = orders.filter((o) => o.status === "PENDING");
   const approved = orders.filter((o) => o.status === "APPROVED");
 
@@ -940,6 +945,11 @@ export default function SchedulePage() {
   >("idle");
   const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
 
+  // Simulation mode state (from dev)
+  const [simMode, setSimMode] = useState(false);
+  const [simDate, setSimDate] = useState("");
+  const [simLoading, setSimLoading] = useState(false);
+
   // Fetch algorithm list (admin/superadmin only)
   useEffect(() => {
     if (!session || session.user.role === "SALES") return;
@@ -1392,6 +1402,79 @@ export default function SchedulePage() {
     setRefreshKey((k) => k + 1);
   };
 
+  // Load simulation state on mount
+  useEffect(() => {
+    if (!session) return;
+    fetch("/api/system/simulation", { credentials: "same-origin" })
+      .then((r) => r.json())
+      .then((body) => {
+        setSimMode(!!body.isSimulationMode);
+        if (body.simulationDate) {
+          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+        }
+      })
+      .catch(() => {});
+  }, [session]);
+
+  const patchSim = async (patch: {
+    isSimulationMode?: boolean;
+    simulationDate?: string | null;
+  }) => {
+    setSimLoading(true);
+    try {
+      const res = await fetch("/api/system/simulation", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        setSimMode(!!body.isSimulationMode);
+        if (body.simulationDate) {
+          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+        } else {
+          setSimDate("");
+        }
+        setLoading(true);
+        setFetchError(null);
+        setRefreshKey((k) => k + 1);
+      }
+    } finally {
+      setSimLoading(false);
+    }
+  };
+
+  const handleTimeModeChange = (nextIsManual: boolean) => {
+    if (!nextIsManual) {
+      patchSim({ isSimulationMode: false });
+      return;
+    }
+
+    patchSim({
+      isSimulationMode: true,
+      simulationDate: simDate
+        ? dateInputToIso(simDate)
+        : new Date().toISOString(),
+    });
+  };
+
+  const handleSimDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSimDate(val);
+    if (val) {
+      patchSim({ simulationDate: dateInputToIso(val) });
+    }
+  };
+
+  const stepSimDate = (days: number) => {
+    const base = simDate ? new Date(simDate) : new Date();
+    base.setDate(base.getDate() + days);
+    const next = format(base, "yyyy-MM-dd");
+    setSimDate(next);
+    patchSim({ simulationDate: dateInputToIso(next) });
+  };
+
   // Build date columns
   const dates = useMemo(() => {
     if (!startDate || !endDate) return [];
@@ -1413,11 +1496,12 @@ export default function SchedulePage() {
               dailyCapacities: effective.dailyCapacities,
               diffs: effective.diffs,
               salesContext: data?.salesContext,
+              today: data?.today ?? "",
             },
             dates,
           )
         : new Map(),
-    [effective, dates, data?.salesContext],
+    [effective, dates, data?.salesContext, data?.today],
   );
 
   // Group factories by productionType
@@ -1731,6 +1815,76 @@ export default function SchedulePage() {
         </div>
       </div>
 
+      {/* Simulation mode bar */}
+      <div
+        className={`flex-none px-6 py-2 flex items-center gap-3 flex-wrap border-b text-xs ${
+          simMode ? "bg-amber-50 border-amber-200" : "bg-white border-gray-100"
+        }`}
+      >
+        <span className="font-medium text-gray-700">Time Mode</span>
+        <div className="inline-flex rounded border border-gray-300 bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => handleTimeModeChange(false)}
+            disabled={simLoading || !simMode}
+            className={`px-2.5 py-1 font-semibold transition-colors ${
+              !simMode
+                ? "bg-green-600 text-white"
+                : "text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            }`}
+          >
+            Auto
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTimeModeChange(true)}
+            disabled={simLoading || simMode}
+            className={`px-2.5 py-1 font-semibold border-l border-gray-300 transition-colors ${
+              simMode
+                ? "bg-amber-500 text-white"
+                : "text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            }`}
+          >
+            Manual
+          </button>
+        </div>
+        {simMode && (
+          <>
+            <button
+              type="button"
+              onClick={() => stepSimDate(-1)}
+              disabled={simLoading}
+              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium"
+            >
+              ← -1d
+            </button>
+            <input
+              type="date"
+              value={simDate}
+              onChange={handleSimDateChange}
+              disabled={simLoading}
+              className="border border-amber-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+            />
+            <button
+              type="button"
+              onClick={() => stepSimDate(1)}
+              disabled={simLoading}
+              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium"
+            >
+              +1d →
+            </button>
+            <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
+              Simulating: {simDate || "—"}
+            </span>
+          </>
+        )}
+        {!simMode && (
+          <span className="text-green-700 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
+            ● Auto: live time
+          </span>
+        )}
+      </div>
+
       {/* Preview banner */}
       {previewData && (
         <div className="flex-none px-6 py-2 bg-indigo-50 border-b border-indigo-200 flex items-center gap-3">
@@ -1932,6 +2086,7 @@ export default function SchedulePage() {
         {isSales && data?.salesContext && !loading && !fetchError && (
           <PendingSidebar
             orders={data.salesContext.pendingOrders}
+            today={data.today}
             onEditOrder={(order) => setEditOrder(order)}
             onCreate={() => setCreateOpen(true)}
           />

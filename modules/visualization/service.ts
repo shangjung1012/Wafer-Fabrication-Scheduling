@@ -3,6 +3,7 @@ import type { RequestContext } from "@/modules/auth/request-context";
 import { requireRole } from "@/modules/auth/rbac";
 import { resolveActorScope, getScopeGroup } from "@/modules/auth/scope";
 import type { SalesScope } from "@/modules/auth/scope";
+import { getTime } from "@/lib/get-time";
 import {
   findFactoriesForVisualization,
   findAssignmentsForVisualization,
@@ -53,8 +54,9 @@ export async function getTimeline(
   const timeline = mapTimeline(assignmentRows);
   const dailyCapacities = mapCapacities(capacityRows);
   const conflicts = detectConflicts(timeline, capacityRows);
+  const today = format(await getTime(), "yyyy-MM-dd");
 
-  return { factories, timeline, conflicts, dailyCapacities, diffs: [] };
+  return { factories, timeline, conflicts, dailyCapacities, diffs: [], today };
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +73,7 @@ async function getSalesTimeline(
   const myOrderIds = [...new Set(salesRows.map((r) => r.orderId))];
 
   const pendingRows = await findPendingOrdersForSales(db, scope.userId);
-  const today = format(new Date(), "yyyy-MM-dd");
+  const today = format(await getTime(), "yyyy-MM-dd");
 
   const pendingOrders: PendingOrderInfo[] = pendingRows.map((r) => ({
     id: r.id,
@@ -90,6 +92,7 @@ async function getSalesTimeline(
       conflicts: [],
       dailyCapacities: [],
       diffs: [],
+      today,
       salesContext: { myOrderIds: [], pendingOrders },
     };
   }
@@ -112,6 +115,7 @@ async function getSalesTimeline(
     conflicts,
     dailyCapacities,
     diffs: [],
+    today,
     salesContext: { myOrderIds, pendingOrders },
   };
 }

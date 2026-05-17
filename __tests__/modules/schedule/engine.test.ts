@@ -39,6 +39,11 @@ vi.mock("@/infra/db/capacity-repository", () => ({
   updateDailyCapacityById: vi.fn(),
 }));
 
+const MOCK_NOW = new Date("2026-05-17T00:00:00.000Z");
+vi.mock("@/lib/get-time", () => ({
+  getTime: vi.fn().mockResolvedValue(new Date("2026-05-17T00:00:00.000Z")),
+}));
+
 describe("Schedule Engine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -118,6 +123,7 @@ describe("Schedule Engine", () => {
     expect(factoryRepo.findFactoriesWithCapacities).toHaveBeenCalledWith(
       prisma,
       "Type A",
+      MOCK_NOW,
     );
 
     // Strategy

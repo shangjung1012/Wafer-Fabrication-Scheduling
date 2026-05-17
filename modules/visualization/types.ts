@@ -75,6 +75,7 @@ export type TimelineResponse = {
   dailyCapacities: DailyCapacityInfo[];
   diffs: DiffEntry[];
   salesContext?: SalesContext;
+  today: string; // YYYY-MM-DD, reflects simulation date if active
 };
 
 export type SchedulePreviewResponse = {

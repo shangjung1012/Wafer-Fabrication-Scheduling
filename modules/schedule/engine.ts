@@ -14,6 +14,7 @@ import {
   bulkUpdateOrderStatus,
 } from "@/infra/db/order-repository";
 import { findFactoriesWithCapacities } from "@/infra/db/factory-repository";
+import { getTime } from "@/lib/get-time";
 import {
   deleteScheduledAssignments,
   createAssignments,
@@ -67,8 +68,13 @@ export async function simulateSchedule(
   type: string,
   algorithmId?: SchedulingAlgorithmId | string,
 ): Promise<SimulationResult> {
+  const currentDate = await getTime();
   const orders = await findOrdersForScheduling(prisma, type);
-  const factories = await findFactoriesWithCapacities(prisma, type);
+  const factories = await findFactoriesWithCapacities(
+    prisma,
+    type,
+    currentDate,
+  );
 
   // In-memory reset: restore capacity used by SCHEDULED assignments.
   // Uses isSameLocalDay to handle UTC vs local-midnight date mismatches.
@@ -108,7 +114,6 @@ export async function simulateSchedule(
   }
 
   const algorithm = resolveAlgorithm(algorithmId);
-  const currentDate = new Date();
   const strategy = algorithm.run(orders, factories, capacities, currentDate);
 
   return { strategy, orders, capacitiesBefore, previousScheduled };
