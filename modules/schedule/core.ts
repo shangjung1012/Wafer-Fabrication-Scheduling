@@ -41,11 +41,19 @@ export async function prepareSchedulingData(
 
   if (config.reschedulePolicy !== "GAP_FILLING") {
     for (const order of orders) {
+      const isImmutable =
+        order.isFixed ||
+        order.status === OrderStatus.IN_PRODUCTION ||
+        order.status === OrderStatus.COMPLETED;
+
       if (order.assignments) {
         const remainingAssignments = [];
         for (const assignment of order.assignments) {
-          if (assignment.status === AssignmentStatus.SCHEDULED) {
-            // GLOBAL_OPTIMIZE or PRIORITY_RETAIN
+          if (
+            assignment.status === AssignmentStatus.SCHEDULED &&
+            !isImmutable
+          ) {
+            // GLOBAL_OPTIMIZE or PRIORITY_RETAIN for mutable orders
             const prodDate = new Date(assignment.productionDate).getTime();
             const startLimit = config.startDate.getTime();
             const endLimit = config.endDate
@@ -79,29 +87,39 @@ export async function applyScheduleTransaction(
   config: SchedulingConfig,
   strategyResult: StrategyResult,
 ) {
-  const processedOrderIds = strategyResult.processedOrders.map((o) => o.id);
-
   const scheduledIds = strategyResult.processedOrders
     .filter((o) => o.status === OrderStatus.SCHEDULED)
     .map((o) => o.id);
 
-  const approvedIds = strategyResult.processedOrders
-    .filter((o) => o.status === OrderStatus.APPROVED)
+  const failedIds = strategyResult.processedOrders
+    .filter((o) => o.status === OrderStatus.FAILED)
     .map((o) => o.id);
 
   await prisma.$transaction(async (tx) => {
     const db = tx as unknown as PrismaClient;
 
     if (config.reschedulePolicy !== "GAP_FILLING") {
-      await deleteScheduledAssignments(
-        db,
-        processedOrderIds,
-        config.startDate,
-        config.endDate,
-      );
+      // Only delete assignments for mutable orders
+      const mutableProcessedOrderIds = strategyResult.processedOrders
+        .filter(
+          (o) =>
+            !o.isFixed &&
+            o.status !== OrderStatus.IN_PRODUCTION &&
+            o.status !== OrderStatus.COMPLETED,
+        )
+        .map((o) => o.id);
+
+      if (mutableProcessedOrderIds.length > 0) {
+        await deleteScheduledAssignments(
+          db,
+          mutableProcessedOrderIds,
+          config.startDate,
+          config.endDate,
+        );
+      }
     }
 
-    await applyScheduleOrdersUpdate(db, scheduledIds, approvedIds);
+    await applyScheduleOrdersUpdate(db, scheduledIds, failedIds);
 
     await createDailyCapacities(db, strategyResult.newCapacities);
 

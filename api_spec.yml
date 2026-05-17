@@ -766,7 +766,7 @@ components:
 
     OrderStatus:
       type: string
-      enum: [PENDING, APPROVED, SCHEDULED, IN_PRODUCTION, COMPLETED, CANCELLED]
+      enum: [PENDING, SCHEDULED, IN_PRODUCTION, COMPLETED, CANCELLED, FAILED]
 
     AssignmentStatus:
       type: string
@@ -819,6 +819,10 @@ components:
         type:
           type: string
           description: Production type (A | B | C), auto-assigned from the caller's scope
+        isFixed:
+          type: boolean
+        isPrioritized:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -875,6 +879,10 @@ components:
         dueDate:
           type: string
           format: date-time
+        isFixed:
+          type: boolean
+        isPrioritized:
+          type: boolean
 
     OrderUpdateInput:
       type: object
@@ -888,6 +896,10 @@ components:
           format: date-time
         status:
           $ref: "#/components/schemas/OrderStatus"
+        isFixed:
+          type: boolean
+        isPrioritized:
+          type: boolean
 
     ScheduleUpdateInput:
       type: object

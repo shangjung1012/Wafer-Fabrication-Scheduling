@@ -96,10 +96,10 @@ export async function POST(request: Request) {
 
     const affectedOrders = strategyResult.processedOrders.map((o) => o.id);
 
-    // We determine failedOrderIds by checking if the order's final status is APPROVED
+    // We determine failedOrderIds by checking if the order's final status is FAILED
     // (Orders that successfully scheduled will be SCHEDULED. Orders not processed aren't here).
     const failedOrderIds = newSchedule
-      .filter((o) => o.status === OrderStatus.APPROVED)
+      .filter((o) => o.status === OrderStatus.FAILED)
       .map((o) => o.id);
 
     // Basic conflict warnings

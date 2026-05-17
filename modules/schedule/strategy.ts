@@ -36,6 +36,8 @@ export interface SchedulingOrderInput {
   dueDate: Date;
   quantity: number;
   createdAt: Date;
+  isFixed: boolean;
+  isPrioritized: boolean;
   assignments?: SchedulingAssignmentInput[];
 }
 
@@ -94,19 +96,57 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
       newCapacities: [],
     };
 
-    // 1. Sort orders (Layer 2 & IN_PRODUCTION Priority)
-    const sortedOrders = [...orders].sort((a, b) => {
-      // Priority 1: IN_PRODUCTION orders have absolute priority
-      if (
-        a.status === OrderStatus.IN_PRODUCTION &&
-        b.status !== OrderStatus.IN_PRODUCTION
-      )
-        return -1;
-      if (
-        b.status === OrderStatus.IN_PRODUCTION &&
-        a.status !== OrderStatus.IN_PRODUCTION
-      )
-        return 1;
+    // 1. Separate immutable and mutable orders
+    const immutableOrders: SchedulingOrderInput[] = [];
+    const mutableOrders: SchedulingOrderInput[] = [];
+
+    for (const order of orders) {
+      const isImmutable =
+        order.isFixed ||
+        order.status === OrderStatus.IN_PRODUCTION ||
+        order.status === OrderStatus.COMPLETED;
+      if (isImmutable) {
+        immutableOrders.push(order);
+      } else {
+        mutableOrders.push(order);
+      }
+    }
+
+    // 2. Initialize in-memory capacity map
+    const capacityMap = new Map<string, CapacityDraft>();
+    for (const cap of capacities) {
+      const dateKey = toDateString(cap.date);
+      capacityMap.set(`${cap.factoryId}_${dateKey}`, { ...cap });
+    }
+
+    // 3. Pre-allocate capacity for immutable orders and push to processedOrders
+    for (const order of immutableOrders) {
+      for (const assignment of order.assignments || []) {
+        const dateKey = toDateString(assignment.productionDate);
+        const mapKey = `${assignment.factoryId}_${dateKey}`;
+        let cap = capacityMap.get(mapKey);
+
+        if (!cap) {
+          const factory = factories.find((f) => f.id === assignment.factoryId);
+          const maxCap = factory ? factory.maxCapacity : 10000; // Fallback
+          cap = {
+            factoryId: assignment.factoryId,
+            date: new Date(assignment.productionDate),
+            maxCapacity: maxCap,
+            curCapacity: maxCap,
+          };
+          capacityMap.set(mapKey, cap);
+        }
+        cap.curCapacity -= assignment.assignedQuantity;
+      }
+      result.processedOrders.push({ ...order, status: order.status });
+    }
+
+    // 4. Sort mutable orders
+    const sortedOrders = [...mutableOrders].sort((a, b) => {
+      // Priority 1: isPrioritized orders
+      if (a.isPrioritized && !b.isPrioritized) return -1;
+      if (!a.isPrioritized && b.isPrioritized) return 1;
 
       // Priority 2: PRIORITY_RETAIN policy prioritizes SCHEDULED orders
       if (config.reschedulePolicy === "PRIORITY_RETAIN") {
@@ -134,14 +174,7 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
       return createdAtA - createdAtB;
     });
 
-    // 2. Initialize in-memory capacity map
-    const capacityMap = new Map<string, CapacityDraft>();
-    for (const cap of capacities) {
-      const dateKey = toDateString(cap.date);
-      capacityMap.set(`${cap.factoryId}_${dateKey}`, { ...cap });
-    }
-
-    // 3. Process each order
+    // 5. Process each mutable order
     for (const order of sortedOrders) {
       const windowStart = new Date(config.startDate);
       windowStart.setDate(windowStart.getDate() + config.frozenDays);
@@ -316,13 +349,9 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
           result.newAssignments.push(...virtualAssignments);
         }
 
+        // Mutable order that succeeded becomes SCHEDULED
         let finalStatus = order.status;
-        // If order was already fully scheduled previously, its remainingQty is 0 and startingRemainingQty is 0
-        if (
-          order.status !== OrderStatus.IN_PRODUCTION &&
-          order.status !== OrderStatus.COMPLETED &&
-          startingRemainingQty > 0
-        ) {
+        if (startingRemainingQty > 0) {
           finalStatus = OrderStatus.SCHEDULED;
         }
         result.processedOrders.push({ ...order, status: finalStatus });
@@ -340,14 +369,8 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
           }
         }
 
-        let finalStatus = order.status;
-        if (
-          order.status !== OrderStatus.IN_PRODUCTION &&
-          order.status !== OrderStatus.COMPLETED
-        ) {
-          finalStatus = OrderStatus.APPROVED;
-        }
-        result.processedOrders.push({ ...order, status: finalStatus });
+        // Mutable order that failed becomes FAILED
+        result.processedOrders.push({ ...order, status: OrderStatus.FAILED });
       }
     }
 

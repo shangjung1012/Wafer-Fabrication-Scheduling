@@ -73,7 +73,7 @@ describe("POST /api/schedule/preview", () => {
             },
           ],
         },
-        { id: "O2", status: OrderStatus.APPROVED, quantity: 100 },
+        { id: "O2", status: OrderStatus.FAILED, quantity: 100 },
       ],
       newAssignments: [
         {
@@ -122,11 +122,11 @@ describe("POST /api/schedule/preview", () => {
     expect(data.data.affectedOrders).toContain("O1");
     expect(data.data.affectedOrders).toContain("O2");
 
-    // O2 is APPROVED, which means it failed to schedule.
+    // O2 is FAILED, which means it failed to schedule.
     expect(data.data.failedOrderIds).toEqual(["O2"]);
   });
 
-  it("should extract failedOrderIds correctly when order is APPROVED", async () => {
+  it("should extract failedOrderIds correctly when order is FAILED", async () => {
     vi.mocked(auth.requireAuth).mockResolvedValue({
       user: { role: "ADMIN", id: "U1" },
     } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
@@ -139,7 +139,7 @@ describe("POST /api/schedule/preview", () => {
           status: OrderStatus.SCHEDULED,
           assignments: [],
         },
-        { id: "O2", status: OrderStatus.APPROVED, quantity: 100 },
+        { id: "O2", status: OrderStatus.FAILED, quantity: 100 },
       ],
       newAssignments: [],
       updatedCapacities: [],

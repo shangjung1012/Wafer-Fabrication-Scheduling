@@ -268,7 +268,7 @@ function buildOrders(): SeedOrder[] {
       status: "SCHEDULED",
     },
 
-    // --- APPROVED (no assignments — ready for schedule engine) ---
+    // --- PENDING (no assignments — ready for schedule engine or approval) ---
     {
       id: "ord-seed-013",
       name: "Wafer-Pending-A",
@@ -276,7 +276,7 @@ function buildOrders(): SeedOrder[] {
       quantity: 500,
       dueDate: d("2026-06-10"),
       applicantId: "sales-A",
-      status: "APPROVED",
+      status: "PENDING",
     },
     {
       id: "ord-seed-014",
@@ -285,7 +285,7 @@ function buildOrders(): SeedOrder[] {
       quantity: 400,
       dueDate: d("2026-06-08"),
       applicantId: "sales-B",
-      status: "APPROVED",
+      status: "PENDING",
     },
     {
       id: "ord-seed-015",
@@ -294,7 +294,7 @@ function buildOrders(): SeedOrder[] {
       quantity: 700,
       dueDate: d("2026-06-12"),
       applicantId: "sales-C",
-      status: "APPROVED",
+      status: "PENDING",
     },
   ];
 }
@@ -705,7 +705,7 @@ async function main() {
     "  DUE_DATE  ord-seed-007 B-Lot-02    production 5/15 > dueDate 5/14",
   );
   console.log("");
-  console.log("APPROVED orders (ready for schedule engine):");
+  console.log("PENDING orders (ready for schedule engine after approval):");
   console.log(
     "  ord-seed-013  Wafer-Pending-A  type A  qty 500  due 2026-06-10",
   );

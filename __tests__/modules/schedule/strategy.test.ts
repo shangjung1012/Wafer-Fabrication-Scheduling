@@ -32,10 +32,12 @@ describe("Greedy Best-Fit Strategy", () => {
     const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 5),
         quantity: 100,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
     ];
@@ -82,10 +84,12 @@ describe("Greedy Best-Fit Strategy", () => {
     const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 2),
         quantity: 50,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
     ];
@@ -118,10 +122,12 @@ describe("Greedy Best-Fit Strategy", () => {
     const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 3), // window is TOMORROW and the day after
         quantity: 150,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
     ];
@@ -175,10 +181,12 @@ describe("Greedy Best-Fit Strategy", () => {
     const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 2), // window is TOMORROW and the day after (if allowed)
         quantity: 150,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
     ];
@@ -203,7 +211,7 @@ describe("Greedy Best-Fit Strategy", () => {
       TODAY,
     );
 
-    expect(result.processedOrders[0].status).toBe(OrderStatus.APPROVED); // Remained APPROVED
+    expect(result.processedOrders[0].status).toBe(OrderStatus.FAILED); // Remained FAILED
     expect(result.newAssignments).toHaveLength(0); // No virtual assignments outputted
 
     // Capacity should be rolled back to 50
@@ -220,6 +228,8 @@ describe("Greedy Best-Fit Strategy", () => {
         dueDate: addDays(TODAY, 5),
         quantity: 100,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [
           { status: AssignmentStatus.IN_PRODUCTION, assignedQuantity: 100 },
         ],
@@ -252,6 +262,8 @@ describe("Greedy Best-Fit Strategy", () => {
         dueDate: addDays(TODAY, 2), // window is TOMORROW and the day after
         quantity: 100,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [
           { status: AssignmentStatus.IN_PRODUCTION, assignedQuantity: 50 }, // 50 left to schedule
         ],
@@ -278,7 +290,7 @@ describe("Greedy Best-Fit Strategy", () => {
     );
 
     expect(result.newAssignments).toHaveLength(0); // Rolled back
-    // MUST NOT downgrade to APPROVED
+    // MUST NOT downgrade to FAILED
     expect(result.processedOrders[0].status).toBe(OrderStatus.IN_PRODUCTION);
   });
 
@@ -286,26 +298,32 @@ describe("Greedy Best-Fit Strategy", () => {
     const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 5),
         quantity: 1000,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
       {
         id: "O2",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 3),
         quantity: 50,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       }, // Earliest
       {
         id: "O3",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 5),
         quantity: 1000,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       }, // Larger quantity
     ];
@@ -341,10 +359,10 @@ describe("Greedy Best-Fit Strategy", () => {
       OrderStatus.SCHEDULED,
     );
     expect(result.processedOrders.find((o) => o.id === "O3")?.status).toBe(
-      OrderStatus.APPROVED,
+      OrderStatus.FAILED,
     );
     expect(result.processedOrders.find((o) => o.id === "O1")?.status).toBe(
-      OrderStatus.APPROVED,
+      OrderStatus.FAILED,
     );
   });
 
@@ -354,10 +372,12 @@ describe("Greedy Best-Fit Strategy", () => {
     const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 1),
         quantity: 100,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
       {
@@ -366,7 +386,16 @@ describe("Greedy Best-Fit Strategy", () => {
         dueDate: addDays(TODAY, 5),
         quantity: 100,
         createdAt: TODAY,
-        assignments: [],
+        isFixed: false,
+        isPrioritized: false,
+        assignments: [
+          {
+            status: AssignmentStatus.IN_PRODUCTION,
+            assignedQuantity: 100,
+            factoryId: "F1",
+            productionDate: addDays(TODAY, 1),
+          },
+        ],
       },
     ];
 
@@ -396,7 +425,7 @@ describe("Greedy Best-Fit Strategy", () => {
       OrderStatus.IN_PRODUCTION,
     );
     expect(result.processedOrders.find((o) => o.id === "O1")?.status).toBe(
-      OrderStatus.APPROVED,
+      OrderStatus.FAILED,
     ); // Failed to schedule
   });
 
@@ -404,10 +433,12 @@ describe("Greedy Best-Fit Strategy", () => {
     const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 1),
         quantity: 100,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
       {
@@ -416,6 +447,8 @@ describe("Greedy Best-Fit Strategy", () => {
         dueDate: addDays(TODAY, 5),
         quantity: 100,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
     ];
@@ -450,7 +483,7 @@ describe("Greedy Best-Fit Strategy", () => {
       OrderStatus.SCHEDULED,
     );
     expect(result.processedOrders.find((o) => o.id === "O1")?.status).toBe(
-      OrderStatus.APPROVED,
+      OrderStatus.FAILED,
     );
   });
 
@@ -458,10 +491,12 @@ describe("Greedy Best-Fit Strategy", () => {
     const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 3),
         quantity: 150,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
     ];
@@ -481,7 +516,7 @@ describe("Greedy Best-Fit Strategy", () => {
       TODAY,
     );
 
-    expect(result.processedOrders[0].status).toBe(OrderStatus.APPROVED); // Failed
+    expect(result.processedOrders[0].status).toBe(OrderStatus.FAILED); // Failed
     expect(result.newAssignments).toHaveLength(0);
   });
 
@@ -489,10 +524,12 @@ describe("Greedy Best-Fit Strategy", () => {
     const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 3),
         quantity: 150,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
     ];
@@ -523,10 +560,12 @@ describe("Greedy Best-Fit Strategy", () => {
     const orders: SchedulingOrderInput[] = [
       {
         id: "O1",
-        status: OrderStatus.APPROVED,
+        status: OrderStatus.PENDING,
         dueDate: addDays(TODAY, 10),
         quantity: 100,
         createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
         assignments: [],
       },
     ];
@@ -569,5 +608,138 @@ describe("Greedy Best-Fit Strategy", () => {
 
     expect(assignedDateStr >= expectedStartStr).toBeTruthy();
     expect(assignedDateStr <= expectedEndStr).toBeTruthy();
+  });
+
+  it("should prioritize isPrioritized orders", () => {
+    const orders: SchedulingOrderInput[] = [
+      {
+        id: "O1",
+        status: OrderStatus.PENDING,
+        dueDate: addDays(TODAY, 20),
+        quantity: 50,
+        createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
+        assignments: [],
+      },
+      {
+        id: "O2",
+        status: OrderStatus.PENDING,
+        dueDate: addDays(TODAY, 21),
+        quantity: 50,
+        createdAt: addDays(TODAY, 1),
+        isFixed: false,
+        isPrioritized: true,
+        assignments: [],
+      },
+    ];
+
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 100 },
+    ];
+
+    const capacities: SchedulingCapacityInput[] = [
+      {
+        id: "C1",
+        factoryId: "F1",
+        date: addDays(TODAY, 1),
+        maxCapacity: 100,
+        curCapacity: 100,
+      },
+    ];
+
+    const result = greedyBestFitStrategy.execute(
+      orders,
+      factories,
+      capacities,
+      defaultConfig,
+      TODAY,
+    );
+
+    // O2 should be processed first and get the capacity on the first day
+    const o2Assignment = result.newAssignments.find((a) => a.orderId === "O2");
+    expect(o2Assignment).toBeDefined();
+
+    // If it was prioritized, it should be the first one in processedOrders
+    expect(result.processedOrders[0].id).toBe("O2");
+  });
+
+  it("should treat isFixed orders as immutable, deduct their capacity pre-allocation, and bypass sorting/allocation", () => {
+    const orders: SchedulingOrderInput[] = [
+      {
+        id: "O1",
+        status: OrderStatus.SCHEDULED,
+        dueDate: addDays(TODAY, 20),
+        quantity: 50,
+        createdAt: TODAY,
+        isFixed: true,
+        isPrioritized: false,
+        assignments: [
+          {
+            status: AssignmentStatus.SCHEDULED,
+            assignedQuantity: 50,
+            factoryId: "F1",
+            productionDate: addDays(TODAY, 1),
+          },
+        ],
+      },
+      {
+        id: "O2",
+        status: OrderStatus.PENDING,
+        dueDate: addDays(TODAY, 20),
+        quantity: 50,
+        createdAt: addDays(TODAY, 1),
+        isFixed: false,
+        isPrioritized: false,
+        assignments: [],
+      },
+    ];
+
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 100 },
+    ];
+
+    const capacities: SchedulingCapacityInput[] = [
+      {
+        id: "C1",
+        factoryId: "F1",
+        date: addDays(TODAY, 1),
+        maxCapacity: 100,
+        curCapacity: 100,
+      },
+    ];
+
+    const configWithLimit: SchedulingConfig = {
+      ...defaultConfig,
+      startDate: addDays(TODAY, 1),
+      endDate: addDays(TODAY, 1),
+    };
+
+    const result = greedyBestFitStrategy.execute(
+      orders,
+      factories,
+      capacities,
+      configWithLimit,
+      TODAY,
+    );
+
+    // O1 should not get new assignments, its existing assignment should be preserved
+    expect(result.newAssignments.filter((a) => a.orderId === "O1").length).toBe(
+      0,
+    );
+    expect(result.processedOrders.find((o) => o.id === "O1")?.status).toBe(
+      OrderStatus.SCHEDULED,
+    );
+
+    // O2 should get the remaining 50 capacity and succeed
+    const o2Assignments = result.newAssignments.filter(
+      (a) => a.orderId === "O2",
+    );
+    expect(o2Assignments.reduce((sum, a) => sum + a.assignedQuantity, 0)).toBe(
+      50,
+    );
+    expect(result.processedOrders.find((o) => o.id === "O2")?.status).toBe(
+      OrderStatus.SCHEDULED,
+    );
   });
 });

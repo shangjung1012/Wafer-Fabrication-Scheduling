@@ -92,7 +92,7 @@ describe("Schedule Engine - Database Integration", () => {
           name: "Test Order 1",
           type: "IntegrationType",
           applicantId: applicant.id,
-          status: OrderStatus.APPROVED,
+          status: OrderStatus.PENDING,
           dueDate: addDays(today, 3), // window = tomorrow and day after
           quantity: 120,
         },
@@ -256,7 +256,7 @@ describe("Schedule Engine - Database Integration", () => {
           name: "Idempotent Order",
           type: "IntegrationType",
           applicantId: applicant.id,
-          status: OrderStatus.APPROVED,
+          status: OrderStatus.PENDING,
           dueDate: addDays(today, 3), // window = tomorrow and day after
           quantity: 120,
         },

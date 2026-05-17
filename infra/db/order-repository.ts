@@ -22,6 +22,8 @@ export type OrderRow = {
   applicantId: string;
   name: string;
   type: string;
+  isFixed: boolean;
+  isPrioritized: boolean;
   createdAt: Date;
   updatedAt: Date;
   lastModifiedById: string | null;
@@ -33,6 +35,8 @@ export type CreateOrderInput = {
   name: string;
   type: string;
   applicantId: string;
+  isFixed?: boolean;
+  isPrioritized?: boolean;
 };
 
 export type UpdateOrderInput = {
@@ -41,6 +45,8 @@ export type UpdateOrderInput = {
   quantity?: number;
   name?: string;
   type?: string;
+  isFixed?: boolean;
+  isPrioritized?: boolean;
   lastModifiedById?: string | null;
 };
 
@@ -63,6 +69,8 @@ const orderSelect = {
   applicantId: true,
   name: true,
   type: true,
+  isFixed: true,
+  isPrioritized: true,
   createdAt: true,
   updatedAt: true,
   lastModifiedById: true,
@@ -126,6 +134,10 @@ export async function createOrder(
       name: input.name,
       type: input.type,
       applicantId: input.applicantId,
+      ...(input.isFixed !== undefined ? { isFixed: input.isFixed } : {}),
+      ...(input.isPrioritized !== undefined
+        ? { isPrioritized: input.isPrioritized }
+        : {}),
     },
     select: orderSelect,
   });
@@ -152,6 +164,10 @@ export async function updateOrder(
       ...(input.quantity !== undefined ? { quantity: input.quantity } : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.type !== undefined ? { type: input.type } : {}),
+      ...(input.isFixed !== undefined ? { isFixed: input.isFixed } : {}),
+      ...(input.isPrioritized !== undefined
+        ? { isPrioritized: input.isPrioritized }
+        : {}),
       ...(input.lastModifiedById !== undefined
         ? { lastModifiedById: input.lastModifiedById }
         : {}),
@@ -162,7 +178,9 @@ export async function updateOrder(
   if (
     input.status !== undefined ||
     input.dueDate !== undefined ||
-    input.quantity !== undefined
+    input.quantity !== undefined ||
+    input.isFixed !== undefined ||
+    input.isPrioritized !== undefined
   ) {
     await incrementScheduleVersion(exists.type);
   }
@@ -215,7 +233,7 @@ export async function bulkUpdateOrderStatus(
 export async function applyScheduleOrdersUpdate(
   db: PrismaClient,
   scheduledIds: string[],
-  approvedIds: string[],
+  failedIds: string[],
 ): Promise<void> {
   if (scheduledIds.length > 0) {
     await db.order.updateMany({
@@ -227,13 +245,13 @@ export async function applyScheduleOrdersUpdate(
     });
   }
 
-  if (approvedIds.length > 0) {
+  if (failedIds.length > 0) {
     await db.order.updateMany({
       where: {
-        id: { in: approvedIds },
+        id: { in: failedIds },
         status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
       },
-      data: { status: OrderStatus.APPROVED },
+      data: { status: OrderStatus.FAILED },
     });
   }
 }
@@ -252,7 +270,7 @@ export async function findOrdersForScheduling(
       type,
       status: {
         in: [
-          OrderStatus.APPROVED,
+          OrderStatus.PENDING,
           OrderStatus.SCHEDULED,
           OrderStatus.IN_PRODUCTION,
         ],
