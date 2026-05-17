@@ -63,13 +63,24 @@ export async function PATCH(request: Request) {
     }
 
     const { isSimulationMode, simulationDate } = parsed.data;
+    const currentState = await getSystemState(prisma);
 
     const patch: { isSimulationMode?: boolean; simulationDate?: Date | null } =
       {};
+    const nextIsSimulationMode =
+      isSimulationMode ?? currentState.isSimulationMode;
+
     if (isSimulationMode !== undefined)
       patch.isSimulationMode = isSimulationMode;
     if (simulationDate !== undefined) {
       patch.simulationDate = simulationDate ? new Date(simulationDate) : null;
+    }
+    const nextSimulationDate =
+      simulationDate !== undefined
+        ? patch.simulationDate
+        : currentState.simulationDate;
+    if (nextIsSimulationMode && nextSimulationDate == null) {
+      patch.simulationDate = new Date();
     }
 
     const state = await upsertSystemState(prisma, patch);

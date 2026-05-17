@@ -28,6 +28,10 @@ function toDateStr(d: Date) {
   return format(d, "yyyy-MM-dd");
 }
 
+function dateInputToIso(value: string) {
+  return new Date(`${value}T00:00:00`).toISOString();
+}
+
 // ---------------------------------------------------------------------------
 // Cell computation
 // ---------------------------------------------------------------------------
@@ -736,28 +740,34 @@ export default function SchedulePage() {
         } else {
           setSimDate("");
         }
+        setLoading(true);
+        setFetchError(null);
+        setRefreshKey((k) => k + 1);
       }
     } finally {
       setSimLoading(false);
     }
   };
 
-  const handleSimToggle = () => {
-    const next = !simMode;
-    const patch: { isSimulationMode: boolean; simulationDate?: string } = {
-      isSimulationMode: next,
-    };
-    if (next && !simDate) {
-      patch.simulationDate = new Date().toISOString();
+  const handleTimeModeChange = (nextIsManual: boolean) => {
+    if (!nextIsManual) {
+      patchSim({ isSimulationMode: false });
+      return;
     }
-    patchSim(patch);
+
+    patchSim({
+      isSimulationMode: true,
+      simulationDate: simDate
+        ? dateInputToIso(simDate)
+        : new Date().toISOString(),
+    });
   };
 
   const handleSimDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSimDate(val);
     if (val) {
-      patchSim({ simulationDate: new Date(val).toISOString() });
+      patchSim({ simulationDate: dateInputToIso(val) });
     }
   };
 
@@ -766,7 +776,7 @@ export default function SchedulePage() {
     base.setDate(base.getDate() + days);
     const next = format(base, "yyyy-MM-dd");
     setSimDate(next);
-    patchSim({ simulationDate: new Date(next).toISOString() });
+    patchSim({ simulationDate: dateInputToIso(next) });
   };
 
   // Build date columns
@@ -1018,19 +1028,33 @@ export default function SchedulePage() {
           simMode ? "bg-amber-50 border-amber-200" : "bg-white border-gray-100"
         }`}
       >
-        <span className="font-medium text-gray-700">Simulation Mode</span>
-        <button
-          type="button"
-          onClick={handleSimToggle}
-          disabled={simLoading}
-          className={`px-2.5 py-1 rounded border font-semibold transition-colors ${
-            simMode
-              ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
-              : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
-          }`}
-        >
-          {simMode ? "ON" : "OFF"}
-        </button>
+        <span className="font-medium text-gray-700">Time Mode</span>
+        <div className="inline-flex rounded border border-gray-300 bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => handleTimeModeChange(false)}
+            disabled={simLoading || !simMode}
+            className={`px-2.5 py-1 font-semibold transition-colors ${
+              !simMode
+                ? "bg-green-600 text-white"
+                : "text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            }`}
+          >
+            Auto
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTimeModeChange(true)}
+            disabled={simLoading || simMode}
+            className={`px-2.5 py-1 font-semibold border-l border-gray-300 transition-colors ${
+              simMode
+                ? "bg-amber-500 text-white"
+                : "text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            }`}
+          >
+            Manual
+          </button>
+        </div>
         {simMode && (
           <>
             <button
@@ -1063,7 +1087,7 @@ export default function SchedulePage() {
         )}
         {!simMode && (
           <span className="text-green-700 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
-            ● Live
+            ● Auto: live time
           </span>
         )}
       </div>
