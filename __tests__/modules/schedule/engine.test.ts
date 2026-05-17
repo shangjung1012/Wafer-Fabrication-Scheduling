@@ -39,6 +39,11 @@ vi.mock("@/infra/db/capacity-repository", () => ({
   updateDailyCapacityById: vi.fn(),
 }));
 
+const MOCK_NOW = new Date("2026-05-17T00:00:00.000Z");
+vi.mock("@/lib/get-time", () => ({
+  getTime: vi.fn().mockResolvedValue(new Date("2026-05-17T00:00:00.000Z")),
+}));
+
 describe("Schedule Engine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -63,8 +68,20 @@ describe("Schedule Engine", () => {
 
     const mockStrategyResult = {
       processedOrders: [
-        { id: "O1", status: OrderStatus.SCHEDULED },
-        { id: "O2", status: OrderStatus.APPROVED },
+        {
+          id: "O1",
+          status: OrderStatus.SCHEDULED,
+          dueDate: new Date(),
+          quantity: 100,
+          createdAt: new Date(),
+        },
+        {
+          id: "O2",
+          status: OrderStatus.APPROVED,
+          dueDate: new Date(),
+          quantity: 50,
+          createdAt: new Date(),
+        },
       ],
       newAssignments: [
         {
@@ -92,6 +109,7 @@ describe("Schedule Engine", () => {
           curCapacity: 100,
         },
       ],
+      conflictOrderIds: [],
     };
     vi.mocked(greedyBestFitStrategy).mockReturnValue(mockStrategyResult);
 
@@ -105,6 +123,7 @@ describe("Schedule Engine", () => {
     expect(factoryRepo.findFactoriesWithCapacities).toHaveBeenCalledWith(
       prisma,
       "Type A",
+      MOCK_NOW,
     );
 
     // Strategy
@@ -155,6 +174,7 @@ describe("Schedule Engine", () => {
       newAssignments: [],
       updatedCapacities: [],
       newCapacities: [],
+      conflictOrderIds: [],
     });
 
     await runSchedule("Type B");

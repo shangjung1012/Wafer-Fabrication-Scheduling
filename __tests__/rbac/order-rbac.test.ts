@@ -105,15 +105,17 @@ describe("流程一：正常訂單生命週期", () => {
     expect(order.applicantId).toBe("sales-A");
   });
 
-  it("2. SALES sales-A 嘗試建 type B 訂單 → 403", async () => {
-    await expect(
-      createOrderService(salesA, prisma, {
-        name: "WrongType",
-        type: "B",
-        dueDate: new Date("2026-12-31"),
-        quantity: 100,
-      }),
-    ).rejects.toBeInstanceOf(ForbiddenError);
+  it("2. SALES sales-A 可建立任意 type 的訂單 → 201", async () => {
+    const order = await createOrderService(salesA, prisma, {
+      name: "CrossTypeOrder",
+      type: "B",
+      dueDate: new Date("2026-12-31"),
+      quantity: 100,
+    });
+    createdOrderIds.push(order.id);
+    expect(order.id).toBeDefined();
+    expect(order.type).toBe("B");
+    expect(order.applicantId).toBe("sales-A");
   });
 
   it("3. ADMIN admin-A1 審核訂單 PENDING → APPROVED", async () => {

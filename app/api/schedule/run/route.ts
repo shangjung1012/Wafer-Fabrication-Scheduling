@@ -7,6 +7,8 @@ import {
 import { z } from "zod";
 import Redis from "ioredis";
 import { runSchedule } from "@/modules/schedule/engine";
+import { renderAndSend } from "@/modules/mail/mail-template";
+import { kickOutTemplate } from "@/modules/mail/templates/kick-out";
 
 let redis: Redis | undefined;
 
@@ -76,10 +78,51 @@ export async function POST(request: Request) {
     }
 
     try {
-      // Execute the actual scheduling engine logic
-      await runSchedule(type);
+      const conflicts = await runSchedule(type);
+      let emailsSent = false;
+      let emailFailures = 0;
 
-      return NextResponse.json({ message: "Schedule run successfully" });
+      // Auto-send mode: fire emails immediately without admin confirmation
+      const autoSend = process.env.CONFLICT_EMAIL_AUTO_SEND === "true";
+      if (autoSend && conflicts.length > 0) {
+        const emailJobs = conflicts.flatMap((o) => {
+          const jobs = [];
+          if (o.applicantEmail) {
+            jobs.push(
+              renderAndSend(kickOutTemplate, {
+                orderName: o.name,
+                applicantEmail: o.applicantEmail,
+                applicantUsername: o.applicantUsername,
+              }),
+            );
+          }
+          if (o.adminEmail) {
+            jobs.push(
+              renderAndSend(kickOutTemplate, {
+                orderName: o.name,
+                applicantEmail: o.adminEmail,
+                applicantUsername: o.adminUsername,
+              }),
+            );
+          }
+          return jobs;
+        });
+        const emailResults = await Promise.allSettled(emailJobs);
+        emailResults.forEach((r, i) => {
+          if (r.status === "rejected") {
+            console.error(`Conflict email failed (job ${i}):`, r.reason);
+            emailFailures += 1;
+          }
+        });
+        emailsSent = emailJobs.length > 0 && emailFailures === 0;
+      }
+
+      return NextResponse.json({
+        message: "Schedule run successfully",
+        conflicts,
+        emailsSent,
+        emailFailures,
+      });
     } finally {
       // Always release the lock when done
       await redis.del(lockKey);

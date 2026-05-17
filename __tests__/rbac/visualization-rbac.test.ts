@@ -11,7 +11,6 @@ import { describe, it, expect, afterAll } from "vitest";
 import { prisma } from "@/lib/prisma";
 import type { RequestContext } from "@/modules/auth/request-context";
 import { getTimeline } from "@/modules/visualization/service";
-import { ForbiddenError } from "@/modules/auth/rbac";
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -26,6 +25,7 @@ const ctx = (
 });
 
 const salesA = ctx("sales-A", "SALES");
+const salesB = ctx("sales-B", "SALES");
 const adminA1 = ctx("admin-A1", "ADMIN");
 const adminB1 = ctx("admin-B1", "ADMIN");
 const superAdminA = ctx("sa-A", "SUPERADMIN");
@@ -34,10 +34,37 @@ const superAdminB = ctx("sa-B", "SUPERADMIN");
 const FILTERS = { startDate: "2026-05-10", endDate: "2026-05-23" };
 
 describe("Visualization RBAC", () => {
-  it("SALES → ForbiddenError", async () => {
-    await expect(getTimeline(salesA, prisma, FILTERS)).rejects.toBeInstanceOf(
-      ForbiddenError,
+  it("SALES sales-A → 成功取得資料並附 salesContext", async () => {
+    const data = await getTimeline(salesA, prisma, FILTERS);
+    expect(data.salesContext).toBeDefined();
+    expect(Array.isArray(data.salesContext!.myOrderIds)).toBe(true);
+    expect(Array.isArray(data.salesContext!.pendingOrders)).toBe(true);
+  });
+
+  it("SALES sales-A → 只看到有自己訂單排程的工廠", async () => {
+    const data = await getTimeline(salesA, prisma, FILTERS);
+    if (data.salesContext!.myOrderIds.length === 0) return; // no scheduled orders in seed range
+    const myOrderIdSet = new Set(data.salesContext!.myOrderIds);
+    // All factories in the view must contain at least one of sales-A's assignments
+    const factoryIdsWithMyOrders = new Set(
+      data.timeline
+        .filter((t) => myOrderIdSet.has(t.orderId))
+        .map((t) => t.factoryId),
     );
+    for (const factory of data.factories) {
+      expect(factoryIdsWithMyOrders.has(factory.id)).toBe(true);
+    }
+  });
+
+  it("SALES sales-A 和 sales-B 的 myOrderIds 不重疊", async () => {
+    const [dataA, dataB] = await Promise.all([
+      getTimeline(salesA, prisma, FILTERS),
+      getTimeline(salesB, prisma, FILTERS),
+    ]);
+    const aIds = new Set(dataA.salesContext!.myOrderIds);
+    const bIds = new Set(dataB.salesContext!.myOrderIds);
+    const overlap = [...aIds].filter((id) => bIds.has(id));
+    expect(overlap).toHaveLength(0);
   });
 
   it("ADMIN admin-A1 → 看到整個 Type A（factory-A1/A2/A3）", async () => {

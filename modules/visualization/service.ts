@@ -2,17 +2,24 @@ import type { PrismaClient } from "@/lib/generated/prisma";
 import type { RequestContext } from "@/modules/auth/request-context";
 import { requireRole } from "@/modules/auth/rbac";
 import { resolveActorScope, getScopeGroup } from "@/modules/auth/scope";
+import type { SalesScope } from "@/modules/auth/scope";
+import { getTime } from "@/lib/get-time";
 import {
   findFactoriesForVisualization,
   findAssignmentsForVisualization,
   findDailyCapacitiesForVisualization,
+  findSalesAssignments,
+  findPendingOrdersForSales,
 } from "@/infra/db/visualization-repository";
+import { differenceInDays, parseISO, format } from "date-fns";
 import type {
   TimelineResponse,
   FactoryInfo,
   TimelineItem,
   ConflictInfo,
   DailyCapacityInfo,
+  PendingOrderInfo,
+  OrderRisk,
 } from "./types";
 
 export type TimelineFilters = {
@@ -26,8 +33,13 @@ export async function getTimeline(
   db: PrismaClient,
   filters: TimelineFilters,
 ): Promise<TimelineResponse> {
-  requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
+
+  if (scope.role === "SALES") {
+    return getSalesTimeline(scope, db, filters);
+  }
+
+  requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
 
   // Both ADMIN and SUPERADMIN see all factories in their production type
   const scopedFilters = { ...filters, productionType: getScopeGroup(scope) };
@@ -38,14 +50,102 @@ export async function getTimeline(
     findDailyCapacitiesForVisualization(db, scopedFilters),
   ]);
 
-  const factories: FactoryInfo[] = factoryRows.map((f) => ({
+  const factories = mapFactories(factoryRows);
+  const timeline = mapTimeline(assignmentRows);
+  const dailyCapacities = mapCapacities(capacityRows);
+  const conflicts = detectConflicts(timeline, capacityRows);
+  const today = format(await getTime(), "yyyy-MM-dd");
+
+  return { factories, timeline, conflicts, dailyCapacities, diffs: [], today };
+}
+
+// ---------------------------------------------------------------------------
+// SALES path
+// ---------------------------------------------------------------------------
+
+async function getSalesTimeline(
+  scope: SalesScope,
+  db: PrismaClient,
+  filters: TimelineFilters,
+): Promise<TimelineResponse> {
+  const salesRows = await findSalesAssignments(db, scope.userId, filters);
+  const factoryIds = [...new Set(salesRows.map((r) => r.factoryId))];
+  const myOrderIds = [...new Set(salesRows.map((r) => r.orderId))];
+
+  const pendingRows = await findPendingOrdersForSales(db, scope.userId);
+  const today = format(await getTime(), "yyyy-MM-dd");
+
+  const pendingOrders: PendingOrderInfo[] = pendingRows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    status: r.status as "PENDING" | "APPROVED",
+    quantity: r.quantity,
+    dueDate: r.dueDate,
+    createdAt: r.createdAt,
+    risk: calcRisk(r.dueDate, today),
+  }));
+
+  if (factoryIds.length === 0) {
+    return {
+      factories: [],
+      timeline: [],
+      conflicts: [],
+      dailyCapacities: [],
+      diffs: [],
+      today,
+      salesContext: { myOrderIds: [], pendingOrders },
+    };
+  }
+
+  const scopedFilters = { ...filters, factoryIds };
+  const [factoryRows, assignmentRows, capacityRows] = await Promise.all([
+    findFactoriesForVisualization(db, scopedFilters),
+    findAssignmentsForVisualization(db, scopedFilters),
+    findDailyCapacitiesForVisualization(db, scopedFilters),
+  ]);
+
+  const factories = mapFactories(factoryRows);
+  const timeline = mapTimeline(assignmentRows);
+  const dailyCapacities = mapCapacities(capacityRows);
+  const conflicts = detectConflicts(timeline, capacityRows);
+
+  return {
+    factories,
+    timeline,
+    conflicts,
+    dailyCapacities,
+    diffs: [],
+    today,
+    salesContext: { myOrderIds, pendingOrders },
+  };
+}
+
+function calcRisk(dueDate: string, today: string): OrderRisk {
+  const diff = differenceInDays(parseISO(dueDate), parseISO(today));
+  if (diff < 0) return "OVERDUE";
+  if (diff <= 3) return "AT_RISK";
+  return "ON_TRACK";
+}
+
+// ---------------------------------------------------------------------------
+// Row mappers (shared between ADMIN and SALES paths)
+// ---------------------------------------------------------------------------
+
+function mapFactories(
+  rows: Awaited<ReturnType<typeof findFactoriesForVisualization>>,
+): FactoryInfo[] {
+  return rows.map((f) => ({
     id: f.id,
     label: formatFactoryLabel(f.id),
     productionType: f.productionType,
     maxCapacity: f.maxCapacity,
   }));
+}
 
-  const timeline: TimelineItem[] = assignmentRows.map((a) => ({
+function mapTimeline(
+  rows: Awaited<ReturnType<typeof findAssignmentsForVisualization>>,
+): TimelineItem[] {
+  return rows.map((a) => ({
     orderId: a.orderId,
     orderName: a.orderName,
     factoryId: a.factoryId,
@@ -56,17 +156,17 @@ export async function getTimeline(
     applicantId: a.applicantId,
     lastModifiedById: a.lastModifiedById,
   }));
+}
 
-  const dailyCapacities: DailyCapacityInfo[] = capacityRows.map((c) => ({
+function mapCapacities(
+  rows: Awaited<ReturnType<typeof findDailyCapacitiesForVisualization>>,
+): DailyCapacityInfo[] {
+  return rows.map((c) => ({
     factoryId: c.factoryId,
     date: c.date,
     maxCapacity: c.maxCapacity,
     usedCapacity: c.maxCapacity - c.curCapacity,
   }));
-
-  const conflicts = detectConflicts(timeline, capacityRows);
-
-  return { factories, timeline, conflicts, dailyCapacities, diffs: [] };
 }
 
 // ---------------------------------------------------------------------------

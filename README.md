@@ -1,22 +1,29 @@
 # 工廠訂單管理排程系統
 
-A Next.js + Prisma (PostgreSQL) wafer factory order scheduling system.
+A Next.js + Prisma (PostgreSQL) wafer factory order scheduling system，包含訂單流程、RBAC、排程視覺化與 Azure Communication Services Email 邀請機制。
 
 ## Folder Structure
 
 ```text
 wafer-fabrication-scheduling/
 ├── app/                    # Presentation layer: UI + API route handlers
+│   ├── (auth)/             # Login / set-password pages
+│   ├── (dashboard)/        # Orders / visualization / users UI
 │   ├── api/                # API endpoints (Next.js App Router)
-│   │   ├── auth/
-│   │   ├── docs/spec/      # GET /api/docs/spec — serves OpenAPI YAML
+│   │   ├── auth/           # Login, refresh, logout, invitations
+│   │   ├── docs/           # Swagger UI (http://localhost:3000/docs)
 │   │   ├── orders/
-│   │   ├── schedule/
-│   │   └── users/          # User Management API (CRUD)
-│   └── docs/               # Swagger UI (http://localhost:3000/docs)
+│   │   ├── requests/       # Order change request API
+│   │   ├── schedule/       # Schedule runner API
+│   │   ├── users/          # User invitation/listing API
+│   │   └── visualization/  # Timeline data API
 ├── modules/                # Business logic layer
-│   ├── auth/               # JWT auth, RBAC helpers
-│   └── users/              # User service (scope-filtered CRUD)
+│   ├── auth/               # JWT auth, RBAC, invitations
+│   ├── mail/               # Azure Email adapter
+│   ├── order/              # Order/request services
+│   ├── schedule/           # Scheduling engine
+│   ├── users/              # User listing/invitation service
+│   └── visualization/      # Timeline/read model service
 ├── infra/
 │   └── db/                 # DB access layer (repositories)
 ├── lib/
@@ -26,9 +33,8 @@ wafer-fabrication-scheduling/
 │   ├── seed.ts             # Dev seed data
 │   └── migrations/
 ├── api_spec.yml            # OpenAPI 3.0 spec (source of truth)
-└── .cursor/                # Team docs & rules for AI-assisted development
-    ├── docs/
-    └── rules/
+├── Dockerfile
+└── docker-compose.yml
 ```
 
 ## Local Setup
@@ -43,14 +49,18 @@ cp .env.example .env
 
 ```env
 DATABASE_URL="postgresql://wafer_user:wafer_password@localhost:5432/wafer_db?schema=public"
+REDIS_URL="redis://localhost:6379"
+APP_BASE_URL="http://localhost:3000"
 JWT_SECRET="replace-with-a-strong-secret-at-least-32-chars"
 JWT_ISSUER="wafer-auth"
 JWT_AUDIENCE="wafer-api"
 ACCESS_TOKEN_EXPIRES_IN="15m"
 REFRESH_TOKEN_EXPIRES_IN="7d"
+AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING="endpoint=...;accesskey=..."
+AZURE_COMMUNICATION_EMAIL_SENDER_ADDRESS="DoNotReply@example.com"
 ```
 
-### 2. 啟動資料庫
+### 2. 啟動資料庫與 Redis
 
 ```bash
 docker compose up -d
@@ -94,11 +104,14 @@ pnpm dev
 
 ## 身份驗證
 
-1. `POST /api/auth/register` 已停用公開註冊。
-2. `POST /api/auth/login` 使用 `username` 或 `email` / `password` 登入，取得 auth cookies。
-3. 呼叫受保護 API 時使用 `Authorization: Bearer <accessToken>`。
-4. `POST /api/auth/refresh` 以 refresh token rotation 換發新 token。
-5. `POST /api/auth/logout` 撤銷 refresh token。
+公開註冊已停用。使用者透過 SUPERADMIN 邀請建立：
+
+1. `SUPERADMIN` 在 `/users` 頁面邀請使用者（填入 `email`、`role`、`group`）。
+2. 系統寄送 Azure Email，內含 180 秒有效的 `/set-password?token=...` 連結。
+3. 受邀者設定 `username` 與密碼後即可登入。
+4. `POST /api/auth/login` 使用 `username` 或 `email` / `password` 登入，取得 auth cookies。
+5. `POST /api/auth/refresh` 以 refresh token rotation 換發新 token。
+6. `POST /api/auth/logout` 撤銷 refresh token。
 
 ---
 
@@ -107,7 +120,7 @@ pnpm dev
 開啟 **[http://localhost:3000/docs](http://localhost:3000/docs)**
 
 1. 到 **[http://localhost:3000/login](http://localhost:3000/login)** 登入。
-2. 複製 login response/session 內的 `accessToken`。
+2. 複製 login response 內的 `accessToken` cookie。
 3. 在 docs 頁右上角 **Authorize** 輸入 `Bearer <accessToken>`。
 4. 展開任一 endpoint → **Try it out** → **Execute**。
 
@@ -117,11 +130,15 @@ OpenAPI spec：[`api_spec.yml`](./api_spec.yml)
 
 ## Scripts
 
-| 指令               | 說明                    |
-| ------------------ | ----------------------- |
-| `pnpm dev`         | 啟動 Next.js dev server |
-| `pnpm build`       | 建置 production         |
-| `pnpm db:migrate`  | 執行 Prisma migration   |
-| `pnpm db:generate` | 產生 Prisma client      |
-| `pnpm db:seed`     | Seed 測試資料進 DB      |
-| `pnpm db:studio`   | 開啟 Prisma Studio      |
+| 指令                    | 說明                               |
+| ----------------------- | ---------------------------------- |
+| `pnpm dev`              | 啟動 Next.js dev server            |
+| `pnpm build`            | 建置 production                    |
+| `pnpm lint`             | 執行 ESLint                        |
+| `pnpm test`             | 執行 Vitest                        |
+| `pnpm format`           | 格式化程式碼（Prettier）           |
+| `pnpm db:migrate`       | 執行 Prisma migration（local dev） |
+| `pnpm db:deploy`        | 套用 migration（CI/production）    |
+| `pnpm db:generate`      | 產生 Prisma client                 |
+| `pnpm db:seed`          | Seed 測試資料進 DB                 |
+| `pnpm db:studio`        | 開啟 Prisma Studio                 |
