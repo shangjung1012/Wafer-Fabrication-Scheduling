@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   logoutClientAuthSession,
@@ -96,6 +96,14 @@ function roleBadge(role: Role): React.CSSProperties {
 }
 
 export default function ProfilePage() {
+  return (
+    <Suspense>
+      <ProfilePageInner />
+    </Suspense>
+  );
+}
+
+function ProfilePageInner() {
   const session = useClientAuthSession();
   const router = useRouter();
   const searchParams = useSearchParams();
