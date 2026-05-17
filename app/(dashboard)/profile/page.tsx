@@ -106,43 +106,42 @@ export default function ProfilePage() {
   const [emailStatus, setEmailStatus] = useState<{
     ok: boolean;
     message: string;
-  } | null>(null);
+  } | null>(() => {
+    // Read ?emailError on first render so no setState-in-effect is needed
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const emailError = params.get("emailError");
+    if (!emailError) return null;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("emailError");
+    window.history.replaceState({}, "", url.toString());
+    return {
+      ok: false,
+      message: EMAIL_ERROR_MESSAGES[emailError] ?? "Email verification failed.",
+    };
+  });
   const [emailLoading, setEmailLoading] = useState(false);
   const [pendingVerification, setPendingVerification] = useState(false);
 
-  // On mount: handle ?emailUpdated=true and ?emailError=* from the verify redirect
+  // On mount: handle ?emailUpdated=true — fetch fresh user data then update localStorage
   useEffect(() => {
     if (sessionRefreshed.current) return;
+    if (searchParams.get("emailUpdated") !== "true") return;
 
-    const emailUpdated = searchParams.get("emailUpdated");
-    const emailError = searchParams.get("emailError");
+    sessionRefreshed.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("emailUpdated");
+    window.history.replaceState({}, "", url.toString());
 
-    if (emailUpdated === "true") {
-      sessionRefreshed.current = true;
-      // Fetch fresh user data from DB and update localStorage so UI reflects new email
-      apiFetch("/api/users/me")
-        .then((res) => res.json())
-        .then((data: { user?: ClientAuthSession["user"] }) => {
-          if (data.user) {
-            persistClientAuthSession({ user: data.user });
-          }
-          setEmailStatus({ ok: true, message: "Email updated successfully." });
-        })
-        .catch(() => {
-          setEmailStatus({ ok: true, message: "Email updated successfully." });
-        });
-      // Clean up the query param without a full navigation
-      const url = new URL(window.location.href);
-      url.searchParams.delete("emailUpdated");
-      window.history.replaceState({}, "", url.toString());
-    } else if (emailError) {
-      const msg =
-        EMAIL_ERROR_MESSAGES[emailError] ?? "Email verification failed.";
-      setEmailStatus({ ok: false, message: msg });
-      const url = new URL(window.location.href);
-      url.searchParams.delete("emailError");
-      window.history.replaceState({}, "", url.toString());
-    }
+    apiFetch("/api/users/me")
+      .then((res) => res.json())
+      .then((data: { user?: ClientAuthSession["user"] }) => {
+        if (data.user) persistClientAuthSession({ user: data.user });
+        setEmailStatus({ ok: true, message: "Email updated successfully." });
+      })
+      .catch(() => {
+        setEmailStatus({ ok: true, message: "Email updated successfully." });
+      });
   }, [searchParams]);
 
   useEffect(() => {
