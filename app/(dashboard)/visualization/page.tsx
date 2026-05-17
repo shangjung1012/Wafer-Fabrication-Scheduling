@@ -171,6 +171,7 @@ function DetailPanel({
   diffByOrderId,
   myOrderIds,
   etaByOrderId,
+  onEditOrder,
   onClose,
 }: {
   cell: CellData;
@@ -178,6 +179,7 @@ function DetailPanel({
   diffByOrderId: Map<string, DiffEntry>;
   myOrderIds?: string[];
   etaByOrderId?: Map<string, string>;
+  onEditOrder: (order: OrderEditorValues) => void;
   onClose: () => void;
 }) {
   const myOrderIdSet = new Set(myOrderIds ?? []);
@@ -273,7 +275,27 @@ function DetailPanel({
                 <span className="text-sm font-medium text-gray-900">
                   {item.orderName}
                 </span>
-                <StatusBadge status={item.status} />
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={item.status} />
+                  {item.status === "SCHEDULED" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onEditOrder({
+                          orderId: item.orderId,
+                          name: item.orderName,
+                          quantity: String(item.assignedQuantity),
+                          status: item.status,
+                          dueDate: item.dueDate,
+                          type: factory.productionType,
+                        })
+                      }
+                      className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:text-gray-900"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="text-xs text-gray-500 space-y-0.5">
                 <div className="flex justify-between">
@@ -383,7 +405,15 @@ function DetailPanel({
 // Pending orders sidebar (SALES only)
 // ---------------------------------------------------------------------------
 
-function PendingSidebar({ orders }: { orders: PendingOrderInfo[] }) {
+function PendingSidebar({
+  orders,
+  onEditOrder,
+  onCreate,
+}: {
+  orders: PendingOrderInfo[];
+  onEditOrder: (order: OrderEditorValues) => void;
+  onCreate?: () => void;
+}) {
   const today = toDateStr(new Date());
   const pending = orders.filter((o) => o.status === "PENDING");
   const approved = orders.filter((o) => o.status === "APPROVED");
@@ -440,14 +470,49 @@ function PendingSidebar({ orders }: { orders: PendingOrderInfo[] }) {
         >
           {daysLabel(o.dueDate)}
         </div>
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={() =>
+              onEditOrder({
+                orderId: o.id,
+                name: o.name,
+                quantity: String(o.quantity),
+                status: o.status,
+                dueDate: o.dueDate,
+              })
+            }
+            className="text-[10px] font-semibold px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Edit
+          </button>
+        </div>
       </div>
     ));
 
   return (
     <div className="flex-none w-64 border-r border-gray-200 bg-gray-50 flex flex-col overflow-hidden">
       <div className="px-3 py-2 border-b border-gray-200 bg-white">
-        <p className="text-xs font-semibold text-gray-700">My Pending Orders</p>
-        <p className="text-[10px] text-gray-400">{orders.length} unscheduled</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-gray-700">
+              My Pending Orders
+            </p>
+            <p className="text-[10px] text-gray-400">
+              {orders.length} unscheduled
+            </p>
+          </div>
+          {onCreate && (
+            <button
+              type="button"
+              onClick={onCreate}
+              className="flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              <span className="text-sm leading-none">+</span>
+              New Order
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {orders.length === 0 && (
@@ -471,6 +536,198 @@ function PendingSidebar({ orders }: { orders: PendingOrderInfo[] }) {
             {renderOrders(approved)}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Order form dialog
+// ---------------------------------------------------------------------------
+
+type OrderEditorValues = {
+  name: string;
+  quantity: string;
+  type?: string;
+  dueDate?: string;
+  orderId?: string;
+  status?: string;
+};
+
+function OrderFormModal({
+  open,
+  title,
+  mode,
+  initialValues,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  title: string;
+  mode: "create" | "edit";
+  initialValues: OrderEditorValues;
+  onClose: () => void;
+  onSubmit: (values: OrderEditorValues) => Promise<void>;
+}) {
+  const [name, setName] = useState(initialValues.name);
+  const [quantity, setQuantity] = useState(initialValues.quantity);
+  const [type, setType] = useState(initialValues.type ?? "A");
+  const [dueDate, setDueDate] = useState(initialValues.dueDate ?? "2026-12-31");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setName(initialValues.name);
+    setQuantity(initialValues.quantity);
+    setType(initialValues.type ?? "A");
+    setDueDate(initialValues.dueDate ?? "2026-12-31");
+    setSubmitting(false);
+    setError("");
+  }, [open, initialValues]);
+
+  if (!open) return null;
+
+  const isCreate = mode === "create";
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try {
+      await onSubmit({
+        name: name.trim(),
+        quantity: quantity.trim(),
+        type: isCreate ? type.trim() : undefined,
+        dueDate: isCreate ? dueDate : undefined,
+        orderId: initialValues.orderId,
+        status: initialValues.status,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Operation failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 px-4">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              {isCreate
+                ? "Create a new sales order using the current production style."
+                : "Update the order name or quantity and save the change."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xl leading-none text-gray-400 hover:text-gray-600"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {error}
+            </div>
+          )}
+
+          {!isCreate && initialValues.orderId && (
+            <div className="grid grid-cols-2 gap-3 text-xs text-gray-500">
+              <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <div className="font-semibold text-gray-400 uppercase tracking-wide">
+                  Order ID
+                </div>
+                <div className="mt-1 font-mono text-gray-700">
+                  {initialValues.orderId}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <div className="font-semibold text-gray-400 uppercase tracking-wide">
+                  Status
+                </div>
+                <div className="mt-1 font-medium text-gray-700">
+                  {initialValues.status ?? "—"}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <label className="block text-sm font-medium text-gray-700">
+            Name
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={isCreate ? "Order name" : "new name (optional)"}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />
+          </label>
+
+          {isCreate && (
+            <label className="block text-sm font-medium text-gray-700">
+              Type (production group: A/B/C)
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              >
+                {(["A", "B", "C"] as const).map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {isCreate && (
+            <label className="block text-sm font-medium text-gray-700">
+              Due Date
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              />
+            </label>
+          )}
+
+          <label className="block text-sm font-medium text-gray-700">
+            Quantity
+            <input
+              type="number"
+              min="1"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              placeholder={isCreate ? "Quantity" : "new quantity (optional)"}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />
+          </label>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting ? "Saving…" : mode === "create" ? "Send" : "Save"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -637,6 +894,7 @@ type AssignmentMove = {
   productionDate: string;
   original: { factoryId: string; productionDate: string };
 };
+type OrderEditorState = OrderEditorValues & { orderId?: string };
 
 export default function SchedulePage() {
   const router = useRouter();
@@ -692,6 +950,8 @@ export default function SchedulePage() {
       })
       .catch(() => {});
   }, [session]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOrder, setEditOrder] = useState<OrderEditorState | null>(null);
 
   // Fetch timeline data
   useEffect(() => {
@@ -1057,6 +1317,80 @@ export default function SchedulePage() {
       diffs: data.diffs,
     };
   }, [data, previewData, editMode, pendingMoves]);
+  const handleCreateOrder = async (values: OrderEditorValues) => {
+    if (!values.name) {
+      throw new Error("Name is required.");
+    }
+    if (!values.type || !["A", "B", "C"].includes(values.type)) {
+      throw new Error("Type must be A, B, or C.");
+    }
+    if (!values.dueDate) {
+      throw new Error("Due date is required.");
+    }
+    const quantity = Number(values.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new Error("Quantity must be a positive integer.");
+    }
+
+    const res = await fetch("/api/orders", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: values.name,
+        type: values.type,
+        dueDate: new Date(values.dueDate).toISOString(),
+        quantity,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message ?? `Create order failed (${res.status})`);
+    }
+
+    setLoading(true);
+    setFetchError(null);
+    setRefreshKey((k) => k + 1);
+  };
+
+  const handleUpdateOrder = async (values: OrderEditorValues) => {
+    if (!editOrder?.orderId) {
+      throw new Error("Order ID is missing.");
+    }
+
+    const body: Record<string, unknown> = {};
+    if (values.name.trim()) body.name = values.name.trim();
+    if (values.quantity.trim()) {
+      const quantity = Number(values.quantity);
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw new Error("Quantity must be a positive integer.");
+      }
+      body.quantity = quantity;
+    }
+
+    if (Object.keys(body).length === 0) {
+      throw new Error("Name or quantity is required.");
+    }
+
+    const res = await fetch(`/api/orders/${editOrder.orderId}`, {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const bodyJson = await res.json().catch(() => ({}));
+      throw new Error(
+        bodyJson.message ?? `Update order failed (${res.status})`,
+      );
+    }
+
+    setLoading(true);
+    setFetchError(null);
+    setRefreshKey((k) => k + 1);
+  };
 
   // Build date columns
   const dates = useMemo(() => {
@@ -1213,6 +1547,12 @@ export default function SchedulePage() {
             className="text-xs font-medium px-2.5 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700"
           >
             Visualization
+          </a>
+          <a
+            href="/visualization/dashboard"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Dashboard
           </a>
           <a
             href="/users"
@@ -1590,7 +1930,11 @@ export default function SchedulePage() {
       <div className="flex-1 overflow-hidden flex">
         {/* Pending sidebar (SALES only) */}
         {isSales && data?.salesContext && !loading && !fetchError && (
-          <PendingSidebar orders={data.salesContext.pendingOrders} />
+          <PendingSidebar
+            orders={data.salesContext.pendingOrders}
+            onEditOrder={(order) => setEditOrder(order)}
+            onCreate={() => setCreateOpen(true)}
+          />
         )}
 
         <div className="flex-1 overflow-auto">
@@ -1741,10 +2085,41 @@ export default function SchedulePage() {
             diffByOrderId={diffByOrderId}
             myOrderIds={data?.salesContext?.myOrderIds}
             etaByOrderId={etaByOrderId}
+            onEditOrder={(order) => setEditOrder(order)}
             onClose={() => setSelectedCell(null)}
           />
         </>
       )}
+
+      <OrderFormModal
+        open={createOpen}
+        title="Create Order"
+        mode="create"
+        initialValues={{
+          name: "",
+          quantity: "",
+          type: "A",
+          dueDate: "2026-12-31",
+        }}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={handleCreateOrder}
+      />
+
+      <OrderFormModal
+        open={editOrder !== null}
+        title="Update Order"
+        mode="edit"
+        initialValues={{
+          name: editOrder?.name ?? "",
+          quantity: editOrder?.quantity ?? "",
+          orderId: editOrder?.orderId,
+          status: editOrder?.status,
+          dueDate: editOrder?.dueDate,
+          type: editOrder?.type,
+        }}
+        onClose={() => setEditOrder(null)}
+        onSubmit={handleUpdateOrder}
+      />
     </div>
   );
 }
