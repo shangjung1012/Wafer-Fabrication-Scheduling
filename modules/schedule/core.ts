@@ -23,13 +23,18 @@ import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
 export async function prepareSchedulingData(
   type: string,
   config: SchedulingConfig,
+  currentDate: Date,
 ) {
   const orders = await findOrdersForScheduling(
     prisma,
     type,
     config.targetOrderIds,
   );
-  const factories = await findFactoriesWithCapacities(prisma, type);
+  const factories = await findFactoriesWithCapacities(
+    prisma,
+    type,
+    currentDate,
+  );
 
   // In-memory reset: restore capacity used by SCHEDULED assignments
   const capacities: SchedulingCapacityInput[] = [];

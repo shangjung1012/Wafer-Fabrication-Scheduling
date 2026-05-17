@@ -36,6 +36,7 @@ describe("order-repository", () => {
         },
         include: {
           assignments: true,
+          applicant: { select: { email: true, username: true } },
         },
       });
     });
@@ -65,6 +66,7 @@ describe("order-repository", () => {
         },
         include: {
           assignments: true,
+          applicant: { select: { email: true, username: true } },
         },
       });
     });

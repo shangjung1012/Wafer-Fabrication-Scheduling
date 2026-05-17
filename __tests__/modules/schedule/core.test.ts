@@ -54,7 +54,7 @@ describe("Schedule Engine - Core", () => {
       const mockOrders = [
         {
           id: "O1",
-          status: OrderStatus.APPROVED,
+          status: OrderStatus.PENDING,
           assignments: [
             {
               factoryId: "F1",
@@ -101,7 +101,11 @@ describe("Schedule Engine - Core", () => {
         splittable: true,
       };
 
-      const result = await prepareSchedulingData("Type A", dummyConfig);
+      const result = await prepareSchedulingData(
+        "Type A",
+        dummyConfig,
+        fixedDate,
+      );
 
       expect(orderRepo.findOrdersForScheduling).toHaveBeenCalledWith(
         prisma,
@@ -111,6 +115,7 @@ describe("Schedule Engine - Core", () => {
       expect(factoryRepo.findFactoriesWithCapacities).toHaveBeenCalledWith(
         prisma,
         "Type A",
+        fixedDate,
       );
       expect(result.orders).toEqual(mockOrders);
       expect(result.factories).toEqual(mockFactories);

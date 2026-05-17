@@ -63,10 +63,12 @@ for (let i = 1; i <= NUM_ORDERS; i++) {
 
   mockOrders.push({
     id: `O${i}`,
-    status: OrderStatus.APPROVED,
+    status: OrderStatus.PENDING,
     dueDate: addDays(TODAY, dueDays),
     quantity: randomInt(100, 2000),
     createdAt: new Date(TODAY.getTime() - randomInt(0, 1000000000)), // Random created time in the past
+    isFixed: false,
+    isPrioritized: false,
     assignments: [],
   });
 }
@@ -101,15 +103,15 @@ console.log(`⏱️  Execution Time: ${executionTimeMs} ms`);
 const scheduledCount = strategyResult.processedOrders.filter(
   (o) => o.status === OrderStatus.SCHEDULED,
 ).length;
-const approvedCount = strategyResult.processedOrders.filter(
-  (o) => o.status === OrderStatus.APPROVED,
+const failedCount = strategyResult.processedOrders.filter(
+  (o) => o.status === OrderStatus.FAILED,
 ).length;
 
 console.log(
   `📈 Total Orders Processed: ${strategyResult.processedOrders.length}`,
 );
 console.log(`✅ Successfully Scheduled Orders: ${scheduledCount}`);
-console.log(`❌ Failed to Schedule (Rollback): ${approvedCount}`);
+console.log(`❌ Failed to Schedule (Rollback): ${failedCount}`);
 console.log(
   `📝 Total Virtual Assignments Created: ${strategyResult.newAssignments.length}`,
 );

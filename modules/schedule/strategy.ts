@@ -122,6 +122,8 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
     // 3. Pre-allocate capacity for immutable orders and push to processedOrders
     for (const order of immutableOrders) {
       for (const assignment of order.assignments || []) {
+        if (!assignment.productionDate || !assignment.factoryId) continue;
+
         const dateKey = toDateString(assignment.productionDate);
         const mapKey = `${assignment.factoryId}_${dateKey}`;
         let cap = capacityMap.get(mapKey);
