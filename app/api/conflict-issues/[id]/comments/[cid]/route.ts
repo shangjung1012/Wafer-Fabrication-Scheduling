@@ -1,11 +1,7 @@
 /**
- * app/api/conflicts/[id]/requeue/route.ts
+ * app/api/conflict-issues/[id]/comments/[cid]/route.ts
  *
- * POST /api/conflicts/:id/requeue — admin returns order to PENDING for rescheduling
- * without applying any changes.
- *
- * Body:
- *   note string (optional)
+ * PATCH /api/conflict-issues/:id/comments/:cid  — edit comment body (author only)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -23,18 +19,18 @@ import {
   badRequestResponse,
   notFoundResponse,
 } from "@/modules/auth/rbac";
-import { requeueConflict } from "@/modules/order/conflict-service";
+import { editComment } from "@/modules/order/conflict-issue-service";
 import { prisma } from "@/lib/prisma";
 
-const BodySchema = z.object({
-  note: z.string().optional(),
+const PatchCommentBodySchema = z.object({
+  body: z.string().min(1, "body is required"),
 });
 
-export async function POST(
+export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string; cid: string }> },
 ) {
-  const { id } = await params;
+  const { cid } = await params;
 
   try {
     const ctx = await requireAuth(req);
@@ -43,10 +39,10 @@ export async function POST(
     try {
       body = await req.json();
     } catch {
-      body = {};
+      return badRequestResponse("Request body must be valid JSON.");
     }
 
-    const parsed = BodySchema.safeParse(body);
+    const parsed = PatchCommentBodySchema.safeParse(body);
     if (!parsed.success) {
       return badRequestResponse(
         "Invalid request body.",
@@ -54,8 +50,8 @@ export async function POST(
       );
     }
 
-    await requeueConflict(ctx, prisma, id, parsed.data.note);
-    return NextResponse.json({ success: true });
+    await editComment(ctx, prisma, cid, { body: parsed.data.body });
+    return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof UnauthorizedError)
       return unauthorizedResponse(err.message);

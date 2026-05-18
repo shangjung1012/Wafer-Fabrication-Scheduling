@@ -1,7 +1,7 @@
 /**
- * app/api/conflicts/[id]/route.ts
+ * app/api/conflict-issues/[id]/comments/[cid]/reject/route.ts
  *
- * GET /api/conflicts/:id — get conflict order detail with comment thread
+ * POST /api/conflict-issues/:id/comments/:cid/reject  — reject a proposal (opposite-role)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,20 +16,21 @@ import {
   forbiddenResponse,
   unauthorizedResponse,
   notFoundResponse,
+  badRequestResponse,
 } from "@/modules/auth/rbac";
-import { getConflict } from "@/modules/order/conflict-service";
+import { rejectProposal } from "@/modules/order/conflict-issue-service";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(
+export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string; cid: string }> },
 ) {
-  const { id } = await params;
+  const { cid } = await params;
 
   try {
     const ctx = await requireAuth(req);
-    const detail = await getConflict(ctx, prisma, id);
-    return NextResponse.json(detail);
+    await rejectProposal(ctx, prisma, cid);
+    return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof UnauthorizedError)
       return unauthorizedResponse(err.message);
@@ -37,6 +38,11 @@ export async function GET(
     if (err instanceof ForbiddenError) return forbiddenResponse(err);
     const e = err as { status?: number; message?: string };
     if (e.status === 404) return notFoundResponse(e.message);
+    if (e.status === 400)
+      return badRequestResponse(e.message ?? "Bad request.");
+    if (e.status === 409) {
+      return NextResponse.json({ error: e.message }, { status: 409 });
+    }
     throw err;
   }
 }
