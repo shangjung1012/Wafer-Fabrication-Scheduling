@@ -289,7 +289,7 @@ function buildOrders(): SeedOrder[] {
       status: "SCHEDULED",
     },
 
-    // --- APPROVED (no assignments — ready for schedule engine) ---
+    // --- PENDING (no assignments — ready for schedule engine or approval) ---
     // Case 4 base order: on schedule run, takes the 100 free slots on
     // factory-A1 May 17 (80 used, 20 remaining).
     {
@@ -299,7 +299,7 @@ function buildOrders(): SeedOrder[] {
       quantity: 80,
       dueDate: d("2026-05-17"),
       applicantId: "sales-A",
-      status: "APPROVED",
+      status: "PENDING",
     },
     {
       id: "ord-seed-014",
@@ -308,7 +308,7 @@ function buildOrders(): SeedOrder[] {
       quantity: 400,
       dueDate: d("2026-06-08"),
       applicantId: "sales-B",
-      status: "APPROVED",
+      status: "PENDING",
     },
     {
       id: "ord-seed-015",
@@ -317,7 +317,7 @@ function buildOrders(): SeedOrder[] {
       quantity: 700,
       dueDate: d("2026-06-12"),
       applicantId: "sales-C",
-      status: "APPROVED",
+      status: "PENDING",
     },
 
     // --- PENDING (awaiting admin approval) ---
@@ -771,9 +771,7 @@ async function main() {
     "  ord-seed-016 Wafer-CF4-New   PENDING   qty=30  due 2026-05-17",
   );
   console.log("");
-  console.log("Steps to trigger conflict:");
-  console.log("  1. admin-A1 approves ord-seed-016 (Wafer-CF4-New) → APPROVED");
-  console.log("  2. admin-A1 runs schedule:");
+  console.log("PENDING orders (ready for schedule engine after approval):");
   console.log(
     "       - Wafer-CF4-Base (qty 80, higher priority) scheduled on A1 → 20 left",
   );

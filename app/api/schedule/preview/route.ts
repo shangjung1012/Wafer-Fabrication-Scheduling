@@ -1,16 +1,45 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import {
   CsrfError,
   requireAuth,
   UnauthorizedError,
 } from "@/modules/auth/require-auth";
-import { buildSchedulePreview } from "@/modules/schedule/preview-service";
-import { DEFAULT_ALGORITHM } from "@/modules/schedule/algorithms";
+import { z } from "zod";
+import { previewSchedule } from "@/modules/schedule/preview";
+import { type SchedulingConfig } from "@/modules/schedule/strategy";
+import { getScheduleVersion, setPreview } from "@/infra/redis/schedule-store";
+import crypto from "crypto";
+import { OrderStatus } from "@/lib/generated/prisma";
+import { getTime } from "@/lib/get-time";
+import { prisma } from "@/lib/prisma";
+import { fetchConflictOrders } from "@/modules/schedule/conflict";
 
-const PreviewSchema = z.object({
+const SchedulingConfigSchema = z
+  .object({
+    startDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
+    frozenDays: z.number().int().min(0).default(0),
+    productionDays: z.number().int().min(1).default(1),
+    bufferDays: z.number().int().min(0).default(0),
+    reschedulePolicy: z
+      .enum(["GLOBAL_OPTIMIZE", "PRIORITY_RETAIN", "GAP_FILLING"])
+      .default("GAP_FILLING"),
+    algorithm: z.enum(["GREEDY_BEST_FIT"]).default("GREEDY_BEST_FIT"),
+    splittable: z.boolean().default(true),
+    targetOrderIds: z.array(z.string()).optional(),
+  })
+  .default({
+    frozenDays: 0,
+    productionDays: 1,
+    bufferDays: 0,
+    reschedulePolicy: "GAP_FILLING",
+    algorithm: "GREEDY_BEST_FIT",
+    splittable: true,
+  });
+
+const PreviewScheduleSchema = z.object({
   type: z.string().min(1, "Type is required"),
-  algorithm: z.string().optional(),
+  config: SchedulingConfigSchema,
 });
 
 export async function POST(request: Request) {
@@ -25,7 +54,8 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const parsed = PreviewSchema.safeParse(body);
+    const parsed = PreviewScheduleSchema.safeParse(body);
+
     if (!parsed.success) {
       return NextResponse.json(
         {
@@ -37,13 +67,78 @@ export async function POST(request: Request) {
       );
     }
 
-    const { type, algorithm } = parsed.data;
-    const preview = await buildSchedulePreview(
-      type,
-      algorithm ?? DEFAULT_ALGORITHM,
-    );
+    const { type, config } = parsed.data;
 
-    return NextResponse.json(preview);
+    const currentDate = await getTime();
+    currentDate.setHours(0, 0, 0, 0);
+
+    if (!config.startDate) {
+      const defaultStartDate = new Date(currentDate);
+      defaultStartDate.setDate(defaultStartDate.getDate() + 1);
+      config.startDate = defaultStartDate;
+    }
+
+    const strategyResult = await previewSchedule(
+      type,
+      config as SchedulingConfig,
+      currentDate,
+    );
+    const version = await getScheduleVersion(type);
+    const previewId = crypto.randomUUID();
+
+    // Data Hydration for frontend
+    const newSchedule = strategyResult.processedOrders.map((order) => {
+      const newAssignmentsForOrder = strategyResult.newAssignments.filter(
+        (a) => a.orderId === order.id,
+      );
+      return {
+        ...order,
+        assignments: [...(order.assignments || []), ...newAssignmentsForOrder],
+      };
+    });
+
+    const affectedOrders = strategyResult.processedOrders.map((o) => o.id);
+
+    // We determine failedOrderIds by checking if the order's final status is FAILED
+    // (Orders that successfully scheduled will be SCHEDULED. Orders not processed aren't here).
+    const failedOrderIds = newSchedule
+      .filter((o) => o.status === OrderStatus.FAILED)
+      .map((o) => o.id);
+
+    // Basic conflict warnings
+    const conflictWarnings: string[] = [];
+    if (failedOrderIds.length > 0) {
+      conflictWarnings.push(
+        `There was not enough capacity to schedule ${failedOrderIds.length} orders.`,
+      );
+    }
+
+    const payload = {
+      type,
+      config,
+      version,
+      result: strategyResult,
+    };
+
+    await setPreview(previewId, payload, 1800);
+
+    const conflictOrderIds = strategyResult.conflictOrderIds;
+    const conflictOrders =
+      conflictOrderIds.length > 0
+        ? await fetchConflictOrders(prisma, conflictOrderIds)
+        : [];
+
+    return NextResponse.json({
+      previewId,
+      data: {
+        newSchedule,
+        affectedOrders,
+        failedOrderIds,
+        conflictWarnings,
+        conflictOrderIds,
+        conflictOrders,
+      },
+    });
   } catch (error) {
     if (error instanceof UnauthorizedError) {
       return NextResponse.json(
@@ -57,7 +152,7 @@ export async function POST(request: Request) {
         { status: error.status },
       );
     }
-    console.error("Error generating schedule preview:", error);
+    console.error("Error generating preview:", error);
     return NextResponse.json(
       { code: "INTERNAL_SERVER_ERROR", message: "Failed to generate preview" },
       { status: 500 },

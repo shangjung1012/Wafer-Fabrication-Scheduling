@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/lib/generated/prisma";
+import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
 
 export type CreateDailyCapacityInput = {
   factoryId: string;
@@ -20,10 +21,19 @@ export async function updateDailyCapacityById(
   id: string,
   curCapacity: number,
 ): Promise<void> {
+  const exists = await db.dailyCapacity.findUnique({
+    where: { id },
+    include: { factory: true },
+  });
+
+  if (!exists) return;
+
   await db.dailyCapacity.update({
     where: { id },
     data: { curCapacity },
   });
+
+  await incrementScheduleVersion(exists.factory.productionType);
 }
 
 export async function findDailyCapacity(

@@ -26,7 +26,6 @@ import type {
   PendingOrderInfo,
   OrderRisk,
   SchedulePreviewResponse,
-  AlgorithmInfo,
   DailyCapacityInfo,
 } from "@/modules/visualization/types";
 import { logoutClientAuthSession } from "@/modules/auth/client-session";
@@ -46,6 +45,203 @@ function toDateStr(d: Date) {
 
 function dateInputToIso(value: string) {
   return new Date(`${value}T00:00:00`).toISOString();
+}
+
+// ---------------------------------------------------------------------------
+// Preview adapter
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert the new `/api/schedule/preview` payload (hydrated orders with their
+ * assignments) into the SchedulePreviewResponse view-model the page already
+ * renders. T4C/T4D will eventually consume the raw payload directly; until
+ * then this adapter keeps the existing preview banner & timeline working.
+ */
+function convertNewScheduleToPreview(args: {
+  newSchedule: Array<{
+    id: string;
+    status?: string;
+    dueDate?: string | Date;
+    name?: string;
+    applicantId?: string;
+    lastModifiedById?: string | null;
+    assignments?: Array<{
+      id?: string;
+      orderId?: string;
+      factoryId?: string;
+      productionDate?: string | Date;
+      assignedQuantity?: number;
+      status?: string;
+    }>;
+  }>;
+  affectedOrders: string[];
+  failedOrderIds: string[];
+  algorithm: string;
+  baseTimeline: TimelineResponse | null;
+}): SchedulePreviewResponse {
+  const {
+    newSchedule,
+    affectedOrders,
+    failedOrderIds,
+    algorithm,
+    baseTimeline,
+  } = args;
+
+  const affectedSet = new Set(affectedOrders);
+  const failedSet = new Set(failedOrderIds);
+  const orderById = new Map(newSchedule.map((o) => [o.id, o]));
+
+  const toIsoDate = (d: string | Date | undefined): string => {
+    if (!d) return "";
+    if (d instanceof Date) return format(d, "yyyy-MM-dd");
+    // Accept both ISO and already-yyyy-MM-dd strings.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    try {
+      return format(parseISO(d), "yyyy-MM-dd");
+    } catch {
+      return String(d).slice(0, 10);
+    }
+  };
+
+  // Build TimelineItem[] from every assignment on every order in newSchedule.
+  const timeline: TimelineItem[] = [];
+  let synthAssignmentSeq = 0;
+  for (const order of newSchedule) {
+    for (const a of order.assignments ?? []) {
+      if (!a.factoryId || !a.productionDate) continue;
+      timeline.push({
+        assignmentId: a.id ?? `preview-${order.id}-${synthAssignmentSeq++}`,
+        orderId: a.orderId ?? order.id,
+        orderName: order.name ?? order.id,
+        factoryId: a.factoryId,
+        productionDate: toIsoDate(a.productionDate),
+        assignedQuantity: a.assignedQuantity ?? 0,
+        status: (a.status as TimelineItem["status"]) ?? "SCHEDULED",
+        dueDate: toIsoDate(order.dueDate),
+        applicantId: order.applicantId ?? "",
+        lastModifiedById: order.lastModifiedById ?? null,
+      });
+    }
+  }
+
+  // Factories: preview API doesn't return factories; reuse the baseline timeline's.
+  const factories: FactoryInfo[] = baseTimeline?.factories ?? [];
+
+  // Recompute dailyCapacities from new timeline + baseline maxCapacity map.
+  const factoryMaxById = new Map(factories.map((f) => [f.id, f.maxCapacity]));
+  const usedByCell = new Map<string, number>();
+  for (const t of timeline) {
+    const key = `${t.factoryId}__${t.productionDate}`;
+    usedByCell.set(key, (usedByCell.get(key) ?? 0) + t.assignedQuantity);
+  }
+  const dailyCapMap = new Map<string, DailyCapacityInfo>();
+  // Seed from baseline so untouched cells still show their maxCapacity row.
+  for (const dc of baseTimeline?.dailyCapacities ?? []) {
+    dailyCapMap.set(`${dc.factoryId}__${dc.date}`, {
+      ...dc,
+      usedCapacity: 0,
+    });
+  }
+  for (const [key, used] of usedByCell.entries()) {
+    const [factoryId, date] = key.split("__");
+    const existing = dailyCapMap.get(key);
+    if (existing) {
+      existing.usedCapacity = used;
+    } else {
+      dailyCapMap.set(key, {
+        factoryId,
+        date,
+        maxCapacity: factoryMaxById.get(factoryId) ?? 0,
+        usedCapacity: used,
+      });
+    }
+  }
+  const dailyCapacities = Array.from(dailyCapMap.values());
+
+  // Conflicts: capacity overflow + due-date violations.
+  const conflicts: ConflictInfo[] = [];
+  for (const dc of dailyCapacities) {
+    if (dc.maxCapacity > 0 && dc.usedCapacity > dc.maxCapacity) {
+      const orderIds = timeline
+        .filter(
+          (t) => t.factoryId === dc.factoryId && t.productionDate === dc.date,
+        )
+        .map((t) => t.orderId);
+      conflicts.push({
+        conflictType: "CAPACITY",
+        severity: "ERROR",
+        factoryId: dc.factoryId,
+        date: dc.date,
+        orderIds,
+        message: `Total ${dc.usedCapacity.toLocaleString()} exceeds max capacity ${dc.maxCapacity.toLocaleString()}`,
+      });
+    }
+  }
+  for (const t of timeline) {
+    if (t.dueDate && t.productionDate > t.dueDate) {
+      conflicts.push({
+        conflictType: "DUE_DATE",
+        severity: "ERROR",
+        factoryId: t.factoryId,
+        date: t.productionDate,
+        orderIds: [t.orderId],
+        message: `${t.orderName} production date ${t.productionDate} is after due date ${t.dueDate}`,
+      });
+    }
+  }
+
+  // Diffs: produce a minimal entry per affected order, comparing earliest
+  // baseline production date vs earliest new production date. Sufficient for
+  // the preview banner count; T4D may refine.
+  const baseFirstDateByOrder = new Map<string, string>();
+  for (const t of baseTimeline?.timeline ?? []) {
+    const prev = baseFirstDateByOrder.get(t.orderId);
+    if (!prev || t.productionDate < prev) {
+      baseFirstDateByOrder.set(t.orderId, t.productionDate);
+    }
+  }
+  const newFirstDateByOrder = new Map<string, string>();
+  for (const t of timeline) {
+    const prev = newFirstDateByOrder.get(t.orderId);
+    if (!prev || t.productionDate < prev) {
+      newFirstDateByOrder.set(t.orderId, t.productionDate);
+    }
+  }
+  const diffs: DiffEntry[] = [];
+  for (const id of affectedSet) {
+    const before = baseFirstDateByOrder.get(id) ?? "";
+    const after = newFirstDateByOrder.get(id) ?? "";
+    if (before === after) continue;
+    const o = orderById.get(id);
+    diffs.push({
+      orderId: id,
+      orderName: o?.name ?? id,
+      field: "productionDate",
+      before,
+      after,
+      reason: "rescheduled by preview",
+    });
+  }
+
+  const unscheduledOrders = Array.from(failedSet).map((id) => {
+    const o = orderById.get(id);
+    return {
+      id,
+      name: o?.name ?? id,
+      quantity: 0,
+      dueDate: toIsoDate(o?.dueDate),
+    };
+  });
+
+  return {
+    algorithm,
+    factories,
+    timeline,
+    dailyCapacities,
+    conflicts,
+    diffs,
+    unscheduledOrders,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -922,15 +1118,18 @@ export default function SchedulePage() {
   >([]);
   const [emailsAutoSent, setEmailsAutoSent] = useState(false);
   const [notifyStatus, setNotifyStatus] = useState<NotifyStatus>("idle");
+  const [notifiedCount, setNotifiedCount] = useState<number>(0);
 
-  // Algorithm selector + preview state
-  const [algorithms, setAlgorithms] = useState<AlgorithmInfo[]>([]);
-  const [selectedAlgorithm, setSelectedAlgorithm] =
-    useState<string>("greedy-best-fit");
+  // Reschedule policy selector + preview state
+  const [reschedulePolicy, setReschedulePolicy] = useState<
+    "GLOBAL_OPTIMIZE" | "PRIORITY_RETAIN" | "GAP_FILLING"
+  >("GAP_FILLING");
   const [previewData, setPreviewData] =
     useState<SchedulePreviewResponse | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
 
   // Edit-mode state
   const [editMode, setEditMode] = useState(false);
@@ -950,16 +1149,6 @@ export default function SchedulePage() {
   const [simDate, setSimDate] = useState("");
   const [simLoading, setSimLoading] = useState(false);
 
-  // Fetch algorithm list (admin/superadmin only)
-  useEffect(() => {
-    if (!session || session.user.role === "SALES") return;
-    fetch("/api/schedule/algorithms", { credentials: "same-origin" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((body) => {
-        if (body?.algorithms) setAlgorithms(body.algorithms);
-      })
-      .catch(() => {});
-  }, [session]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorState | null>(null);
 
@@ -997,7 +1186,7 @@ export default function SchedulePage() {
   // Run schedule handler (applies the selected algorithm directly)
   const handleRunSchedule = async (algorithmOverride?: string) => {
     if (!productionType) return;
-    const algorithm = algorithmOverride ?? selectedAlgorithm;
+    const algorithm = algorithmOverride ?? reschedulePolicy;
     setScheduleStatus("running");
     setScheduleConflicts([]);
     setEmailsAutoSent(false);
@@ -1014,18 +1203,15 @@ export default function SchedulePage() {
       if (res.status === 409) {
         setScheduleStatus("conflict");
       } else if (res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setEmailsAutoSent(body.emailsSent === true);
-        if (Array.isArray(body.conflicts) && body.conflicts.length > 0) {
-          setScheduleConflicts(body.conflicts);
-          setScheduleStatus("idle");
-        } else {
-          setScheduleStatus("success");
-          setTimeout(() => setScheduleStatus("idle"), 4000);
-        }
+        // Refactor: /api/schedule/run no longer returns conflicts/emailsSent.
+        // Conflict banner is driven exclusively by preview (T4D); a successful
+        // run clears any stale banner state.
+        setScheduleStatus("success");
+        setTimeout(() => setScheduleStatus("idle"), 4000);
         setLoading(true);
         setFetchError(null);
         setPreviewData(null);
+        setPreviewId(null);
         setRefreshKey((k) => k + 1);
       } else {
         setScheduleStatus("error");
@@ -1048,7 +1234,14 @@ export default function SchedulePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: productionType,
-          algorithm: selectedAlgorithm,
+          config: {
+            reschedulePolicy,
+            frozenDays: 0,
+            productionDays: 1,
+            bufferDays: 0,
+            algorithm: "GREEDY_BEST_FIT",
+            splittable: true,
+          },
         }),
       });
       if (!res.ok) {
@@ -1056,8 +1249,43 @@ export default function SchedulePage() {
         setPreviewError(body.message ?? `HTTP ${res.status}`);
         return;
       }
-      const body: SchedulePreviewResponse = await res.json();
-      setPreviewData(body);
+      const json = await res.json();
+      const { previewId: nextPreviewId, data: previewBody } = json ?? {};
+      const {
+        newSchedule = [],
+        affectedOrders = [],
+        failedOrderIds = [],
+        conflictOrderIds = [],
+        conflictOrders = [],
+        conflictWarnings = [],
+      } = previewBody ?? {};
+
+      // Adapter: convert hydrated newSchedule -> SchedulePreviewResponse view model.
+      const preview = convertNewScheduleToPreview({
+        newSchedule,
+        affectedOrders,
+        failedOrderIds,
+        algorithm: reschedulePolicy,
+        baseTimeline: data,
+      });
+
+      setPreviewId(nextPreviewId ?? null);
+      setPreviewData(preview);
+      // T4D: conflict banner is driven by preview. Hydrated conflictOrders
+      // (with applicant + admin email) feed scheduleConflicts; Notify button
+      // POSTs them to /api/schedule/notify. Reset notify state so the amber
+      // (action-required) banner shows on each fresh preview.
+      if (Array.isArray(conflictOrders) && conflictOrders.length > 0) {
+        setScheduleConflicts(conflictOrders as ConflictOrderInfo[]);
+        setNotifyStatus("idle");
+        setEmailsAutoSent(false);
+      } else {
+        setScheduleConflicts([]);
+      }
+      // conflictOrderIds / conflictWarnings are intentionally unused here:
+      // the hydrated conflictOrders payload already covers the banner.
+      void conflictOrderIds;
+      void conflictWarnings;
     } catch {
       setPreviewError("Network error");
     } finally {
@@ -1066,13 +1294,66 @@ export default function SchedulePage() {
   };
 
   const handleApplyPreview = async () => {
-    if (!previewData) return;
-    await handleRunSchedule(previewData.algorithm);
-    setPreviewData(null);
+    if (!previewId) {
+      setPreviewError("沒有可套用的 preview，請先按 Preview");
+      return;
+    }
+    setApplying(true);
+    setPreviewError(null);
+    try {
+      const res = await fetch("/api/schedule/apply", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ previewId }),
+      });
+
+      if (res.status === 409) {
+        // OCC failure or concurrent lock — discard preview and surface error.
+        const body = await res.json().catch(() => ({}));
+        setPreviewError(body?.message ?? "資料已變更，請重新預覽");
+        setPreviewData(null);
+        setPreviewId(null);
+        return;
+      }
+
+      if (res.status === 404) {
+        const body = await res.json().catch(() => ({}));
+        setPreviewError(body?.message ?? "Preview 已過期，請重新預覽");
+        setPreviewData(null);
+        setPreviewId(null);
+        return;
+      }
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setPreviewError(body?.message ?? "套用失敗");
+        setScheduleStatus("error");
+        setTimeout(() => setScheduleStatus("idle"), 4000);
+        return;
+      }
+
+      // Success — clear preview state and refetch timeline.
+      setPreviewData(null);
+      setPreviewId(null);
+      setScheduleStatus("success");
+      setTimeout(() => setScheduleStatus("idle"), 4000);
+      setLoading(true);
+      setFetchError(null);
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      console.error(e);
+      setPreviewError("Network error");
+      setScheduleStatus("error");
+      setTimeout(() => setScheduleStatus("idle"), 4000);
+    } finally {
+      setApplying(false);
+    }
   };
 
   const handleDiscardPreview = () => {
     setPreviewData(null);
+    setPreviewId(null);
     setPreviewError(null);
   };
 
@@ -1083,6 +1364,7 @@ export default function SchedulePage() {
     setSaveStatus("idle");
     setSelectedCell(null);
     setPreviewData(null);
+    setPreviewId(null);
   };
 
   const handleDiscardEdits = () => {
@@ -1192,21 +1474,36 @@ export default function SchedulePage() {
     });
   };
 
-  // Manual notify handler (preview mode)
+  // Manual notify handler — POSTs scheduleConflicts to /api/schedule/notify.
+  // Banner is preview-driven (T4D); run no longer emits conflicts.
   const handleSendNotifications = async () => {
     if (scheduleConflicts.length === 0) return;
     setNotifyStatus("sending");
+    // Notify schema requires applicantEmail to be a string|null but at least
+    // one of applicant/admin email needs to exist for a real send. Drop
+    // entries with neither so we never POST orders the server would silently
+    // skip (and so a 100%-skip set doesn't read as "sent").
+    const payloadOrders = scheduleConflicts.filter(
+      (o) => o.applicantEmail || o.adminEmail,
+    );
+    if (payloadOrders.length === 0) {
+      setNotifyStatus("error");
+      return;
+    }
     try {
       const res = await fetch("/api/schedule/notify", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orders: scheduleConflicts }),
+        body: JSON.stringify({ orders: payloadOrders }),
       });
       if (res.ok) {
         const body = await res.json().catch(() => ({}));
         const failedCount = Array.isArray(body.failed) ? body.failed.length : 0;
-        const sentCount = Array.isArray(body.sent) ? body.sent.length : 0;
+        const sentCount = Array.isArray(body.sent)
+          ? body.sent.length
+          : payloadOrders.length;
+        setNotifiedCount(sentCount);
         setNotifyStatus(failedCount === 0 && sentCount > 0 ? "sent" : "error");
       } else {
         setNotifyStatus("error");
@@ -1678,27 +1975,29 @@ export default function SchedulePage() {
         {/* Schedule controls (admin/superadmin only) */}
         {!isSales && (
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Algorithm dropdown */}
+            {/* Reschedule policy dropdown */}
             <label className="flex items-center gap-1 text-xs text-gray-600">
-              <span className="text-gray-500">Algorithm</span>
+              <span className="text-gray-500">Policy</span>
               <select
-                value={selectedAlgorithm}
-                onChange={(e) => setSelectedAlgorithm(e.target.value)}
+                value={reschedulePolicy}
+                onChange={(e) =>
+                  setReschedulePolicy(
+                    e.target.value as
+                      | "GLOBAL_OPTIMIZE"
+                      | "PRIORITY_RETAIN"
+                      | "GAP_FILLING",
+                  )
+                }
                 disabled={editMode || previewLoading}
                 className="text-xs border border-gray-200 rounded px-2 py-1 bg-white disabled:bg-gray-100 disabled:text-gray-400"
-                title={
-                  algorithms.find((a) => a.id === selectedAlgorithm)
-                    ?.description ?? ""
-                }
               >
-                {algorithms.length === 0 && (
-                  <option value="greedy-best-fit">Greedy Best-Fit</option>
-                )}
-                {algorithms.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.label}
-                  </option>
-                ))}
+                <option value="GAP_FILLING">填補空隙 (GAP_FILLING)</option>
+                <option value="PRIORITY_RETAIN">
+                  優先保留現有 (PRIORITY_RETAIN)
+                </option>
+                <option value="GLOBAL_OPTIMIZE">
+                  全域最佳化 (GLOBAL_OPTIMIZE)
+                </option>
               </select>
             </label>
 
@@ -1910,14 +2209,20 @@ export default function SchedulePage() {
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={handleApplyPreview}
-              disabled={scheduleStatus === "running"}
+              disabled={
+                !previewId ||
+                applying ||
+                editMode ||
+                scheduleStatus === "running"
+              }
               className="text-xs font-medium px-3 py-1.5 rounded border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:border-gray-300"
             >
-              ✓ Apply
+              {applying ? "套用中…" : "✓ Apply"}
             </button>
             <button
               onClick={handleDiscardPreview}
-              className="text-xs font-medium px-3 py-1.5 rounded border bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+              disabled={applying}
+              className="text-xs font-medium px-3 py-1.5 rounded border bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
             >
               Discard
             </button>
@@ -1977,8 +2282,15 @@ export default function SchedulePage() {
           {emailsAutoSent || notifyStatus === "sent" ? (
             <div className="flex items-center justify-between">
               <span className="text-green-700 font-medium">
-                Notification emails sent for {scheduleConflicts.length} order(s)
-                that could not be scheduled.
+                {`已寄出 ${
+                  notifyStatus === "sent"
+                    ? notifiedCount || scheduleConflicts.length
+                    : scheduleConflicts.length
+                } 封通知 (Notification emails sent for ${
+                  notifyStatus === "sent"
+                    ? notifiedCount || scheduleConflicts.length
+                    : scheduleConflicts.length
+                } order(s) that could not be scheduled.)`}
               </span>
               <button
                 type="button"
@@ -1998,16 +2310,18 @@ export default function SchedulePage() {
                   <button
                     type="button"
                     onClick={handleSendNotifications}
-                    disabled={notifyStatus === "sending"}
+                    disabled={
+                      notifyStatus === "sending" ||
+                      scheduleConflicts.length === 0
+                    }
                     className={`px-2.5 py-1 rounded border font-medium transition-colors ${
-                      notifyStatus === "sending"
+                      notifyStatus === "sending" ||
+                      scheduleConflicts.length === 0
                         ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                         : "bg-amber-700 text-white border-amber-700 hover:bg-amber-800"
                     }`}
                   >
-                    {notifyStatus === "sending"
-                      ? "Sending…"
-                      : "Send notifications"}
+                    {notifyStatus === "sending" ? "Sending…" : "Notify"}
                   </button>
                   {notifyStatus === "error" && (
                     <span className="text-red-600 font-medium">

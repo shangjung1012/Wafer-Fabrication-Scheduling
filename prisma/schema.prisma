@@ -28,11 +28,11 @@ enum FactoryStatus {
 // 母訂單
 enum OrderStatus {
   PENDING        // Sales 剛建立，可修改，等待 Admin 審核
-  APPROVED       // Admin 已核准，鎖定修改，進入待排程池
   SCHEDULED
   IN_PRODUCTION  // 其中一張子訂單變成 IN_PRODUCTION，母訂單就也變成 IN_PRODUCTION
   COMPLETED      // 所有子訂單變成 COMPLETED，母訂單變成 COMPLETED
   CANCELLED
+  FAILED         // 排程失敗
 }
 
 // 子訂單 (派工單)
@@ -159,6 +159,8 @@ model Order {
   applicantId      String
   name             String
   type             String
+  isFixed          Boolean     @default(false)
+  isPrioritized    Boolean     @default(false)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   lastModifiedById String?
