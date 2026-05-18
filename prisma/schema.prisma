@@ -33,6 +33,14 @@ enum OrderStatus {
   COMPLETED      // 所有子訂單變成 COMPLETED，母訂單變成 COMPLETED
   CANCELLED
   FAILED         // 排程失敗
+  CONFLICT       // 被排程踢出，需要衝突解決
+}
+
+enum ConflictCommentType {
+  COMMENT    // 一般留言
+  PROPOSAL   // Sales 提出的解決方案
+  RESOLUTION // Admin 標記為已解決的動作紀錄
+  REQUEUE    // Admin 送回 PENDING 重排的動作紀錄
 }
 
 // 子訂單 (派工單)
@@ -67,6 +75,7 @@ model User {
   invitations        UserInvitation[]   @relation("InvitationUser")
   createdInvitations UserInvitation[]   @relation("InvitationCreator")
   emailChangeTokens  EmailChangeToken[]
+  conflictComments   ConflictComment[]
 
   @@map("user")
 }
@@ -170,7 +179,8 @@ model Order {
   
   // Relations
   assignments      OrderAssignment[] // 記錄這筆訂單被拆分成哪些派工單
-  requests       OrderRequest[]
+  requests         OrderRequest[]
+  conflictComments ConflictComment[]
 
   @@map("order")
 }
@@ -201,6 +211,22 @@ model OrderRequest {
   order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("order_request")
+}
+
+model ConflictComment {
+  id           String              @id @default(cuid())
+  orderId      String
+  authorId     String
+  content      String
+  type         ConflictCommentType @default(COMMENT)
+  proposalData Json?               // { newDueDate?, newQuantity?, targetFactoryNote? }
+  createdAt    DateTime            @default(now())
+
+  order  Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id])
+
+  @@index([orderId])
+  @@map("conflict_comment")
 }
 
 // Singleton row (id = "global") for system-wide settings
