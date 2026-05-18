@@ -222,6 +222,9 @@ function ProfilePageInner() {
         <a href="/orders" style={navLinkStyle}>
           Orders
         </a>
+        <a href="/conflicts" style={navLinkStyle}>
+          Conflicts
+        </a>
         <a href="/visualization" style={navLinkStyle}>
           Visualization
         </a>
