@@ -1738,7 +1738,7 @@ export default function SchedulePage() {
       isSimulationMode: true,
       simulationDate: simDate
         ? dateInputToIso(simDate)
-        : new Date().toISOString(),
+        : dateInputToIso(data?.today ?? format(new Date(), "yyyy-MM-dd")),
     });
   };
 
@@ -1751,7 +1751,9 @@ export default function SchedulePage() {
   };
 
   const stepSimDate = (days: number) => {
-    const base = simDate ? new Date(simDate) : new Date();
+    const base = simDate
+      ? new Date(simDate)
+      : parseISO(data?.today ?? format(new Date(), "yyyy-MM-dd"));
     base.setDate(base.getDate() + days);
     const next = format(base, "yyyy-MM-dd");
     setSimDate(next);
