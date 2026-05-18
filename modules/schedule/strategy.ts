@@ -57,6 +57,7 @@ export interface StrategyResult {
   newAssignments: OrderAssignmentDraft[];
   updatedCapacities: ExistingCapacityDraft[];
   newCapacities: CapacityDraft[];
+  conflictOrderIds: string[];
 }
 
 export interface IScheduleStrategy {
