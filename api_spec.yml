@@ -450,7 +450,10 @@ paths:
   /schedule/preview:
     post:
       summary: 預覽排程變更 (甘特圖/衝突分析)
-      description: 在實際生效前，預覽手動調整順序的影響範圍與衝突提示。
+      description: |
+        在實際生效前，預覽手動調整順序的影響範圍與衝突提示。
+        產生 previewId 並暫存（TTL 1800 秒）於 Redis，供後續 `/schedule/apply` 使用。
+        受 OCC（樂觀並行控制）保護：preview 會記錄當下的 schedule version，apply 時若 version 已變動則回 409。
       tags:
         - Schedule
       requestBody:
@@ -458,18 +461,43 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ScheduleUpdateInput"
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                  description: 要預覽排程的產品類型 (例如 'Type A')
+                config:
+                  $ref: "#/components/schemas/SchedulingConfig"
       responses:
         "200":
           description: 預覽結果
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SchedulePreviewResult"
+                type: object
+                properties:
+                  previewId:
+                    type: string
+                    description: 用於後續 `/schedule/apply` 的 preview 識別碼
+                  data:
+                    $ref: "#/components/schemas/SchedulePreviewResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /schedule/apply:
     post:
       summary: 確認並生效排程變更
+      description: |
+        套用先前 `/schedule/preview` 產生的排程結果到 DB。
+        受 Redis 分散式鎖與樂觀並行控制（OCC）保護：
+        - 若該類型已有其他排程作業執行中 → 409
+        - 若 preview 期間 schedule version 已被推進 → 409（需重新 preview）
+        - 若 previewId 已過期或不存在 → 404
       tags:
         - Schedule
       requestBody:
@@ -477,10 +505,96 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ScheduleUpdateInput"
+              type: object
+              required: [previewId]
+              properties:
+                previewId:
+                  type: string
+                  description: 由 `/schedule/preview` 回傳的 preview 識別碼
       responses:
         "200":
           description: 排程已生效更新，版本號推進
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Schedule applied successfully
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: previewId 已過期或不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: NOT_FOUND
+                message: Preview expired or not found
+        "409":
+          description: |
+            OCC 失敗或鎖衝突：
+            - 排程鎖已被其他作業持有
+            - preview 期間 schedule version 已變動，需重新 preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: CONFLICT
+                message: Schedule environment has changed. Please preview again.
+
+  /schedule/notify:
+    post:
+      summary: 寄送衝突訂單通知信
+      description: |
+        針對 preview 階段被 kick out（排程衝突）的訂單，寄送通知信給訂單申請人 (applicant) 及所屬工廠管理員 (admin)。
+        每個訂單可能產生 1~2 封信（applicant 與 admin 各一）。
+      tags:
+        - Schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orders]
+              properties:
+                orders:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: "#/components/schemas/ConflictOrder"
+      responses:
+        "200":
+          description: 通知寄送結果（部分成功亦回 200，以 sent/failed 分流）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sent:
+                    type: array
+                    description: 成功通知（至少寄出一封）的訂單 ID
+                    items:
+                      type: string
+                  failed:
+                    type: array
+                    description: 所有相關信件皆失敗的訂單 ID
+                    items:
+                      type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   # ==========================================================
   # Users & Permissions API (FR-06: 管理員進行權限管理)
@@ -919,9 +1033,12 @@ components:
 
     SchedulePreviewResult:
       type: object
+      description: |
+        排程預覽結果。`conflictOrderIds` 與 `conflictOrders` 用於前端顯示衝突訂單與寄送 kick-out 通知信。
       properties:
         newSchedule:
           type: array
+          description: 預覽後的訂單清單（含每筆訂單預計的 assignments）
           items:
             $ref: "#/components/schemas/Order"
         affectedOrders:
@@ -939,6 +1056,55 @@ components:
           items:
             type: string
             description: 衝突警告訊息
+        conflictOrderIds:
+          type: array
+          nullable: true
+          description: |
+            排程衝突（kick out）的訂單 ID 清單。目前 preview route 主要回傳 `failedOrderIds`；
+            `conflictOrderIds` 為將與前端 `/schedule/notify` 流程對齊的欄位（可能與 `failedOrderIds` 重疊或相同）。
+          items:
+            type: string
+        conflictOrders:
+          type: array
+          nullable: true
+          description: |
+            衝突訂單的 hydrated 物件清單（含 applicant/admin email），可直接餵給 `/schedule/notify`。
+            注意：目前 preview route 尚未實作 applicant + admin email hydration，將於後續任務補上；
+            spec 先預留欄位以便前後端對齊。
+          items:
+            $ref: "#/components/schemas/ConflictOrder"
+
+    ConflictOrder:
+      type: object
+      description: |
+        排程衝突訂單的 hydrated 物件，供 `/schedule/notify` 寄送 kick-out 通知信使用。
+      required: [id, name, applicantEmail, applicantUsername]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        quantity:
+          type: integer
+        dueDate:
+          type: string
+          description: 訂單交期（ISO 8601 字串，與 notify route zod schema 對齊）
+        applicantEmail:
+          type: string
+          format: email
+          nullable: true
+          description: 申請業務的 email；為 null 時不會寄信給 applicant
+        applicantUsername:
+          type: string
+          nullable: true
+        adminEmail:
+          type: string
+          format: email
+          nullable: true
+          description: 該訂單所屬工廠管理員的 email；為 null 時不會寄信給 admin
+        adminUsername:
+          type: string
+          nullable: true
 
     CreateUserInput:
       type: object

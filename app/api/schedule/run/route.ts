@@ -8,6 +8,7 @@ import { z } from "zod";
 import { getRedis } from "@/lib/redis";
 import { runSchedule } from "@/modules/schedule/run";
 import { type SchedulingConfig } from "@/modules/schedule/strategy";
+import { getTime } from "@/lib/get-time";
 
 const SchedulingConfigSchema = z
   .object({
@@ -86,7 +87,8 @@ export async function POST(request: Request) {
     const lockKey = `schedule:lock:${type}`;
     const redis = getRedis();
 
-    // Acquire Redis Lock (Fail-fast, 5-minute expiry)
+    // Acquire Redis Lock first (fail-fast for concurrent requests; must precede
+    // any DB roundtrip so losers return 409 without waiting for getTime()).
     const lockAcquired = await redis.set(lockKey, "locked", "EX", 300, "NX");
     if (!lockAcquired) {
       return NextResponse.json(
@@ -99,6 +101,16 @@ export async function POST(request: Request) {
     }
 
     try {
+      // Only the lock winner pays the cost of resolving the simulation/current date.
+      const currentDate = await getTime();
+      currentDate.setHours(0, 0, 0, 0);
+
+      if (!config.startDate) {
+        const defaultStartDate = new Date(currentDate);
+        defaultStartDate.setDate(defaultStartDate.getDate() + 1);
+        config.startDate = defaultStartDate;
+      }
+
       // Execute the actual scheduling engine logic
       await runSchedule(type, config as SchedulingConfig, currentDate);
 

@@ -70,6 +70,17 @@ export interface IScheduleStrategy {
   ): StrategyResult;
 }
 
+export interface IScheduleStrategy {
+  name: string;
+  execute(
+    orders: SchedulingOrderInput[],
+    factories: SchedulingFactoryInput[],
+    capacities: SchedulingCapacityInput[],
+    config: SchedulingConfig,
+    currentDate?: Date,
+  ): StrategyResult;
+}
+
 // Helper to get YYYY-MM-DD string robustly
 function toDateString(d: Date | string): string {
   const date = new Date(d);
@@ -77,6 +88,41 @@ function toDateString(d: Date | string): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+// Helper to compute the total available capacity across all factories within
+// the [windowStart, windowEnd] inclusive date window. For each (factory, day):
+//   - If a CapacityDraft exists in capacityMap, use max(0, curCapacity).
+//   - Otherwise, fall back to factory.maxCapacity (dynamic capacity baseline).
+// Used to detect "hard conflicts" — orders whose remaining quantity exceeds
+// the total schedulable capacity within their due-date window, meaning no
+// future rerun can resolve them.
+function computeTotalAvailableCapacity(
+  windowStart: Date,
+  windowEnd: Date,
+  factories: SchedulingFactoryInput[],
+  capacityMap: Map<string, CapacityDraft>,
+): number {
+  let total = 0;
+  const iterDate = new Date(windowStart);
+  iterDate.setHours(0, 0, 0, 0);
+  const endTime = windowEnd.getTime();
+
+  while (iterDate.getTime() <= endTime) {
+    const dateKey = toDateString(iterDate);
+    for (const factory of factories) {
+      const mapKey = `${factory.id}_${dateKey}`;
+      const cap = capacityMap.get(mapKey);
+      if (cap) {
+        total += Math.max(0, cap.curCapacity);
+      } else {
+        total += factory.maxCapacity;
+      }
+    }
+    iterDate.setDate(iterDate.getDate() + 1);
+  }
+
+  return total;
 }
 
 export const greedyBestFitStrategy: IScheduleStrategy = {
@@ -94,6 +140,7 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
       newAssignments: [],
       updatedCapacities: [],
       newCapacities: [],
+      conflictOrderIds: [],
     };
 
     // 1. Separate immutable and mutable orders
@@ -164,6 +211,39 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
           return 1;
       }
 
+      // Standard Priority: dueDate (asc) > quantity (desc) > createdAt (asc)
+      const dueDateA = new Date(a.dueDate).getTime();
+      const dueDateB = new Date(b.dueDate).getTime();
+      if (dueDateA !== dueDateB) return dueDateA - dueDateB;
+
+      if (a.quantity !== b.quantity) return b.quantity - a.quantity;
+
+      const createdAtA = new Date(a.createdAt).getTime();
+      const createdAtB = new Date(b.createdAt).getTime();
+      return createdAtA - createdAtB;
+    });
+
+    // 5. Process each mutable order
+    for (const order of sortedOrders) {
+      const windowStart = new Date(config.startDate);
+      windowStart.setDate(windowStart.getDate() + config.frozenDays);
+      windowStart.setHours(0, 0, 0, 0);
+
+      const windowEnd = new Date(order.dueDate);
+      windowEnd.setDate(
+        windowEnd.getDate() - config.bufferDays - (config.productionDays - 1),
+      );
+      if (config.endDate && windowEnd > config.endDate) {
+        windowEnd.setTime(config.endDate.getTime());
+      }
+      windowEnd.setHours(23, 59, 59, 999);
+
+      // Calculate remaining quantity excluding all current assignments
+      // Engine leaves frozen or GAP_FILLING assignments in order.assignments
+      let scheduledOrProducedQuantity = 0;
+      for (const assignment of order.assignments || []) {
+        scheduledOrProducedQuantity += assignment.assignedQuantity;
+      }
       // Standard Priority: dueDate (asc) > quantity (desc) > createdAt (asc)
       const dueDateA = new Date(a.dueDate).getTime();
       const dueDateB = new Date(b.dueDate).getTime();
@@ -373,6 +453,22 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
 
         // Mutable order that failed becomes FAILED
         result.processedOrders.push({ ...order, status: OrderStatus.FAILED });
+
+        // Detect "hard conflict": even with all factories' total available
+        // capacity in the entire [windowStart, windowEnd] window, the order's
+        // remaining quantity still cannot be covered. Such orders cannot be
+        // resolved by any future rerun and are reported separately from FAILED.
+        if (startingRemainingQty > 0) {
+          const totalAvailable = computeTotalAvailableCapacity(
+            windowStart,
+            windowEnd,
+            factories,
+            capacityMap,
+          );
+          if (totalAvailable < startingRemainingQty) {
+            result.conflictOrderIds.push(order.id);
+          }
+        }
       }
     }
 

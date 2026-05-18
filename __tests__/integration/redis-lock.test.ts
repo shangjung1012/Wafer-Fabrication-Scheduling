@@ -21,6 +21,12 @@ vi.mock("@/modules/schedule/run", () => ({
   }),
 }));
 
+// Mock getTime so the route doesn't pay a DB roundtrip; this test only
+// verifies Redis lock fail-fast, not simulation-date resolution.
+vi.mock("@/lib/get-time", () => ({
+  getTime: vi.fn().mockResolvedValue(new Date()),
+}));
+
 // Mock requireAuth to simulate JWT validation for ADMIN users
 vi.mock("@/modules/auth/require-auth", () => ({
   requireAuth: vi.fn(),

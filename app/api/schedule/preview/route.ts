@@ -10,6 +10,9 @@ import { type SchedulingConfig } from "@/modules/schedule/strategy";
 import { getScheduleVersion, setPreview } from "@/infra/redis/schedule-store";
 import crypto from "crypto";
 import { OrderStatus } from "@/lib/generated/prisma";
+import { getTime } from "@/lib/get-time";
+import { prisma } from "@/lib/prisma";
+import { fetchConflictOrders } from "@/modules/schedule/conflict";
 
 const SchedulingConfigSchema = z
   .object({
@@ -66,7 +69,7 @@ export async function POST(request: Request) {
 
     const { type, config } = parsed.data;
 
-    const currentDate = new Date();
+    const currentDate = await getTime();
     currentDate.setHours(0, 0, 0, 0);
 
     if (!config.startDate) {
@@ -119,6 +122,12 @@ export async function POST(request: Request) {
 
     await setPreview(previewId, payload, 1800);
 
+    const conflictOrderIds = strategyResult.conflictOrderIds;
+    const conflictOrders =
+      conflictOrderIds.length > 0
+        ? await fetchConflictOrders(prisma, conflictOrderIds)
+        : [];
+
     return NextResponse.json({
       previewId,
       data: {
@@ -126,6 +135,8 @@ export async function POST(request: Request) {
         affectedOrders,
         failedOrderIds,
         conflictWarnings,
+        conflictOrderIds,
+        conflictOrders,
       },
     });
   } catch (error) {
