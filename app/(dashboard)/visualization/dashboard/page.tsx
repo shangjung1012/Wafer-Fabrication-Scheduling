@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { format, parseISO } from "date-fns";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { DashboardSummary } from "@/components/dashboard/DashboardSummary";
@@ -65,26 +64,13 @@ function apiFetch(path: string, options: RequestInit = {}) {
   });
 }
 
-function formatDateValue(value?: string | null) {
-  if (!value) return "—";
-  try {
-    const parsed = parseISO(value);
-    if (Number.isNaN(parsed.getTime())) return "—";
-    return format(parsed, "yyyy/MM/dd");
-  } catch {
-    return "—";
-  }
-}
-
 function OrderEditorModal({
-  open,
   mode,
   title,
   initialValues,
   onClose,
   onSubmit,
 }: {
-  open: boolean;
   mode: "create" | "edit";
   title: string;
   initialValues: OrderEditorValues;
@@ -98,18 +84,6 @@ function OrderEditorModal({
   const [dueDate, setDueDate] = useState(initialValues.dueDate ?? "2026-12-31");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    setName(initialValues.name);
-    setQuantity(initialValues.quantity);
-    setType(initialValues.type ?? "A");
-    setDueDate(initialValues.dueDate ?? "2026-12-31");
-    setSubmitting(false);
-    setError("");
-  }, [open, initialValues]);
-
-  if (!open) return null;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -271,7 +245,7 @@ export default function DashboardPage() {
     }
     if (session === undefined) return;
 
-    setLoading(true);
+    let cancelled = false;
 
     Promise.all([
       apiFetch("/api/orders").then(async (res) => {
@@ -284,6 +258,7 @@ export default function DashboardPage() {
       }),
     ])
       .then(([ordersRes, timelineRes]) => {
+        if (cancelled) return;
         setOrders(ordersRes);
         setTimelineData(timelineRes);
         setPendingRequests(
@@ -292,9 +267,14 @@ export default function DashboardPage() {
         setLoading(false);
       })
       .catch((err) => {
+        if (cancelled) return;
         console.error(err);
         setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [session, router, refreshKey]);
 
   const scheduleByOrderId = useMemo(() => {
@@ -356,6 +336,7 @@ export default function DashboardPage() {
     }
 
     setCreateOpen(false);
+    setLoading(true);
     setRefreshKey((value) => value + 1);
   };
 
@@ -390,6 +371,7 @@ export default function DashboardPage() {
     }
 
     setEditOrder(null);
+    setLoading(true);
     setRefreshKey((value) => value + 1);
   };
 
@@ -443,24 +425,25 @@ export default function DashboardPage() {
         onBack={() => router.push("/visualization")}
       />
 
-      {/* Modals */}
-      <OrderEditorModal
-        open={createOpen}
-        mode="create"
-        title="New Order"
-        initialValues={{
-          name: "",
-          quantity: "1",
-          type: "A",
-          dueDate: "2026-12-31",
-        }}
-        onClose={() => setCreateOpen(false)}
-        onSubmit={handleCreateOrder}
-      />
+      {/* Modals — mount only when open so form state resets without an effect */}
+      {createOpen && (
+        <OrderEditorModal
+          mode="create"
+          title="New Order"
+          initialValues={{
+            name: "",
+            quantity: "1",
+            type: "A",
+            dueDate: "2026-12-31",
+          }}
+          onClose={() => setCreateOpen(false)}
+          onSubmit={handleCreateOrder}
+        />
+      )}
 
       {editOrder && (
         <OrderEditorModal
-          open={!!editOrder}
+          key={editOrder.orderId ?? "edit"}
           mode="edit"
           title="Edit Order"
           initialValues={editOrder}

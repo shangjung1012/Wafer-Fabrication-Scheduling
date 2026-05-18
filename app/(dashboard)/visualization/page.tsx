@@ -756,14 +756,12 @@ type OrderEditorValues = {
 };
 
 function OrderFormModal({
-  open,
   title,
   mode,
   initialValues,
   onClose,
   onSubmit,
 }: {
-  open: boolean;
   title: string;
   mode: "create" | "edit";
   initialValues: OrderEditorValues;
@@ -776,18 +774,6 @@ function OrderFormModal({
   const [dueDate, setDueDate] = useState(initialValues.dueDate ?? "2026-12-31");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    setName(initialValues.name);
-    setQuantity(initialValues.quantity);
-    setType(initialValues.type ?? "A");
-    setDueDate(initialValues.dueDate ?? "2026-12-31");
-    setSubmitting(false);
-    setError("");
-  }, [open, initialValues]);
-
-  if (!open) return null;
 
   const isCreate = mode === "create";
 
@@ -2560,35 +2546,38 @@ export default function SchedulePage() {
         </>
       )}
 
-      <OrderFormModal
-        open={createOpen}
-        title="Create Order"
-        mode="create"
-        initialValues={{
-          name: "",
-          quantity: "",
-          type: "A",
-          dueDate: "2026-12-31",
-        }}
-        onClose={() => setCreateOpen(false)}
-        onSubmit={handleCreateOrder}
-      />
+      {createOpen && (
+        <OrderFormModal
+          title="Create Order"
+          mode="create"
+          initialValues={{
+            name: "",
+            quantity: "",
+            type: "A",
+            dueDate: "2026-12-31",
+          }}
+          onClose={() => setCreateOpen(false)}
+          onSubmit={handleCreateOrder}
+        />
+      )}
 
-      <OrderFormModal
-        open={editOrder !== null}
-        title="Update Order"
-        mode="edit"
-        initialValues={{
-          name: editOrder?.name ?? "",
-          quantity: editOrder?.quantity ?? "",
-          orderId: editOrder?.orderId,
-          status: editOrder?.status,
-          dueDate: editOrder?.dueDate,
-          type: editOrder?.type,
-        }}
-        onClose={() => setEditOrder(null)}
-        onSubmit={handleUpdateOrder}
-      />
+      {editOrder && (
+        <OrderFormModal
+          key={editOrder.orderId ?? "edit"}
+          title="Update Order"
+          mode="edit"
+          initialValues={{
+            name: editOrder.name,
+            quantity: editOrder.quantity,
+            orderId: editOrder.orderId,
+            status: editOrder.status,
+            dueDate: editOrder.dueDate,
+            type: editOrder.type,
+          }}
+          onClose={() => setEditOrder(null)}
+          onSubmit={handleUpdateOrder}
+        />
+      )}
     </div>
   );
 }
