@@ -5,26 +5,37 @@ import {
   UnauthorizedError,
 } from "@/modules/auth/require-auth";
 import { z } from "zod";
-import Redis from "ioredis";
-import { runSchedule } from "@/modules/schedule/engine";
-import { renderAndSend } from "@/modules/mail/mail-template";
-import { kickOutTemplate } from "@/modules/mail/templates/kick-out";
+import { getRedis } from "@/lib/redis";
+import { runSchedule } from "@/modules/schedule/run";
+import { type SchedulingConfig } from "@/modules/schedule/strategy";
+import { getTime } from "@/lib/get-time";
 
-let redis: Redis | undefined;
-
-function getRedis(): Redis {
-  if (!redis) {
-    redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
-    redis.on?.("error", (error) => {
-      console.error("Redis connection error:", error);
-    });
-  }
-
-  return redis;
-}
+const SchedulingConfigSchema = z
+  .object({
+    startDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
+    frozenDays: z.number().int().min(0).default(0),
+    productionDays: z.number().int().min(1).default(1),
+    bufferDays: z.number().int().min(0).default(0),
+    reschedulePolicy: z
+      .enum(["GLOBAL_OPTIMIZE", "PRIORITY_RETAIN", "GAP_FILLING"])
+      .default("GAP_FILLING"),
+    algorithm: z.enum(["GREEDY_BEST_FIT"]).default("GREEDY_BEST_FIT"),
+    splittable: z.boolean().default(true),
+    targetOrderIds: z.array(z.string()).optional(),
+  })
+  .default({
+    frozenDays: 0,
+    productionDays: 1,
+    bufferDays: 0,
+    reschedulePolicy: "GAP_FILLING",
+    algorithm: "GREEDY_BEST_FIT",
+    splittable: true,
+  });
 
 const RunScheduleSchema = z.object({
   type: z.string().min(1, "Type is required"),
+  config: SchedulingConfigSchema,
 });
 
 export async function POST(request: Request) {
@@ -61,11 +72,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const { type } = parsed.data;
+    const { type, config } = parsed.data;
+
     const lockKey = `schedule:lock:${type}`;
     const redis = getRedis();
 
-    // Acquire Redis Lock (Fail-fast, 5-minute expiry)
+    // Acquire Redis Lock first (fail-fast for concurrent requests; must precede
+    // any DB roundtrip so losers return 409 without waiting for getTime()).
     const lockAcquired = await redis.set(lockKey, "locked", "EX", 300, "NX");
     if (!lockAcquired) {
       return NextResponse.json(
@@ -78,51 +91,20 @@ export async function POST(request: Request) {
     }
 
     try {
-      const conflicts = await runSchedule(type);
-      let emailsSent = false;
-      let emailFailures = 0;
+      // Only the lock winner pays the cost of resolving the simulation/current date.
+      const currentDate = await getTime();
+      currentDate.setHours(0, 0, 0, 0);
 
-      // Auto-send mode: fire emails immediately without admin confirmation
-      const autoSend = process.env.CONFLICT_EMAIL_AUTO_SEND === "true";
-      if (autoSend && conflicts.length > 0) {
-        const emailJobs = conflicts.flatMap((o) => {
-          const jobs = [];
-          if (o.applicantEmail) {
-            jobs.push(
-              renderAndSend(kickOutTemplate, {
-                orderName: o.name,
-                applicantEmail: o.applicantEmail,
-                applicantUsername: o.applicantUsername,
-              }),
-            );
-          }
-          if (o.adminEmail) {
-            jobs.push(
-              renderAndSend(kickOutTemplate, {
-                orderName: o.name,
-                applicantEmail: o.adminEmail,
-                applicantUsername: o.adminUsername,
-              }),
-            );
-          }
-          return jobs;
-        });
-        const emailResults = await Promise.allSettled(emailJobs);
-        emailResults.forEach((r, i) => {
-          if (r.status === "rejected") {
-            console.error(`Conflict email failed (job ${i}):`, r.reason);
-            emailFailures += 1;
-          }
-        });
-        emailsSent = emailJobs.length > 0 && emailFailures === 0;
+      if (!config.startDate) {
+        const defaultStartDate = new Date(currentDate);
+        defaultStartDate.setDate(defaultStartDate.getDate() + 1);
+        config.startDate = defaultStartDate;
       }
 
-      return NextResponse.json({
-        message: "Schedule run successfully",
-        conflicts,
-        emailsSent,
-        emailFailures,
-      });
+      // Execute the actual scheduling engine logic
+      await runSchedule(type, config as SchedulingConfig, currentDate);
+
+      return NextResponse.json({ message: "Schedule run successfully" });
     } finally {
       // Always release the lock when done
       await redis.del(lockKey);

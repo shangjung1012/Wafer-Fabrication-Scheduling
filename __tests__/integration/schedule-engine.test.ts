@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { runSchedule } from "@/modules/schedule/engine";
+import { runSchedule } from "@/modules/schedule/run";
+import { type SchedulingConfig } from "@/modules/schedule/strategy";
 import {
   OrderStatus,
   AssignmentStatus,
@@ -42,7 +43,11 @@ describe("Schedule Engine - Database Integration", () => {
         where: { productionType: "IntegrationType" },
       });
       await prisma.user.deleteMany({
-        where: { username: { in: ["test-applicant-1", "test-applicant-2"] } },
+        where: {
+          username: {
+            in: ["test-applicant-1", "test-applicant-2", "test-applicant-3"],
+          },
+        },
       });
     } catch {
       // Ignore if DB isn't running
@@ -87,14 +92,23 @@ describe("Schedule Engine - Database Integration", () => {
           name: "Test Order 1",
           type: "IntegrationType",
           applicantId: applicant.id,
-          status: OrderStatus.APPROVED,
+          status: OrderStatus.PENDING,
           dueDate: addDays(today, 3), // window = tomorrow and day after
           quantity: 120,
         },
       });
 
       // 2. Execute runSchedule
-      await runSchedule("IntegrationType");
+      const dummyConfig: SchedulingConfig = {
+        startDate: addDays(today, 1),
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GLOBAL_OPTIMIZE", // Changed from GAP_FILLING so it gets rescheduled
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+      await runSchedule("IntegrationType", dummyConfig, today);
 
       // 3. Assert Database State
       const updatedOrder = await prisma.order.findUnique({
@@ -180,7 +194,16 @@ describe("Schedule Engine - Database Integration", () => {
       });
 
       // 2. Execute
-      await runSchedule("IntegrationType");
+      const dummyConfig: SchedulingConfig = {
+        startDate: addDays(today, 1),
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GLOBAL_OPTIMIZE",
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+      await runSchedule("IntegrationType", dummyConfig, today);
 
       // 3. Assert DB State
       // The capacity should be reset to 100, then order scheduled again.
@@ -200,6 +223,106 @@ describe("Schedule Engine - Database Integration", () => {
       });
 
       expect(capacities[0].curCapacity).toBe(40);
+    } catch (e: unknown) {
+      if (isDatabaseUnreachable(e)) {
+        console.warn("Skipping DB test because database is not reachable.");
+      } else {
+        throw e;
+      }
+    }
+  });
+
+  it("should be idempotent across multiple identical runs", async () => {
+    try {
+      // 1. Seed initial data
+      const applicant = await prisma.user.create({
+        data: {
+          username: "test-applicant-3",
+          email: "test-applicant-3@mail.shangjung.com",
+          role: UserRole.SALES,
+        },
+      });
+
+      const factoryA = await prisma.factory.create({
+        data: {
+          productionType: "IntegrationType",
+          maxCapacity: 100,
+          status: "ACTIVE",
+        },
+      });
+
+      const order1 = await prisma.order.create({
+        data: {
+          name: "Idempotent Order",
+          type: "IntegrationType",
+          applicantId: applicant.id,
+          status: OrderStatus.PENDING,
+          dueDate: addDays(today, 3), // window = tomorrow and day after
+          quantity: 120,
+        },
+      });
+
+      const dummyConfig: SchedulingConfig = {
+        startDate: addDays(today, 1),
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GLOBAL_OPTIMIZE",
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+
+      // 2. Execute first run
+      await runSchedule("IntegrationType", dummyConfig, today);
+
+      // 3. Record state
+      const assignmentsAfterFirstRun = await prisma.orderAssignment.findMany({
+        where: { orderId: order1.id },
+      });
+      const capacitiesAfterFirstRun = await prisma.dailyCapacity.findMany({
+        where: { factoryId: factoryA.id },
+        orderBy: { date: "asc" },
+      });
+
+      // Assert basic correctness of first run
+      expect(assignmentsAfterFirstRun.length).toBeGreaterThan(0);
+      expect(capacitiesAfterFirstRun.length).toBeGreaterThan(0);
+
+      // 4. Execute second run (exact same config and date)
+      await runSchedule("IntegrationType", dummyConfig, today);
+
+      // 5. Assert state is EXACTLY the same
+      const assignmentsAfterSecondRun = await prisma.orderAssignment.findMany({
+        where: { orderId: order1.id },
+      });
+      const capacitiesAfterSecondRun = await prisma.dailyCapacity.findMany({
+        where: { factoryId: factoryA.id },
+        orderBy: { date: "asc" },
+      });
+
+      expect(assignmentsAfterSecondRun.length).toBe(
+        assignmentsAfterFirstRun.length,
+      );
+      expect(capacitiesAfterSecondRun.length).toBe(
+        capacitiesAfterFirstRun.length,
+      );
+
+      for (let i = 0; i < capacitiesAfterFirstRun.length; i++) {
+        expect(capacitiesAfterSecondRun[i].curCapacity).toBe(
+          capacitiesAfterFirstRun[i].curCapacity,
+        );
+      }
+
+      // Check total assigned quantity remains the same
+      const totalAssignedFirst = assignmentsAfterFirstRun.reduce(
+        (sum, a) => sum + a.assignedQuantity,
+        0,
+      );
+      const totalAssignedSecond = assignmentsAfterSecondRun.reduce(
+        (sum, a) => sum + a.assignedQuantity,
+        0,
+      );
+      expect(totalAssignedSecond).toBe(totalAssignedFirst);
     } catch (e: unknown) {
       if (isDatabaseUnreachable(e)) {
         console.warn("Skipping DB test because database is not reachable.");

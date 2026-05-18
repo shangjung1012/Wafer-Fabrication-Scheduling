@@ -118,26 +118,30 @@ describe("流程一：正常訂單生命週期", () => {
     expect(order.applicantId).toBe("sales-A");
   });
 
-  it("3. ADMIN admin-A1 審核訂單 PENDING → APPROVED", async () => {
+  it("3. ADMIN admin-A1 審核訂單 PENDING → SCHEDULED", async () => {
     const order = await seedOrderA();
     const updated = await updateOrderService(adminA1, prisma, order.id, {
-      status: "APPROVED",
+      status: "SCHEDULED",
     });
-    expect(updated.status).toBe("APPROVED");
+    expect(updated.status).toBe("SCHEDULED");
   });
 
-  it("4. SALES 嘗試改 APPROVED 的訂單 → 403", async () => {
+  it("4. SALES 嘗試改 SCHEDULED 的訂單 → 403", async () => {
     const order = await seedOrderA();
-    await updateOrderService(adminA1, prisma, order.id, { status: "APPROVED" });
+    await updateOrderService(adminA1, prisma, order.id, {
+      status: "SCHEDULED",
+    });
 
     await expect(
       updateOrderService(salesA, prisma, order.id, { name: "改名" }),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
-  it("5. SALES 對 APPROVED 訂單提修改申請 → 201", async () => {
+  it("5. SALES 對 SCHEDULED 訂單提修改申請 → 201", async () => {
     const order = await seedOrderA();
-    await updateOrderService(adminA1, prisma, order.id, { status: "APPROVED" });
+    await updateOrderService(adminA1, prisma, order.id, {
+      status: "SCHEDULED",
+    });
 
     const request = await createRequestService(salesA, prisma, {
       orderId: order.id,
@@ -152,7 +156,9 @@ describe("流程一：正常訂單生命週期", () => {
 
   it("6. ADMIN 核准申請後 quantity 更新為 200", async () => {
     const order = await seedOrderA();
-    await updateOrderService(adminA1, prisma, order.id, { status: "APPROVED" });
+    await updateOrderService(adminA1, prisma, order.id, {
+      status: "SCHEDULED",
+    });
 
     const request = await createRequestService(salesA, prisma, {
       orderId: order.id,

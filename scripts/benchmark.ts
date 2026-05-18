@@ -3,6 +3,7 @@ import {
   type SchedulingCapacityInput,
   type SchedulingFactoryInput,
   type SchedulingOrderInput,
+  type SchedulingConfig,
 } from "../modules/schedule/strategy";
 import { OrderStatus } from "../lib/generated/prisma/client";
 
@@ -62,10 +63,12 @@ for (let i = 1; i <= NUM_ORDERS; i++) {
 
   mockOrders.push({
     id: `O${i}`,
-    status: OrderStatus.APPROVED,
+    status: OrderStatus.PENDING,
     dueDate: addDays(TODAY, dueDays),
     quantity: randomInt(100, 2000),
     createdAt: new Date(TODAY.getTime() - randomInt(0, 1000000000)), // Random created time in the past
+    isFixed: false,
+    isPrioritized: false,
     assignments: [],
   });
 }
@@ -75,10 +78,19 @@ console.log("\n✅ Data Generation Complete. Running strategy...");
 // Measure performance
 const startTime = performance.now();
 
-const strategyResult = greedyBestFitStrategy(
+const strategyResult = greedyBestFitStrategy.execute(
   mockOrders,
   mockFactories,
   mockCapacities,
+  {
+    startDate: addDays(TODAY, 1),
+    frozenDays: 0,
+    productionDays: 1,
+    bufferDays: 0,
+    reschedulePolicy: "GAP_FILLING",
+    algorithm: "GREEDY_BEST_FIT",
+    splittable: true,
+  } as SchedulingConfig,
   TODAY,
 );
 
@@ -91,15 +103,15 @@ console.log(`⏱️  Execution Time: ${executionTimeMs} ms`);
 const scheduledCount = strategyResult.processedOrders.filter(
   (o) => o.status === OrderStatus.SCHEDULED,
 ).length;
-const approvedCount = strategyResult.processedOrders.filter(
-  (o) => o.status === OrderStatus.APPROVED,
+const failedCount = strategyResult.processedOrders.filter(
+  (o) => o.status === OrderStatus.FAILED,
 ).length;
 
 console.log(
   `📈 Total Orders Processed: ${strategyResult.processedOrders.length}`,
 );
 console.log(`✅ Successfully Scheduled Orders: ${scheduledCount}`);
-console.log(`❌ Failed to Schedule (Rollback): ${approvedCount}`);
+console.log(`❌ Failed to Schedule (Rollback): ${failedCount}`);
 console.log(
   `📝 Total Virtual Assignments Created: ${strategyResult.newAssignments.length}`,
 );

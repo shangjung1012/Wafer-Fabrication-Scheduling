@@ -146,6 +146,7 @@ function mapTimeline(
   rows: Awaited<ReturnType<typeof findAssignmentsForVisualization>>,
 ): TimelineItem[] {
   return rows.map((a) => ({
+    assignmentId: a.id,
     orderId: a.orderId,
     orderName: a.orderName,
     factoryId: a.factoryId,

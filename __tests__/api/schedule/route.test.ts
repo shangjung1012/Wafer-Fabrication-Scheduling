@@ -10,8 +10,7 @@ import {
 import { POST } from "@/app/api/schedule/run/route";
 import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
 import Redis from "ioredis";
-import * as scheduleEngine from "@/modules/schedule/engine";
-import * as mailTemplate from "@/modules/mail/mail-template";
+import * as scheduleEngine from "@/modules/schedule/run";
 
 // Mock requireAuth
 vi.mock("@/modules/auth/require-auth", () => ({
@@ -35,20 +34,8 @@ vi.mock("ioredis", () => {
 });
 
 // Mock schedule engine
-vi.mock("@/modules/schedule/engine", () => ({
+vi.mock("@/modules/schedule/run", () => ({
   runSchedule: vi.fn(),
-}));
-
-// Mock mail modules so azure SDK is never loaded in tests
-vi.mock("@/modules/mail/mail-template", () => ({
-  renderAndSend: vi.fn().mockResolvedValue(undefined),
-}));
-vi.mock("@/modules/mail/templates/kick-out", () => ({
-  kickOutTemplate: {
-    id: "kick-out-notification",
-    name: "mock",
-    build: vi.fn(),
-  },
 }));
 
 describe("POST /api/schedule/run", () => {
@@ -73,7 +60,7 @@ describe("POST /api/schedule/run", () => {
     });
 
     // Default: engine success
-    vi.mocked(scheduleEngine.runSchedule).mockResolvedValue([]);
+    vi.mocked(scheduleEngine.runSchedule).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -130,7 +117,11 @@ describe("POST /api/schedule/run", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(200);
-    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith("Type A");
+    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith(
+      "Type A",
+      expect.any(Object),
+      expect.any(Date),
+    );
   });
 
   it("should reject execution if invalid CRON_SECRET is provided", async () => {
@@ -165,6 +156,41 @@ describe("POST /api/schedule/run", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(400);
+  });
+
+  it("should parse configuration parameters safely via Zod", async () => {
+    const req = createRequest({
+      type: "Type B",
+      config: {
+        frozenDays: "invalid-string",
+      },
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.details.config.frozenDays).toBeDefined();
+  });
+
+  it("should apply default configurations, notably injecting startDate if omitted", async () => {
+    const req = createRequest({ type: "Type C" });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+
+    const callArgs = vi.mocked(scheduleEngine.runSchedule).mock.calls[0];
+    const passedConfig = callArgs[1];
+
+    expect(passedConfig).toMatchObject({
+      frozenDays: 0,
+      productionDays: 1,
+      bufferDays: 0,
+      reschedulePolicy: "GAP_FILLING",
+      algorithm: "GREEDY_BEST_FIT",
+      splittable: true,
+    });
+    // startDate defaults to tomorrow (currentDate + 1 day)
+    expect(passedConfig.startDate).toBeInstanceOf(Date);
   });
 
   it("should return 409 if redis lock cannot be acquired", async () => {
@@ -209,63 +235,14 @@ describe("POST /api/schedule/run", () => {
     );
 
     // Engine called
-    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith("Type A");
+    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith(
+      "Type A",
+      expect.any(Object),
+      expect.any(Date),
+    );
 
     // Released lock
     expect(redisDelMock).toHaveBeenCalledWith("schedule:lock:Type A");
-  });
-
-  it("reports auto-send success only when all conflict emails are sent", async () => {
-    vi.stubEnv("CONFLICT_EMAIL_AUTO_SEND", "true");
-    vi.mocked(scheduleEngine.runSchedule).mockResolvedValueOnce([
-      {
-        id: "O1",
-        name: "Order 1",
-        quantity: 10,
-        dueDate: "2026-05-20",
-        applicantEmail: "sales@example.com",
-        applicantUsername: "sales",
-        adminEmail: "admin@example.com",
-        adminUsername: "admin",
-      },
-    ]);
-    vi.mocked(mailTemplate.renderAndSend).mockResolvedValue(undefined);
-
-    const req = createRequest({ type: "Type A" });
-    const res = await POST(req);
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.emailsSent).toBe(true);
-    expect(json.emailFailures).toBe(0);
-    expect(mailTemplate.renderAndSend).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not report auto-send success when any conflict email fails", async () => {
-    vi.stubEnv("CONFLICT_EMAIL_AUTO_SEND", "true");
-    vi.mocked(scheduleEngine.runSchedule).mockResolvedValueOnce([
-      {
-        id: "O1",
-        name: "Order 1",
-        quantity: 10,
-        dueDate: "2026-05-20",
-        applicantEmail: "sales@example.com",
-        applicantUsername: "sales",
-        adminEmail: "admin@example.com",
-        adminUsername: "admin",
-      },
-    ]);
-    vi.mocked(mailTemplate.renderAndSend)
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("smtp error"));
-
-    const req = createRequest({ type: "Type A" });
-    const res = await POST(req);
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.emailsSent).toBe(false);
-    expect(json.emailFailures).toBe(1);
   });
 
   it("should release lock even if engine throws an error", async () => {
