@@ -57,7 +57,17 @@ export interface StrategyResult {
   newAssignments: OrderAssignmentDraft[];
   updatedCapacities: ExistingCapacityDraft[];
   newCapacities: CapacityDraft[];
-  conflictOrderIds: string[];
+}
+
+export interface IScheduleStrategy {
+  name: string;
+  execute(
+    orders: SchedulingOrderInput[],
+    factories: SchedulingFactoryInput[],
+    capacities: SchedulingCapacityInput[],
+    config: SchedulingConfig,
+    currentDate?: Date,
+  ): StrategyResult;
 }
 
 export interface IScheduleStrategy {
@@ -201,6 +211,39 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
           return 1;
       }
 
+      // Standard Priority: dueDate (asc) > quantity (desc) > createdAt (asc)
+      const dueDateA = new Date(a.dueDate).getTime();
+      const dueDateB = new Date(b.dueDate).getTime();
+      if (dueDateA !== dueDateB) return dueDateA - dueDateB;
+
+      if (a.quantity !== b.quantity) return b.quantity - a.quantity;
+
+      const createdAtA = new Date(a.createdAt).getTime();
+      const createdAtB = new Date(b.createdAt).getTime();
+      return createdAtA - createdAtB;
+    });
+
+    // 5. Process each mutable order
+    for (const order of sortedOrders) {
+      const windowStart = new Date(config.startDate);
+      windowStart.setDate(windowStart.getDate() + config.frozenDays);
+      windowStart.setHours(0, 0, 0, 0);
+
+      const windowEnd = new Date(order.dueDate);
+      windowEnd.setDate(
+        windowEnd.getDate() - config.bufferDays - (config.productionDays - 1),
+      );
+      if (config.endDate && windowEnd > config.endDate) {
+        windowEnd.setTime(config.endDate.getTime());
+      }
+      windowEnd.setHours(23, 59, 59, 999);
+
+      // Calculate remaining quantity excluding all current assignments
+      // Engine leaves frozen or GAP_FILLING assignments in order.assignments
+      let scheduledOrProducedQuantity = 0;
+      for (const assignment of order.assignments || []) {
+        scheduledOrProducedQuantity += assignment.assignedQuantity;
+      }
       // Standard Priority: dueDate (asc) > quantity (desc) > createdAt (asc)
       const dueDateA = new Date(a.dueDate).getTime();
       const dueDateB = new Date(b.dueDate).getTime();

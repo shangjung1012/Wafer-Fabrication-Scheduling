@@ -74,6 +74,16 @@ export async function POST(request: Request) {
 
     const { type, config } = parsed.data;
 
+    // Handle the dynamic default for startDate (today + 1)
+    const currentDate = new Date();
+    currentDate.setHours(0, 0, 0, 0);
+
+    if (!config.startDate) {
+      const defaultStartDate = new Date(currentDate);
+      defaultStartDate.setDate(defaultStartDate.getDate() + 1);
+      config.startDate = defaultStartDate;
+    }
+
     const lockKey = `schedule:lock:${type}`;
     const redis = getRedis();
 
