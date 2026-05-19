@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
@@ -615,9 +616,9 @@ export default function OrdersPage() {
         <a href="/orders" style={navLinkStyle}>
           Orders
         </a>
-        <a href="/conflict-issues" style={navLinkStyle}>
+        <Link href="/conflict-issues" style={navLinkStyle}>
           Conflicts
-        </a>
+        </Link>
         <a href="/visualization" style={navLinkStyle}>
           Visualization
         </a>

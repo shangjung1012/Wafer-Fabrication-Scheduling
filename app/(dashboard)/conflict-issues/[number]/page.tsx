@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, use } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   logoutClientAuthSession,
@@ -722,7 +723,7 @@ function Sidebar({
   onAction: () => void;
 }) {
   const [suggestions, setSuggestions] = useState<SuggestionResult | null>(null);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [adminAction, setAdminAction] = useState<"CLOSE" | "REOPEN" | null>(
     null,
@@ -751,8 +752,14 @@ function Sidebar({
   }, [issue.number]);
 
   useEffect(() => {
-    void fetchSuggestions();
-  }, [fetchSuggestions]);
+    apiFetch(`/api/conflict-issues/${issue.number}/suggestions`)
+      .then(async (res) => {
+        if (res.ok) setSuggestions((await res.json()) as SuggestionResult);
+        else setSuggestionsError("Failed to load suggestions.");
+      })
+      .catch(() => setSuggestionsError("Network error."))
+      .finally(() => setLoadingSuggestions(false));
+  }, [issue.number]);
 
   const doAdminAction = async () => {
     if (!adminAction) return;
@@ -1191,8 +1198,16 @@ export default function ConflictIssueDetailPage({
   }, [issueNumber]);
 
   useEffect(() => {
-    if (session) void fetchIssue();
-  }, [session, fetchIssue]);
+    if (!session || isNaN(issueNumber)) return;
+    apiFetch(`/api/conflict-issues/${issueNumber}`)
+      .then(async (res) => {
+        if (res.ok) setIssue((await res.json()) as IssueDetail);
+        else if (res.status === 404) setError("Issue not found.");
+        else setError("Failed to load issue.");
+      })
+      .catch(() => setError("Network error."))
+      .finally(() => setLoading(false));
+  }, [session, issueNumber]);
 
   const handleLogout = async () => {
     await apiFetch("/api/auth/logout", { method: "POST" });
@@ -1228,12 +1243,12 @@ export default function ConflictIssueDetailPage({
         <a href="/orders" style={navLinkStyle}>
           Orders
         </a>
-        <a
+        <Link
           href="/conflict-issues"
           style={{ ...navLinkStyle, background: "#dbeafe", fontWeight: 700 }}
         >
           Conflicts
-        </a>
+        </Link>
         <a href="/visualization" style={navLinkStyle}>
           Visualization
         </a>
@@ -1297,12 +1312,12 @@ export default function ConflictIssueDetailPage({
 
       {/* Breadcrumb */}
       <div style={{ marginBottom: 16, fontSize: 13, color: "#64748b" }}>
-        <a
+        <Link
           href="/conflict-issues"
           style={{ color: "#1d4ed8", textDecoration: "none" }}
         >
           Conflict Issues
-        </a>
+        </Link>
         {" / "}
         <span style={{ color: "#0f172a" }}>#{issueNumber}</span>
       </div>
