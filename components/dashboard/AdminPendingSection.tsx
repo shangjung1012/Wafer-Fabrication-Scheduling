@@ -24,24 +24,36 @@ export function AdminPendingSection({
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>(
     {},
   );
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleApprove = async (req: RequestInfo) => {
     setActionLoading((s) => ({ ...s, [req.id]: true }));
+    setErrors((s) => {
+      const c = { ...s };
+      delete c[req.id];
+      return c;
+    });
     try {
       const res = await fetch(`/api/orders/${req.id}`, {
         method: "PUT",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "APPROVED" }),
+        body: JSON.stringify({ status: "SCHEDULED" }),
       });
       if (res.ok) {
         onRequestsChange(requests.filter((r) => r.id !== req.id));
       } else {
-        const body = await res.json().catch(() => ({}));
-        console.error("Approve failed", body);
+        const body = (await res.json().catch(() => ({}))) as {
+          message?: string;
+          code?: string;
+        };
+        setErrors((s) => ({
+          ...s,
+          [req.id]: body.message ?? body.code ?? "Approve failed.",
+        }));
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setErrors((s) => ({ ...s, [req.id]: "Network error." }));
     } finally {
       setActionLoading((s) => {
         const copy = { ...s };
@@ -53,6 +65,11 @@ export function AdminPendingSection({
 
   const handleReject = async (req: RequestInfo) => {
     setActionLoading((s) => ({ ...s, [req.id]: true }));
+    setErrors((s) => {
+      const c = { ...s };
+      delete c[req.id];
+      return c;
+    });
     try {
       const res = await fetch(`/api/orders/${req.id}`, {
         method: "PUT",
@@ -63,11 +80,17 @@ export function AdminPendingSection({
       if (res.ok) {
         onRequestsChange(requests.filter((r) => r.id !== req.id));
       } else {
-        const body = await res.json().catch(() => ({}));
-        console.error("Reject failed", body);
+        const body = (await res.json().catch(() => ({}))) as {
+          message?: string;
+          code?: string;
+        };
+        setErrors((s) => ({
+          ...s,
+          [req.id]: body.message ?? body.code ?? "Reject failed.",
+        }));
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setErrors((s) => ({ ...s, [req.id]: "Network error." }));
     } finally {
       setActionLoading((s) => {
         const copy = { ...s };
@@ -142,6 +165,9 @@ export function AdminPendingSection({
                     <span>{new Date(req.createdAt).toLocaleDateString()}</span>
                   </div>
                 </div>
+                {errors[req.id] && (
+                  <p className="text-xs text-red-600 mt-2">{errors[req.id]}</p>
+                )}
               </div>
             ))}
           </div>

@@ -251,7 +251,7 @@ export async function applyScheduleOrdersUpdate(
         id: { in: failedIds },
         status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
       },
-      data: { status: OrderStatus.FAILED },
+      data: { status: OrderStatus.CONFLICT },
     });
   }
 }
