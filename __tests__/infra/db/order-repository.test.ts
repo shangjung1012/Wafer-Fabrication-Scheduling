@@ -99,7 +99,7 @@ describe("order-repository", () => {
   });
 
   describe("applyScheduleOrdersUpdate", () => {
-    it("should route unsuccessful orders to FAILED", async () => {
+    it("should route scheduled orders to SCHEDULED and conflicting orders to CONFLICT", async () => {
       const mockDb = {
         order: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -110,10 +110,18 @@ describe("order-repository", () => {
 
       expect(mockDb.order.updateMany).toHaveBeenCalledWith({
         where: {
+          id: { in: ["S1"] },
+          status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
+        },
+        data: { status: OrderStatus.SCHEDULED },
+      });
+
+      expect(mockDb.order.updateMany).toHaveBeenCalledWith({
+        where: {
           id: { in: ["F1"] },
           status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
         },
-        data: { status: OrderStatus.FAILED },
+        data: { status: OrderStatus.CONFLICT },
       });
     });
   });

@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState, useCallback, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   logoutClientAuthSession,
@@ -222,6 +223,9 @@ function ProfilePageInner() {
         <a href="/orders" style={navLinkStyle}>
           Orders
         </a>
+        <Link href="/conflict-issues" style={navLinkStyle}>
+          Conflicts
+        </Link>
         <a href="/visualization" style={navLinkStyle}>
           Visualization
         </a>

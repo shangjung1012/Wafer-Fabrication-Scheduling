@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   format,
@@ -1699,6 +1700,15 @@ export default function SchedulePage() {
       .catch(() => {});
   }, [session]);
 
+  // Auto-refresh every 60 s while in Real-time mode
+  useEffect(() => {
+    if (simMode) return;
+    const id = setInterval(() => {
+      setRefreshKey((k) => k + 1);
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [simMode]);
+
   const patchSim = async (patch: {
     isSimulationMode?: boolean;
     simulationDate?: string | null;
@@ -1729,6 +1739,7 @@ export default function SchedulePage() {
   };
 
   const handleTimeModeChange = (nextIsManual: boolean) => {
+    setSimMode(nextIsManual); // optimistic update — confirmed by patchSim response
     if (!nextIsManual) {
       patchSim({ isSimulationMode: false });
       return;
@@ -1911,6 +1922,12 @@ export default function SchedulePage() {
           >
             Orders
           </a>
+          <Link
+            href="/conflict-issues"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Conflicts
+          </Link>
           <a
             href="/visualization"
             className="text-xs font-medium px-2.5 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700"
@@ -2113,14 +2130,14 @@ export default function SchedulePage() {
           <button
             type="button"
             onClick={() => handleTimeModeChange(false)}
-            disabled={simLoading || !simMode}
+            disabled={simLoading}
             className={`px-2.5 py-1 font-semibold transition-colors ${
               !simMode
                 ? "bg-green-600 text-white"
                 : "text-gray-600 hover:bg-gray-50 disabled:opacity-50"
             }`}
           >
-            Auto
+            Real-time
           </button>
           <button
             type="button"
@@ -2132,7 +2149,7 @@ export default function SchedulePage() {
                 : "text-gray-600 hover:bg-gray-50 disabled:opacity-50"
             }`}
           >
-            Manual
+            Custom
           </button>
         </div>
         {simMode && (
@@ -2161,13 +2178,13 @@ export default function SchedulePage() {
               +1d →
             </button>
             <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-              Simulating: {simDate || "—"}
+              Custom: {simDate || "—"}
             </span>
           </>
         )}
         {!simMode && (
           <span className="text-green-700 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
-            ● Auto: live time
+            ● Real-time
           </span>
         )}
       </div>
