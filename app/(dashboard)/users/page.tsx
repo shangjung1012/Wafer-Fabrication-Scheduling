@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   LogOut,
@@ -275,9 +276,9 @@ export default function UsersPage() {
           <a href="/orders" style={navLinkStyle}>
             Orders
           </a>
-          <a href="/conflict-issues" style={navLinkStyle}>
+          <Link href="/conflict-issues" style={navLinkStyle}>
             Conflicts
-          </a>
+          </Link>
           <a href="/visualization" style={navLinkStyle}>
             Visualization
           </a>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   logoutClientAuthSession,
@@ -128,67 +129,40 @@ export default function ConflictIssuesPage() {
 
   const [activeTab, setActiveTab] = useState<"open" | "closed">("open");
   const [issues, setIssues] = useState<IssueRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchIssues = useCallback(async (tab: "open" | "closed") => {
-    setLoading(true);
-    setError(null);
-    try {
-      const statusFilter =
-        tab === "open" ? "OPEN&status=IN_DISCUSSION" : "RESOLVED&status=CLOSED";
-      const res = await apiFetch(
-        `/api/conflict-issues?status=${statusFilter.split("&")[0]}`,
-      );
-
-      // Fetch both statuses for the tab
-      let allIssues: IssueRow[] = [];
-      if (tab === "open") {
-        const [openRes, inDiscRes] = await Promise.all([
-          apiFetch("/api/conflict-issues?status=OPEN"),
-          apiFetch("/api/conflict-issues?status=IN_DISCUSSION"),
-        ]);
-        if (openRes.ok && inDiscRes.ok) {
-          const open = (await openRes.json()) as IssueRow[];
-          const inDisc = (await inDiscRes.json()) as IssueRow[];
-          allIssues = [...open, ...inDisc].sort(
-            (a, b) =>
-              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-          );
-        } else {
-          setError("Failed to load issues.");
-        }
-      } else {
-        const [resolvedRes, closedRes] = await Promise.all([
-          apiFetch("/api/conflict-issues?status=RESOLVED"),
-          apiFetch("/api/conflict-issues?status=CLOSED"),
-        ]);
-        if (resolvedRes.ok && closedRes.ok) {
-          const resolved = (await resolvedRes.json()) as IssueRow[];
-          const closed = (await closedRes.json()) as IssueRow[];
-          allIssues = [...resolved, ...closed].sort(
-            (a, b) =>
-              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-          );
-        } else {
-          setError("Failed to load issues.");
-        }
-      }
-
-      void res; // discard the unused fetch above (replaced by the parallel fetches)
-      setIssues(allIssues);
-    } catch {
-      setError("Network error.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    if (session) {
-      void fetchIssues(activeTab);
-    }
-  }, [session, activeTab, fetchIssues]);
+    if (!session) return;
+    const urls =
+      activeTab === "open"
+        ? [
+            "/api/conflict-issues?status=OPEN",
+            "/api/conflict-issues?status=IN_DISCUSSION",
+          ]
+        : [
+            "/api/conflict-issues?status=RESOLVED",
+            "/api/conflict-issues?status=CLOSED",
+          ];
+    Promise.all(urls.map((u) => apiFetch(u)))
+      .then(async ([res1, res2]) => {
+        if (res1.ok && res2.ok) {
+          const a = (await res1.json()) as IssueRow[];
+          const b = (await res2.json()) as IssueRow[];
+          setIssues(
+            [...a, ...b].sort(
+              (x, y) =>
+                new Date(y.updatedAt).getTime() -
+                new Date(x.updatedAt).getTime(),
+            ),
+          );
+        } else {
+          setError("Failed to load issues.");
+        }
+      })
+      .catch(() => setError("Network error."))
+      .finally(() => setLoading(false));
+  }, [session, activeTab]);
 
   const handleLogout = async () => {
     await apiFetch("/api/auth/logout", { method: "POST" });
@@ -231,12 +205,12 @@ export default function ConflictIssuesPage() {
         <a href="/orders" style={navLinkStyle}>
           Orders
         </a>
-        <a
+        <Link
           href="/conflict-issues"
           style={{ ...navLinkStyle, background: "#dbeafe", fontWeight: 700 }}
         >
           Conflicts
-        </a>
+        </Link>
         <a href="/visualization" style={navLinkStyle}>
           Visualization
         </a>
@@ -305,7 +279,12 @@ export default function ConflictIssuesPage() {
           <button
             key={tab}
             type="button"
-            onClick={() => setActiveTab(tab)}
+            onClick={() => {
+              setActiveTab(tab);
+              setIssues([]);
+              setLoading(true);
+              setError(null);
+            }}
             style={{
               padding: "8px 20px",
               border: "none",

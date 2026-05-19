@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   format,
@@ -1911,12 +1912,12 @@ export default function SchedulePage() {
           >
             Orders
           </a>
-          <a
+          <Link
             href="/conflict-issues"
             className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
           >
             Conflicts
-          </a>
+          </Link>
           <a
             href="/visualization"
             className="text-xs font-medium px-2.5 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700"
