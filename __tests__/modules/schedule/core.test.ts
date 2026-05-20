@@ -41,6 +41,12 @@ vi.mock("@/infra/db/capacity-repository", () => ({
   updateDailyCapacityById: vi.fn(),
 }));
 
+vi.mock("@/infra/redis/schedule-store", () => ({
+  withScheduleLock: vi.fn(async (type, cb) => {
+    return cb();
+  }),
+}));
+
 describe("Schedule Engine - Core", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -185,7 +191,7 @@ describe("Schedule Engine - Core", () => {
         mockTx,
         ["O1"],
         [],
-        "SYSTEM",
+        "system-user",
       );
 
       expect(capacityRepo.createDailyCapacities).toHaveBeenCalledWith(

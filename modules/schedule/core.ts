@@ -92,7 +92,7 @@ export async function _applyScheduleTransaction(
   type: string,
   config: SchedulingConfig,
   strategyResult: StrategyResult,
-  operatorId: string = "SYSTEM",
+  operatorId: string = "system-user",
 ) {
   const scheduledIds = strategyResult.processedOrders
     .filter((o) => o.status === OrderStatus.SCHEDULED)
@@ -142,7 +142,7 @@ export async function applyScheduleTransaction(
   type: string,
   config: SchedulingConfig,
   strategyResult: StrategyResult,
-  operatorId: string = "SYSTEM",
+  operatorId: string = "system-user",
 ) {
   return withScheduleLock(type, async () => {
     await _applyScheduleTransaction(type, config, strategyResult, operatorId);

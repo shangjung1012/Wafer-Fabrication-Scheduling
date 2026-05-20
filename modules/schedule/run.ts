@@ -14,7 +14,7 @@ export async function runSchedule(
   type: string,
   config: SchedulingConfig,
   currentDate?: Date,
-  operatorId: string = "SYSTEM",
+  operatorId: string = "system-user",
 ): Promise<void> {
   return withScheduleLock(type, async () => {
     const actualDate = currentDate ?? (await getTime());
