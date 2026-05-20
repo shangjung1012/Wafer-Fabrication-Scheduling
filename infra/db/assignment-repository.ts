@@ -5,6 +5,7 @@ export type CreateAssignmentInput = {
   orderId: string;
   factoryId: string;
   productionDate: Date;
+  completionDate: Date;
   assignedQuantity: number;
   status: AssignmentStatus;
 };
