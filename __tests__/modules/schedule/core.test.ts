@@ -185,6 +185,7 @@ describe("Schedule Engine - Core", () => {
         mockTx,
         ["O1"],
         [],
+        "SYSTEM",
       );
 
       expect(capacityRepo.createDailyCapacities).toHaveBeenCalledWith(

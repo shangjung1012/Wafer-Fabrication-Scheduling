@@ -99,21 +99,21 @@ describe("order-repository", () => {
   });
 
   describe("applyScheduleOrdersUpdate", () => {
-    it("should route scheduled orders to SCHEDULED and conflicting orders to CONFLICT", async () => {
+    it("should route scheduled orders to SCHEDULED and conflicting orders to CONFLICT, and log operatorId", async () => {
       const mockDb = {
         order: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         },
       } as unknown as PrismaClient;
 
-      await applyScheduleOrdersUpdate(mockDb, ["S1"], ["F1"]);
+      await applyScheduleOrdersUpdate(mockDb, ["S1"], ["F1"], "OP-123");
 
       expect(mockDb.order.updateMany).toHaveBeenCalledWith({
         where: {
           id: { in: ["S1"] },
           status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
         },
-        data: { status: OrderStatus.SCHEDULED },
+        data: { status: OrderStatus.SCHEDULED, lastModifiedById: "OP-123" },
       });
 
       expect(mockDb.order.updateMany).toHaveBeenCalledWith({
@@ -121,8 +121,33 @@ describe("order-repository", () => {
           id: { in: ["F1"] },
           status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
         },
-        data: { status: OrderStatus.CONFLICT },
+        data: { status: OrderStatus.CONFLICT, lastModifiedById: "OP-123" },
       });
+    });
+  });
+
+  describe("findPendingOrderTypes", () => {
+    it("should return unique order types for PENDING orders", async () => {
+      const mockDb = {
+        order: {
+          findMany: vi
+            .fn()
+            .mockResolvedValue([{ type: "Type A" }, { type: "Type B" }]),
+        },
+      } as unknown as PrismaClient;
+
+      const { findPendingOrderTypes } =
+        await import("@/infra/db/order-repository");
+
+      const result = await findPendingOrderTypes(mockDb);
+
+      expect(mockDb.order.findMany).toHaveBeenCalledWith({
+        where: { status: OrderStatus.PENDING },
+        select: { type: true },
+        distinct: ["type"],
+      });
+
+      expect(result).toEqual(["Type A", "Type B"]);
     });
   });
 });

@@ -52,6 +52,7 @@ export async function findAssignmentsByIds(db: PrismaClient, ids: string[]) {
       productionDate: true,
       assignedQuantity: true,
       status: true,
+      order: { select: { type: true } },
     },
   });
 }
