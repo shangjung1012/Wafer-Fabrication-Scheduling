@@ -698,6 +698,10 @@ async function seedOrders(orders: SeedOrder[]) {
 async function seedAssignments(assignments: SeedAssignment[]) {
   console.log(`  Upserting ${assignments.length} assignments…`);
   for (const a of assignments) {
+    // Determine a dummy completion date (e.g., next day)
+    const dummyCompletionDate = new Date(a.productionDate);
+    dummyCompletionDate.setDate(dummyCompletionDate.getDate() + 1);
+
     await prisma.orderAssignment.upsert({
       where: { id: a.id },
       create: {
@@ -705,6 +709,7 @@ async function seedAssignments(assignments: SeedAssignment[]) {
         order: { connect: { id: a.orderId } },
         factory: { connect: { id: a.factoryId } },
         productionDate: a.productionDate,
+        completionDate: dummyCompletionDate,
         assignedQuantity: a.assignedQuantity,
         status: a.status,
       },
@@ -712,6 +717,7 @@ async function seedAssignments(assignments: SeedAssignment[]) {
         order: { connect: { id: a.orderId } },
         factory: { connect: { id: a.factoryId } },
         productionDate: a.productionDate,
+        completionDate: dummyCompletionDate,
         assignedQuantity: a.assignedQuantity,
         status: a.status,
       },
@@ -738,6 +744,44 @@ async function seedDailyCapacities(capacities: SeedDailyCapacity[]) {
   }
 }
 
+async function seedSystemAndConfigs() {
+  console.log(`  Upserting SYSTEM user and AutoSchedulerConfigs…`);
+  const systemUser = await prisma.user.upsert({
+    where: { email: "system@wafer.com" },
+    update: {},
+    create: {
+      id: "system-user",
+      email: "system@wafer.com",
+      username: "AutoScheduler",
+      role: "SYSTEM",
+      group: "SYSTEM",
+      failedLoginCount: 0,
+    },
+  });
+  console.log(`  Upserted SYSTEM user: ${systemUser.email}`);
+
+  const defaultTypes = ["A", "B", "C"];
+  for (const type of defaultTypes) {
+    await prisma.autoSchedulerConfig.upsert({
+      where: { type },
+      update: {},
+      create: {
+        type,
+        isOperating: true,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GAP_FILLING",
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      },
+    });
+  }
+  console.log(
+    `  Upserted AutoSchedulerConfigs for types: ${defaultTypes.join(", ")}`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -756,6 +800,7 @@ async function main() {
   await seedOrders(orders);
   await seedAssignments(assignments);
   await seedDailyCapacities(capacities);
+  await seedSystemAndConfigs();
 
   console.log("");
   console.log("✅ Seed complete.");
