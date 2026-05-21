@@ -33,6 +33,7 @@ enum OrderStatus {
   COMPLETED      // 所有子訂單變成 COMPLETED，母訂單變成 COMPLETED
   CANCELLED
   FAILED         // 排程失敗
+  CONFLICT       // 被排程踢出，需要衝突解決
 }
 
 // 子訂單 (派工單)
@@ -41,6 +42,36 @@ enum AssignmentStatus {
   IN_PRODUCTION
   COMPLETED
   CANCELLED
+}
+
+// =========================
+// Conflict Issue enums
+// =========================
+
+enum ConflictIssueStatus {
+  OPEN          // 剛開，還沒人留言
+  IN_DISCUSSION // 至少一方留言
+  RESOLVED      // 雙方同意某個 proposal，已 apply 到 Order
+  CLOSED        // 關掉但沒 apply（won't fix / 取消等）
+}
+
+enum ConflictResolution {
+  REDUCED_QUANTITY
+  DELAYED_DUE_DATE
+  CANCELLED
+  WONT_FIX
+}
+
+enum ConflictIssueEventType {
+  OPENED
+  REASSIGNED
+  PROPOSAL_ACCEPTED
+  PROPOSAL_REJECTED
+  ORDER_UPDATED     // 因 accept 觸發的 order 變動
+  REPREVIEW_RAN
+  RESOLVED
+  REOPENED
+  CLOSED
 }
 
 // =========================
@@ -59,14 +90,20 @@ model User {
   lastFailedLoginAt DateTime?
 
   // Relations
-  orders           Order[]           @relation("OrderApplicant")
-  modifiedOrders   Order[]           @relation("OrderModifier")
-  managedFactories Factory[]         @relation("FactoryAdmins")
-  requests         OrderRequest[]    @relation("RequestApplicant")
+  orders             Order[]            @relation("OrderApplicant")
+  modifiedOrders     Order[]            @relation("OrderModifier")
+  managedFactories   Factory[]          @relation("FactoryAdmins")
+  requests           OrderRequest[]     @relation("RequestApplicant")
   refreshTokens      RefreshToken[]
   invitations        UserInvitation[]   @relation("InvitationUser")
   createdInvitations UserInvitation[]   @relation("InvitationCreator")
   emailChangeTokens  EmailChangeToken[]
+
+  // Conflict issue relations
+  createdIssues  ConflictIssue[]        @relation("ConflictIssueCreator")
+  assignedIssues ConflictIssue[]        @relation("ConflictIssueAssignee")
+  issueComments  ConflictIssueComment[]
+  issueEvents    ConflictIssueEvent[]
 
   @@map("user")
 }
@@ -138,19 +175,18 @@ model Factory {
 
 // [新增] 每日產能表
 model DailyCapacity {
-  id             String   @id @default(cuid())
-  factoryId      String
-  date           DateTime // 紀錄具體是哪一天
-  maxCapacity      Int      // 該天總產能 (預設帶入 Factory 的 maxCapacity)
-  curCapacity      Int      // 該天剩餘產能 (排程時扣除)
-  
-  factory        Factory  @relation(fields: [factoryId], references: [id], onDelete: Cascade)
-  
+  id          String   @id @default(cuid())
+  factoryId   String
+  date        DateTime // 紀錄具體是哪一天
+  maxCapacity Int      // 該天總產能 (預設帶入 Factory 的 maxCapacity)
+  curCapacity Int      // 該天剩餘產能 (排程時扣除)
+
+  factory Factory @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
   @@unique([factoryId, date]) // 聯合唯一鍵，確保同一廠同一天只有一筆
   @@map("daily_capacity")
 }
 
-// 刪除 productionDate, factoryId，交給OrderAssignment管理
 model Order {
   id               String      @id @default(cuid())
   status           OrderStatus @default(PENDING)
@@ -165,27 +201,28 @@ model Order {
   updatedAt        DateTime    @updatedAt
   lastModifiedById String?
 
-  applicant      User              @relation("OrderApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
-  lastModifiedBy User?             @relation("OrderModifier", fields: [lastModifiedById], references: [id], onDelete: SetNull)
-  
+  applicant      User  @relation("OrderApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
+  lastModifiedBy User? @relation("OrderModifier", fields: [lastModifiedById], references: [id], onDelete: SetNull)
+
   // Relations
-  assignments      OrderAssignment[] // 記錄這筆訂單被拆分成哪些派工單
+  assignments    OrderAssignment[] // 記錄這筆訂單被拆分成哪些派工單
   requests       OrderRequest[]
+  conflictIssues ConflictIssue[]
 
   @@map("order")
 }
 
 // [新增] 訂單派工分配表 (支援拆單)
 model OrderAssignment {
-  id               String             @id @default(cuid())
+  id               String           @id @default(cuid())
   orderId          String
-  status           AssignmentStatus   @default(SCHEDULED)  // 子訂單有自己的status，不會綁死整單操作
+  status           AssignmentStatus @default(SCHEDULED) // 子訂單有自己的status，不會綁死整單操作
   factoryId        String
   productionDate   DateTime // 具體被排在哪一天生產
-  assignedQuantity Int      // 分配到這間工廠這天的數量
+  assignedQuantity Int // 分配到這間工廠這天的數量
 
-  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  factory          Factory  @relation(fields: [factoryId], references: [id], onDelete: Restrict)
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  factory Factory @relation(fields: [factoryId], references: [id], onDelete: Restrict)
 
   @@map("order_assignment")
 }
@@ -201,6 +238,67 @@ model OrderRequest {
   order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("order_request")
+}
+
+// =========================
+// Conflict Issue models
+// =========================
+
+model ConflictIssue {
+  id              String               @id @default(cuid())
+  number          Int                  @unique @default(autoincrement())
+  orderId         String
+  title           String
+  status          ConflictIssueStatus  @default(OPEN)
+  resolution      ConflictResolution?
+  createdById     String               // admin who opened the issue
+  assigneeId      String               // sales person (defaults to order.applicantId)
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  contextSnapshot Json                 // capacity snapshot at preview time — see proposal §1.3
+
+  order     Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdBy User                   @relation("ConflictIssueCreator", fields: [createdById], references: [id])
+  assignee  User                   @relation("ConflictIssueAssignee", fields: [assigneeId], references: [id])
+  comments  ConflictIssueComment[]
+  events    ConflictIssueEvent[]
+
+  @@index([orderId])
+  @@index([status])
+  @@map("conflict_issue")
+}
+
+model ConflictIssueComment {
+  id        String    @id @default(cuid())
+  issueId   String
+  authorId  String
+  body      String
+  proposal  Json?     // CommentProposal: { proposal, expectedOrderUpdatedAt, status }
+  editedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  issue  ConflictIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id])
+
+  @@index([issueId])
+  @@map("conflict_issue_comment")
+}
+
+model ConflictIssueEvent {
+  id        String                 @id @default(cuid())
+  issueId   String
+  actorId   String
+  type      ConflictIssueEventType
+  payload   Json?
+  createdAt DateTime               @default(now())
+
+  issue ConflictIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  actor User          @relation(fields: [actorId], references: [id])
+
+  @@index([issueId])
+  @@map("conflict_issue_event")
 }
 
 // Singleton row (id = "global") for system-wide settings

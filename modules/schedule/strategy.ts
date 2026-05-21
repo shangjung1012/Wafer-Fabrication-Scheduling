@@ -71,6 +71,17 @@ export interface IScheduleStrategy {
   ): StrategyResult;
 }
 
+export interface IScheduleStrategy {
+  name: string;
+  execute(
+    orders: SchedulingOrderInput[],
+    factories: SchedulingFactoryInput[],
+    capacities: SchedulingCapacityInput[],
+    config: SchedulingConfig,
+    currentDate?: Date,
+  ): StrategyResult;
+}
+
 // Helper to get YYYY-MM-DD string robustly
 function toDateString(d: Date | string): string {
   const date = new Date(d);
