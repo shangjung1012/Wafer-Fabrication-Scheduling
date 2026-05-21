@@ -3,7 +3,6 @@ import { POST } from "@/app/api/schedule/apply/route";
 import * as auth from "@/modules/auth/require-auth";
 import * as scheduleCore from "@/modules/schedule/core";
 import * as scheduleStore from "@/infra/redis/schedule-store";
-import { getRedis } from "@/lib/redis";
 
 vi.mock("@/modules/auth/require-auth", () => ({
   requireAuth: vi.fn(),
@@ -25,25 +24,13 @@ vi.mock("@/infra/redis/schedule-store", () => ({
   deletePreview: vi.fn(),
 }));
 
-vi.mock("@/lib/redis", () => {
-  const mockRedisClient = {
-    set: vi.fn(),
-    del: vi.fn(),
-  };
-  return {
-    getRedis: vi.fn(() => mockRedisClient),
-  };
-});
+vi.mock("@/lib/redis", () => ({
+  getRedis: vi.fn(),
+}));
 
 describe("POST /api/schedule/apply", () => {
-  let mockRedis: Record<string, ReturnType<typeof vi.fn>>;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRedis = getRedis() as unknown as Record<
-      string,
-      ReturnType<typeof vi.fn>
-    >;
 
     vi.mocked(auth.requireAuth).mockResolvedValue({
       user: { role: "ADMIN", id: "U1" },
@@ -63,40 +50,43 @@ describe("POST /api/schedule/apply", () => {
     expect(res.status).toBe(404);
   });
 
-  it("should return 409 if unable to acquire lock", async () => {
+  it("should return 409 if unable to acquire lock (already running)", async () => {
     vi.mocked(scheduleStore.getPreview).mockResolvedValue({
       type: "Type A",
       version: 1,
       config: {},
       result: {},
     });
-    mockRedis.set.mockResolvedValue(null); // Lock acquisition fails
+    vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(1);
+    vi.mocked(scheduleCore.applyScheduleTransaction).mockRejectedValue(
+      new Error("already running"),
+    );
 
     const res = await POST(createRequest({ previewId: "valid-123" }));
     expect(res.status).toBe(409);
     const data = await res.json();
-    expect(data.message).toMatch(/A scheduling process is already running/);
+    expect(data.message).toMatch(/already running/);
   });
 
-  it("should return 409 if version mismatched and release lock", async () => {
+  it("should return 409 if version mismatched", async () => {
     vi.mocked(scheduleStore.getPreview).mockResolvedValue({
       type: "Type A",
       version: 1,
       config: {},
       result: {},
     });
-    mockRedis.set.mockResolvedValue("OK"); // Lock acquired
     vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(2); // Mismatched version
 
     const res = await POST(createRequest({ previewId: "valid-123" }));
     expect(res.status).toBe(409);
     const data = await res.json();
     expect(data.message).toMatch(/Schedule environment has changed/);
-
-    expect(mockRedis.del).toHaveBeenCalledWith("schedule:lock:Type A");
   });
 
-  it("should apply schedule, increment version, delete preview, and release lock", async () => {
+  it("should apply schedule, increment version, delete preview", async () => {
+    vi.mocked(scheduleCore.applyScheduleTransaction).mockResolvedValue(
+      undefined,
+    );
     const payload = {
       type: "Type A",
       version: 1,
@@ -104,7 +94,6 @@ describe("POST /api/schedule/apply", () => {
       result: { processedOrders: [] },
     };
     vi.mocked(scheduleStore.getPreview).mockResolvedValue(payload);
-    mockRedis.set.mockResolvedValue("OK");
     vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(1);
 
     const res = await POST(createRequest({ previewId: "valid-123" }));
@@ -114,11 +103,11 @@ describe("POST /api/schedule/apply", () => {
       payload.type,
       payload.config,
       payload.result,
+      "U1",
     );
     expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
       "Type A",
     );
     expect(scheduleStore.deletePreview).toHaveBeenCalledWith("valid-123");
-    expect(mockRedis.del).toHaveBeenCalledWith("schedule:lock:Type A");
   });
 });

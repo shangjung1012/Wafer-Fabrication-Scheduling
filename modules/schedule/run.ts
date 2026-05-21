@@ -4,8 +4,9 @@ import {
 } from "@/modules/schedule/strategy";
 import {
   prepareSchedulingData,
-  applyScheduleTransaction,
+  _applyScheduleTransaction,
 } from "@/modules/schedule/core";
+import { withScheduleLock } from "@/infra/redis/schedule-store";
 
 import { getTime } from "@/lib/get-time";
 
@@ -13,22 +14,25 @@ export async function runSchedule(
   type: string,
   config: SchedulingConfig,
   currentDate?: Date,
+  operatorId: string = "system-user",
 ): Promise<void> {
-  const actualDate = currentDate ?? (await getTime());
+  return withScheduleLock(type, async () => {
+    const actualDate = currentDate ?? (await getTime());
 
-  const { orders, factories, capacities } = await prepareSchedulingData(
-    type,
-    config,
-    actualDate,
-  );
+    const { orders, factories, capacities } = await prepareSchedulingData(
+      type,
+      config,
+      actualDate,
+    );
 
-  const strategyResult = greedyBestFitStrategy.execute(
-    orders,
-    factories,
-    capacities,
-    config,
-    actualDate,
-  );
+    const strategyResult = greedyBestFitStrategy.execute(
+      orders,
+      factories,
+      capacities,
+      config,
+      actualDate,
+    );
 
-  await applyScheduleTransaction(type, config, strategyResult);
+    await _applyScheduleTransaction(type, config, strategyResult, operatorId);
+  });
 }

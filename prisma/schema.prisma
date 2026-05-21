@@ -18,6 +18,7 @@ enum UserRole {
   SUPERADMIN
   ADMIN
   SALES
+  SYSTEM
 }
 
 enum FactoryStatus {
@@ -215,10 +216,11 @@ model Order {
 model OrderAssignment {
   id               String           @id @default(cuid())
   orderId          String
-  status           AssignmentStatus @default(SCHEDULED) // 子訂單有自己的status，不會綁死整單操作
+  status           AssignmentStatus @default(SCHEDULED)
   factoryId        String
-  productionDate   DateTime // 具體被排在哪一天生產
-  assignedQuantity Int // 分配到這間工廠這天的數量
+  productionDate   DateTime
+  completionDate   DateTime
+  assignedQuantity Int
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   factory Factory @relation(fields: [factoryId], references: [id], onDelete: Restrict)
@@ -307,4 +309,18 @@ model SystemState {
   simulationDate   DateTime?
 
   @@map("system_state")
+}
+
+model AutoSchedulerConfig {
+  id               String  @id @default(cuid())
+  type             String  @unique
+  isOperating      Boolean @default(true)
+  frozenDays       Int     @default(0)
+  productionDays   Int     @default(1)
+  bufferDays       Int     @default(0)
+  reschedulePolicy String  @default("GAP_FILLING")
+  algorithm        String  @default("GREEDY_BEST_FIT")
+  splittable       Boolean @default(true)
+
+  @@map("auto_scheduler_config")
 }

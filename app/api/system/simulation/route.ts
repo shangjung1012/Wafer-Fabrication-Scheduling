@@ -10,6 +10,8 @@ import {
   getSystemState,
   upsertSystemState,
 } from "@/infra/db/system-state-repository";
+import { advanceOrderStatuses } from "@/modules/schedule/daily-execution";
+import { getTime } from "@/lib/get-time";
 
 export async function GET(request: Request) {
   try {
@@ -84,6 +86,12 @@ export async function PATCH(request: Request) {
     }
 
     const state = await upsertSystemState(prisma, patch);
+
+    if (patch.simulationDate) {
+      const newTime = await getTime();
+      await advanceOrderStatuses(newTime);
+    }
+
     return NextResponse.json(state);
   } catch (error) {
     if (error instanceof UnauthorizedError) {

@@ -234,6 +234,7 @@ export async function applyScheduleOrdersUpdate(
   db: PrismaClient,
   scheduledIds: string[],
   failedIds: string[],
+  operatorId: string,
 ): Promise<void> {
   if (scheduledIds.length > 0) {
     await db.order.updateMany({
@@ -241,7 +242,7 @@ export async function applyScheduleOrdersUpdate(
         id: { in: scheduledIds },
         status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
       },
-      data: { status: OrderStatus.SCHEDULED },
+      data: { status: OrderStatus.SCHEDULED, lastModifiedById: operatorId },
     });
   }
 
@@ -251,9 +252,20 @@ export async function applyScheduleOrdersUpdate(
         id: { in: failedIds },
         status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
       },
-      data: { status: OrderStatus.FAILED },
+      data: { status: OrderStatus.FAILED, lastModifiedById: operatorId },
     });
   }
+}
+
+export async function findPendingOrderTypes(
+  db: PrismaClient,
+): Promise<string[]> {
+  const orders = await db.order.findMany({
+    where: { status: OrderStatus.PENDING },
+    select: { type: true },
+    distinct: ["type"],
+  });
+  return orders.map((o) => o.type);
 }
 
 // ---------------------------------------------------------------------------

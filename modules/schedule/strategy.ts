@@ -7,6 +7,7 @@ export interface OrderAssignmentDraft {
   orderId: string;
   factoryId: string;
   productionDate: Date;
+  completionDate: Date;
   assignedQuantity: number;
   status: typeof AssignmentStatus.SCHEDULED;
 }
@@ -317,10 +318,16 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
                 wasCreated: false,
               });
 
+              const completionDate = new Date(currentIterDate);
+              completionDate.setDate(
+                completionDate.getDate() + config.productionDays,
+              );
+
               virtualAssignments.push({
                 orderId: order.id,
                 factoryId: cap.factoryId,
                 productionDate: new Date(currentIterDate),
+                completionDate: completionDate,
                 assignedQuantity: allocated,
                 status: AssignmentStatus.SCHEDULED,
               });
@@ -375,10 +382,16 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
                   wasCreated: false,
                 });
 
+                const completionDate = new Date(currentIterDate);
+                completionDate.setDate(
+                  completionDate.getDate() + config.productionDays,
+                );
+
                 virtualAssignments.push({
                   orderId: order.id,
                   factoryId: cap.factoryId,
                   productionDate: new Date(currentIterDate),
+                  completionDate: completionDate,
                   assignedQuantity: remainingQty,
                   status: AssignmentStatus.SCHEDULED,
                 });

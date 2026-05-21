@@ -5,7 +5,6 @@ import {
   UnauthorizedError,
 } from "@/modules/auth/require-auth";
 import { z } from "zod";
-import { getRedis } from "@/lib/redis";
 import { runSchedule } from "@/modules/schedule/run";
 import { type SchedulingConfig } from "@/modules/schedule/strategy";
 import { getTime } from "@/lib/get-time";
@@ -40,22 +39,14 @@ const RunScheduleSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    // 1. Check for Cron execution first
-    const authHeader = request.headers.get("Authorization");
-    const cronSecret = process.env.CRON_SECRET;
-    const isCron = !!cronSecret && authHeader === `Bearer ${cronSecret}`;
+    const ctx = await requireAuth(request);
 
-    // 2. If not a valid cron, fallback to standard user Auth + RBAC
-    if (!isCron) {
-      const ctx = await requireAuth(request);
-
-      // RBAC: Only SUPERADMIN and ADMIN can trigger the scheduling engine
-      if (ctx.user.role !== "SUPERADMIN" && ctx.user.role !== "ADMIN") {
-        return NextResponse.json(
-          { code: "FORBIDDEN", message: "Insufficient permissions" },
-          { status: 403 },
-        );
-      }
+    // RBAC: Only SUPERADMIN and ADMIN can trigger the scheduling engine
+    if (ctx.user.role !== "SUPERADMIN" && ctx.user.role !== "ADMIN") {
+      return NextResponse.json(
+        { code: "FORBIDDEN", message: "Insufficient permissions" },
+        { status: 403 },
+      );
     }
 
     const body = await request.json().catch(() => ({}));
@@ -74,42 +65,32 @@ export async function POST(request: Request) {
 
     const { type, config } = parsed.data;
 
-    const lockKey = `schedule:lock:${type}`;
-    const redis = getRedis();
+    // Only the lock winner pays the cost of resolving the simulation/current date.
+    const currentDate = await getTime();
+    currentDate.setHours(0, 0, 0, 0);
 
-    // Acquire Redis Lock first (fail-fast for concurrent requests; must precede
-    // any DB roundtrip so losers return 409 without waiting for getTime()).
-    const lockAcquired = await redis.set(lockKey, "locked", "EX", 300, "NX");
-    if (!lockAcquired) {
+    if (!config.startDate) {
+      const defaultStartDate = new Date(currentDate);
+      defaultStartDate.setDate(defaultStartDate.getDate() + 1);
+      config.startDate = defaultStartDate;
+    }
+
+    // Execute the actual scheduling engine logic
+    await runSchedule(
+      type,
+      config as SchedulingConfig,
+      currentDate,
+      ctx.user.id,
+    );
+
+    return NextResponse.json({ message: "Schedule run successfully" });
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message?.includes("already running")) {
       return NextResponse.json(
-        {
-          code: "CONFLICT",
-          message: "A scheduling process is already running for this type",
-        },
+        { code: "CONFLICT", message: error.message },
         { status: 409 },
       );
     }
-
-    try {
-      // Only the lock winner pays the cost of resolving the simulation/current date.
-      const currentDate = await getTime();
-      currentDate.setHours(0, 0, 0, 0);
-
-      if (!config.startDate) {
-        const defaultStartDate = new Date(currentDate);
-        defaultStartDate.setDate(defaultStartDate.getDate() + 1);
-        config.startDate = defaultStartDate;
-      }
-
-      // Execute the actual scheduling engine logic
-      await runSchedule(type, config as SchedulingConfig, currentDate);
-
-      return NextResponse.json({ message: "Schedule run successfully" });
-    } finally {
-      // Always release the lock when done
-      await redis.del(lockKey);
-    }
-  } catch (error) {
     if (error instanceof UnauthorizedError) {
       return NextResponse.json(
         { code: "UNAUTHORIZED", message: error.message },

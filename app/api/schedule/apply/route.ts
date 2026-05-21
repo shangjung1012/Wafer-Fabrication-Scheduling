@@ -16,7 +16,6 @@ import {
   deletePreview,
   incrementScheduleVersion,
 } from "@/infra/redis/schedule-store";
-import { getRedis } from "@/lib/redis";
 
 const ApplyScheduleSchema = z.object({
   previewId: z.string().min(1, "Preview ID is required"),
@@ -62,44 +61,34 @@ export async function POST(request: Request) {
     const version = previewPayload.version as number;
     const result = previewPayload.result as StrategyResult;
 
-    const lockKey = `schedule:lock:${type}`;
-    const redis = getRedis();
+    const currentVersion = await getScheduleVersion(type);
 
-    // Acquire Redis Lock (Fail-fast, 5-minute expiry)
-    const lockAcquired = await redis.set(lockKey, "locked", "EX", 300, "NX");
-    if (!lockAcquired) {
+    if (version !== currentVersion) {
       return NextResponse.json(
         {
           code: "CONFLICT",
-          message: "A scheduling process is already running for this type",
+          message: "Schedule environment has changed. Please preview again.",
         },
         { status: 409 },
       );
     }
 
-    try {
-      const currentVersion = await getScheduleVersion(type);
+    await applyScheduleTransaction(type, config, result, ctx.user.id);
+    await incrementScheduleVersion(type);
+    await deletePreview(previewId);
 
-      if (version !== currentVersion) {
-        return NextResponse.json(
-          {
-            code: "CONFLICT",
-            message: "Schedule environment has changed. Please preview again.",
-          },
-          { status: 409 },
-        );
-      }
-
-      await applyScheduleTransaction(type, config, result);
-      await incrementScheduleVersion(type);
-      await deletePreview(previewId);
-
-      return NextResponse.json({ message: "Schedule applied successfully" });
-    } finally {
-      // Always release the lock when done
-      await redis.del(lockKey);
+    return NextResponse.json({ message: "Schedule applied successfully" });
+  } catch (error: unknown) {
+    if (
+      error instanceof Error &&
+      (error.message?.includes("already running") ||
+        error.message?.includes("environment has changed"))
+    ) {
+      return NextResponse.json(
+        { code: "CONFLICT", message: error.message },
+        { status: 409 },
+      );
     }
-  } catch (error) {
     if (error instanceof UnauthorizedError) {
       return NextResponse.json(
         { code: "UNAUTHORIZED", message: error.message },

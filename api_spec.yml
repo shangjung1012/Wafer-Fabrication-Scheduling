@@ -771,6 +771,67 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   # ==========================================================
+  # System API (AutoScheduler & Simulation)
+  # ==========================================================
+  /system/auto-scheduler:
+    get:
+      summary: 取得自動排程設定
+      description: 取得各產品類型的自動排程設定
+      tags:
+        - System
+      responses:
+        "200":
+          description: 設定清單
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AutoSchedulerConfig"
+    patch:
+      summary: 更新自動排程設定
+      description: 更新特定產品類型的自動排程設定 (僅 SUPERADMIN/ADMIN 可用)
+      tags:
+        - System
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                isOperating:
+                  type: boolean
+                frozenDays:
+                  type: integer
+                productionDays:
+                  type: integer
+                bufferDays:
+                  type: integer
+                reschedulePolicy:
+                  type: string
+                  enum: [GLOBAL_OPTIMIZE, PRIORITY_RETAIN, GAP_FILLING]
+                algorithm:
+                  type: string
+                  enum: [GREEDY_BEST_FIT]
+                splittable:
+                  type: boolean
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoSchedulerConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ==========================================================
   # Visualization API (FR-07: 衝突或訂單變更視覺化)
   # ==========================================================
   /visualization/timeline:
@@ -826,6 +887,36 @@ components:
       bearerFormat: JWT
 
   schemas:
+    AutoSchedulerConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        isOperating:
+          type: boolean
+        frozenDays:
+          type: integer
+        productionDays:
+          type: integer
+        bufferDays:
+          type: integer
+        reschedulePolicy:
+          type: string
+          enum: [GLOBAL_OPTIMIZE, PRIORITY_RETAIN, GAP_FILLING]
+        algorithm:
+          type: string
+          enum: [GREEDY_BEST_FIT]
+        splittable:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
     SchedulingConfig:
       type: object
       description: 排程引擎的設定參數

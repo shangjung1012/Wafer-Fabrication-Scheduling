@@ -5,6 +5,7 @@ export type CreateAssignmentInput = {
   orderId: string;
   factoryId: string;
   productionDate: Date;
+  completionDate: Date;
   assignedQuantity: number;
   status: AssignmentStatus;
 };
@@ -49,8 +50,10 @@ export async function findAssignmentsByIds(db: PrismaClient, ids: string[]) {
       orderId: true,
       factoryId: true,
       productionDate: true,
+      completionDate: true,
       assignedQuantity: true,
       status: true,
+      order: { select: { type: true } },
     },
   });
 }
@@ -60,9 +63,14 @@ export async function updateAssignmentSlot(
   id: string,
   factoryId: string,
   productionDate: Date,
+  completionDate?: Date,
 ): Promise<void> {
   await db.orderAssignment.update({
     where: { id },
-    data: { factoryId, productionDate },
+    data: {
+      factoryId,
+      productionDate,
+      ...(completionDate ? { completionDate } : {}),
+    },
   });
 }

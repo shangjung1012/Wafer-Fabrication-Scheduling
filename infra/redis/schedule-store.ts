@@ -36,3 +36,32 @@ export async function deletePreview(previewId: string): Promise<void> {
   const redis = getRedis();
   await redis.del(`preview:${previewId}`);
 }
+
+export async function withScheduleLock<T>(
+  typeOrTypes: string | string[],
+  fn: () => Promise<T>,
+): Promise<T> {
+  const types = Array.isArray(typeOrTypes)
+    ? Array.from(new Set(typeOrTypes)).sort()
+    : [typeOrTypes];
+  const redis = getRedis();
+  const acquiredLocks: string[] = [];
+
+  try {
+    for (const type of types) {
+      const lockKey = `schedule:lock:${type}`;
+      const lockAcquired = await redis.set(lockKey, "locked", "EX", 300, "NX");
+      if (!lockAcquired) {
+        throw new Error(
+          `A scheduling process is already running for type: ${type}`,
+        );
+      }
+      acquiredLocks.push(lockKey);
+    }
+    return await fn();
+  } finally {
+    for (const lockKey of acquiredLocks) {
+      await redis.del(lockKey);
+    }
+  }
+}
