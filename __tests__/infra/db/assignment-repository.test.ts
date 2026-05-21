@@ -58,6 +58,7 @@ describe("assignment-repository", () => {
           orderId: true,
           factoryId: true,
           productionDate: true,
+          completionDate: true,
           assignedQuantity: true,
           status: true,
           order: { select: { type: true } },

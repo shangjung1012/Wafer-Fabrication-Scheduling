@@ -78,10 +78,11 @@ export async function POST(request: Request) {
     await deletePreview(previewId);
 
     return NextResponse.json({ message: "Schedule applied successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (
-      error.message?.includes("already running") ||
-      error.message?.includes("environment has changed")
+      error instanceof Error &&
+      (error.message?.includes("already running") ||
+        error.message?.includes("environment has changed"))
     ) {
       return NextResponse.json(
         { code: "CONFLICT", message: error.message },

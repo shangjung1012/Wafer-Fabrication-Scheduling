@@ -86,7 +86,11 @@ export async function applyAssignmentMoves(
   const orderIdsTouched = new Set<string>();
 
   const types = Array.from(
-    new Set(validMoves.map((v) => (v.assignment as any).order.type)),
+    new Set(
+      validMoves
+        .map((v) => v.assignment.order.type)
+        .filter((t): t is string => Boolean(t)),
+    ),
   );
 
   await withScheduleLock(types, async () => {
@@ -101,6 +105,12 @@ export async function applyAssignmentMoves(
         if (sameSlot) continue;
 
         const qty = assignment.assignedQuantity;
+
+        // Calculate shift in days to update completion date
+        const timeDiff = newDate.getTime() - oldDate.getTime();
+        const newCompletionDate = new Date(
+          assignment.completionDate.getTime() + timeDiff,
+        );
 
         await upsertDailyCapacityDelta(
           txDb,
@@ -122,6 +132,7 @@ export async function applyAssignmentMoves(
           move.assignmentId,
           move.factoryId,
           newDate,
+          newCompletionDate,
         );
         orderIdsTouched.add(assignment.orderId);
       }

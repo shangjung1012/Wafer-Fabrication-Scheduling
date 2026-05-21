@@ -84,8 +84,8 @@ export async function POST(request: Request) {
     );
 
     return NextResponse.json({ message: "Schedule run successfully" });
-  } catch (error: any) {
-    if (error.message?.includes("already running")) {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message?.includes("already running")) {
       return NextResponse.json(
         { code: "CONFLICT", message: error.message },
         { status: 409 },
