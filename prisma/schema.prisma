@@ -33,7 +33,6 @@ enum OrderStatus {
   COMPLETED      // 所有子訂單變成 COMPLETED，母訂單變成 COMPLETED
   CANCELLED
   FAILED         // 排程失敗
-  CONFLICT       // 被排程踢出，需要衝突解決
 }
 
 // 子訂單 (派工單)

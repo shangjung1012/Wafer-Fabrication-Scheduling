@@ -187,7 +187,7 @@ export async function findPendingOrdersForSales(
   const rows = await db.order.findMany({
     where: {
       applicantId,
-      status: { in: ["PENDING", "FAILED", "CONFLICT"] },
+      status: { in: ["PENDING", "FAILED"] },
     },
     select: {
       id: true,

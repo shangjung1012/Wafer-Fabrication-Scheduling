@@ -121,7 +121,7 @@ describe("order-repository", () => {
           id: { in: ["F1"] },
           status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
         },
-        data: { status: OrderStatus.CONFLICT },
+        data: { status: OrderStatus.FAILED },
       });
     });
   });
