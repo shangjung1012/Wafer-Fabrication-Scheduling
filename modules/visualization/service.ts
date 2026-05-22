@@ -78,7 +78,7 @@ async function getSalesTimeline(
   const pendingOrders: PendingOrderInfo[] = pendingRows.map((r) => ({
     id: r.id,
     name: r.name,
-    status: r.status as "PENDING" | "APPROVED",
+    status: "PENDING",
     quantity: r.quantity,
     dueDate: r.dueDate,
     createdAt: r.createdAt,

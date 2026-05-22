@@ -56,7 +56,7 @@ export type OrderRisk = "ON_TRACK" | "AT_RISK" | "OVERDUE";
 export type PendingOrderInfo = {
   id: string;
   name: string;
-  status: "PENDING" | "APPROVED";
+  status: "PENDING";
   quantity: number;
   dueDate: string; // YYYY-MM-DD
   createdAt: string; // YYYY-MM-DD

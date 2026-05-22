@@ -618,7 +618,6 @@ function PendingSidebar({
   onCreate?: () => void;
 }) {
   const pending = orders.filter((o) => o.status === "PENDING");
-  const approved = orders.filter((o) => o.status === "APPROVED");
 
   const riskDot = (risk: OrderRisk) => {
     if (risk === "OVERDUE")
@@ -725,17 +724,9 @@ function PendingSidebar({
         {pending.length > 0 && (
           <div className="space-y-2">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Awaiting Approval
+              My Pending Orders
             </p>
             {renderOrders(pending)}
-          </div>
-        )}
-        {approved.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Awaiting Schedule
-            </p>
-            {renderOrders(approved)}
           </div>
         )}
       </div>
