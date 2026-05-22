@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "@/app/api/schedule/run/route";
 import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
 import * as scheduleEngine from "@/modules/schedule/run";
+import * as conflictIssueService from "@/modules/order/conflict-issue-service";
+import * as getTimeModule from "@/lib/get-time";
 
 vi.mock("@/modules/auth/require-auth", () => ({
   requireAuth: vi.fn(),
@@ -19,6 +21,22 @@ vi.mock("@/modules/schedule/run", () => ({
   runSchedule: vi.fn(),
 }));
 
+vi.mock("@/modules/order/conflict-issue-service", () => ({
+  createIssuesForFailedOrders: vi.fn().mockResolvedValue({
+    created: 0,
+    skippedAsDuplicate: 0,
+    failed: 0,
+  }),
+}));
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: {},
+}));
+
+vi.mock("@/lib/get-time", () => ({
+  getTime: vi.fn().mockResolvedValue(new Date("2026-05-21T00:00:00Z")),
+}));
+
 describe("POST /api/schedule/run", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -28,7 +46,23 @@ describe("POST /api/schedule/run", () => {
       user: { id: "user-1", role: "SUPERADMIN" },
     });
 
-    vi.mocked(scheduleEngine.runSchedule).mockResolvedValue(undefined);
+    vi.mocked(scheduleEngine.runSchedule).mockResolvedValue({
+      failedIds: [],
+    } as unknown as Awaited<ReturnType<typeof scheduleEngine.runSchedule>>);
+
+    vi.mocked(
+      conflictIssueService.createIssuesForFailedOrders,
+    ).mockResolvedValue({
+      created: 0,
+      skippedAsDuplicate: 0,
+      failed: 0,
+    });
+
+    // afterEach calls vi.resetAllMocks which wipes the factory's
+    // mockResolvedValue, so we restore it here.
+    vi.mocked(getTimeModule.getTime).mockResolvedValue(
+      new Date("2026-05-21T00:00:00Z"),
+    );
   });
 
   afterEach(() => {
@@ -96,6 +130,34 @@ describe("POST /api/schedule/run", () => {
       expect.any(Date),
       "user-1",
     );
+  });
+
+  it("should fire-and-forget createIssuesForFailedOrders when there are failed IDs", async () => {
+    vi.mocked(scheduleEngine.runSchedule).mockResolvedValueOnce({
+      failedIds: ["X1"],
+    } as unknown as Awaited<ReturnType<typeof scheduleEngine.runSchedule>>);
+
+    const req = createRequest({ type: "Type A" });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+
+    // Wait a microtask so the fire-and-forget kicks
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(
+      conflictIssueService.createIssuesForFailedOrders,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      conflictIssueService.createIssuesForFailedOrders,
+    ).toHaveBeenCalledWith({
+      failedOrderIds: ["X1"],
+      actorId: "user-1",
+      runConfig: expect.any(Object),
+      runAt: expect.any(Date),
+      prisma: expect.anything(),
+    });
   });
 
   it("should return 500 if engine throws an unhandled error", async () => {

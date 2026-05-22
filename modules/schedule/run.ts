@@ -15,7 +15,7 @@ export async function runSchedule(
   config: SchedulingConfig,
   currentDate?: Date,
   operatorId: string = "system-user",
-): Promise<void> {
+): Promise<{ failedIds: string[] }> {
   return withScheduleLock(type, async () => {
     const actualDate = currentDate ?? (await getTime());
 
@@ -33,6 +33,6 @@ export async function runSchedule(
       actualDate,
     );
 
-    await _applyScheduleTransaction(type, config, strategyResult, operatorId);
+    return _applyScheduleTransaction(type, config, strategyResult, operatorId);
   });
 }

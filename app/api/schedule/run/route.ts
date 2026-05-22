@@ -8,6 +8,8 @@ import { z } from "zod";
 import { runSchedule } from "@/modules/schedule/run";
 import { type SchedulingConfig } from "@/modules/schedule/strategy";
 import { getTime } from "@/lib/get-time";
+import { createIssuesForFailedOrders } from "@/modules/order/conflict-issue-service";
+import { prisma } from "@/lib/prisma";
 
 const SchedulingConfigSchema = z
   .object({
@@ -76,12 +78,31 @@ export async function POST(request: Request) {
     }
 
     // Execute the actual scheduling engine logic
-    await runSchedule(
+    const { failedIds } = await runSchedule(
       type,
       config as SchedulingConfig,
       currentDate,
       ctx.user.id,
     );
+
+    if (failedIds.length > 0) {
+      // Fire-and-forget: do NOT await — response must not block on issue
+      // creation / email side effects. Cron worker calls `runSchedule`
+      // directly (see scripts/cron.ts), bypassing this route, so the actor
+      // here is always the authenticated admin from requireAuth.
+      void createIssuesForFailedOrders({
+        failedOrderIds: failedIds,
+        actorId: ctx.user.id,
+        runConfig: config as SchedulingConfig,
+        runAt: currentDate,
+        prisma,
+      }).catch((err) => {
+        console.error(
+          "[run] createIssuesForFailedOrders unexpected error:",
+          err,
+        );
+      });
+    }
 
     return NextResponse.json({ message: "Schedule run successfully" });
   } catch (error: unknown) {

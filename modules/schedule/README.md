@@ -140,7 +140,7 @@
          │                                       ▲
          ▼                                       │
    回傳 previewId、newSchedule、               以 previewId 套用
-   failedOrderIds、conflictWarnings            並做 OCC 版本檢查
+   failedOrderIds                              並做 OCC 版本檢查
 ```
 
 ### A. `/api/schedule/preview`
@@ -158,7 +158,6 @@
     newSchedule: ProcessedOrder[], // hydrated，含 newAssignments
     affectedOrders: string[],
     failedOrderIds: string[],      // 衝突訂單 ID（status === FAILED）
-    conflictWarnings: string[],
   }
 }
 ```
@@ -184,8 +183,6 @@
 
 ## 7. 衝突偵測與通知 (Conflict Detection & Notify)
 
-> 詳細實作紀錄請見 [`conflict.md`](./conflict.md)；具體測試案例請見 [`conflict_testcase.md`](./conflict_testcase.md)。
-
 ### A. 衝突定義
 
 當以下三條件同時成立時，視為排程衝突：
@@ -203,14 +200,12 @@
 
 ### C. 回傳路徑（preview only）
 
-- `/api/schedule/preview` 回傳 `data.failedOrderIds`（與 `conflictWarnings` 文字摘要）。
+- `/api/schedule/preview` 回傳 `data.failedOrderIds`。
 - 前端拿到 ID 後可進一步 hydrate 訂單詳情（名稱、quantity、dueDate、申請人 email、admin email）以呈現衝突 banner 或寄信清單。
 
-### D. 寄信流程 (`/api/schedule/notify`)
+### D. Conflict issue 自動建立（取代手動 notify）
 
-- **不會自動寄信**。`/api/schedule/run` 不會寄；`/api/schedule/apply` 也不會寄。
-- 前端把整理好的 conflict orders payload（含 `applicantEmail` / `adminEmail`）POST 給 `/api/schedule/notify`，由 server 端用 `kickOutTemplate` 寄信。
-- 設計理由：把「衝突發生」與「實際通知」解耦，避免 cron 自動排程每 10 分鐘把同一份警示信重複寄出。
+`apply` / `run` 寫入 DB 之後，route 會 fire-and-forget 呼叫 `createIssuesForFailedOrders`，對每筆新 FAILED order 建立 `ConflictIssue` 並寄信給 applicant + factory admin。詳見 `modules/order/conflict-issue-service.ts`。
 
 ---
 

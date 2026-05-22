@@ -297,3 +297,88 @@ export async function findOrdersForScheduling(
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// ConflictIssue creation helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch an order with the fields required to build a ConflictIssue
+ * contextSnapshot + send the issue-created email.
+ *
+ * Includes:
+ *  - applicant (email/username) for assignee fallback + email recipient
+ *  - the factories of this order's productionType (and their admin emails)
+ *    so the caller can pick an admin assignee fallback and email recipients
+ */
+export async function findOrderForIssueCreation(db: PrismaClient, id: string) {
+  return db.order.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      quantity: true,
+      dueDate: true,
+      status: true,
+      updatedAt: true,
+      applicantId: true,
+      applicant: { select: { id: true, email: true, username: true } },
+    },
+  });
+}
+
+/**
+ * Find all SCHEDULED OrderAssignments that overlap [windowStart, windowEnd]
+ * in any of the given factories, excluding `excludeOrderId`. Returns the
+ * deduped list of (orderId, name, isPrioritized, isFixed) — used to populate
+ * `competingOrders` in the ConflictIssue contextSnapshot.
+ */
+export async function findCompetingScheduledOrders(
+  db: PrismaClient,
+  args: {
+    factoryIds: string[];
+    windowStart: Date;
+    windowEnd: Date;
+    excludeOrderId: string;
+  },
+): Promise<
+  Array<{ id: string; name: string; isPrioritized: boolean; isFixed: boolean }>
+> {
+  if (args.factoryIds.length === 0) return [];
+
+  const assignments = await db.orderAssignment.findMany({
+    where: {
+      factoryId: { in: args.factoryIds },
+      status: "SCHEDULED",
+      productionDate: { gte: args.windowStart, lte: args.windowEnd },
+      orderId: { not: args.excludeOrderId },
+    },
+    select: {
+      order: {
+        select: {
+          id: true,
+          name: true,
+          isPrioritized: true,
+          isFixed: true,
+        },
+      },
+    },
+  });
+
+  const seen = new Map<
+    string,
+    { id: string; name: string; isPrioritized: boolean; isFixed: boolean }
+  >();
+  for (const a of assignments) {
+    if (!seen.has(a.order.id)) {
+      seen.set(a.order.id, {
+        id: a.order.id,
+        name: a.order.name,
+        isPrioritized: a.order.isPrioritized,
+        isFixed: a.order.isFixed,
+      });
+    }
+  }
+  return Array.from(seen.values());
+}

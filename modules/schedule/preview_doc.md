@@ -22,7 +22,7 @@
 - **參數解析**：驗證傳入的 `type`（生產類型）與 `config`（排程策略設定）。
 - **呼叫核心模組**：將參數傳遞給 `previewSchedule` 進行核心模擬。
 - **結果快取**：將模擬結果（包含更新後的訂單狀態、新產生的產能分配、變更的產能紀錄）連同目前的資料版本號 (`version`) 寫入 Redis，並生成 `previewId`。
-- **回傳資料**：將 `previewId`、受影響的訂單清單、失敗的訂單清單與潛在的衝突警告回傳給前端。
+- **回傳資料**：將 `previewId`、受影響的訂單清單、失敗的訂單清單回傳給前端。
 
 ### 2. 資料準備層 (`modules/schedule/core.ts` - `prepareSchedulingData`)
 

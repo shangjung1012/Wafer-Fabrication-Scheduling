@@ -93,7 +93,7 @@ export async function _applyScheduleTransaction(
   config: SchedulingConfig,
   strategyResult: StrategyResult,
   operatorId: string = "system-user",
-) {
+): Promise<{ failedIds: string[] }> {
   const scheduledIds = strategyResult.processedOrders
     .filter((o) => o.status === OrderStatus.SCHEDULED)
     .map((o) => o.id);
@@ -136,6 +136,8 @@ export async function _applyScheduleTransaction(
 
     await createAssignments(db, strategyResult.newAssignments);
   });
+
+  return { failedIds };
 }
 
 export async function applyScheduleTransaction(
@@ -143,8 +145,8 @@ export async function applyScheduleTransaction(
   config: SchedulingConfig,
   strategyResult: StrategyResult,
   operatorId: string = "system-user",
-) {
+): Promise<{ failedIds: string[] }> {
   return withScheduleLock(type, async () => {
-    await _applyScheduleTransaction(type, config, strategyResult, operatorId);
+    return _applyScheduleTransaction(type, config, strategyResult, operatorId);
   });
 }
