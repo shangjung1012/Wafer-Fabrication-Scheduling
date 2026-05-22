@@ -48,6 +48,15 @@ function dateInputToIso(value: string) {
   return new Date(`${value}T00:00:00`).toISOString();
 }
 
+function toDateInputValue(value?: string) {
+  if (!value) return "";
+  try {
+    return format(parseISO(value), "yyyy-MM-dd");
+  } catch {
+    return value.slice(0, 10);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Preview adapter
 // ---------------------------------------------------------------------------
@@ -864,7 +873,9 @@ function OrderFormModal({
   const [name, setName] = useState(initialValues.name);
   const [quantity, setQuantity] = useState(initialValues.quantity);
   const [type, setType] = useState(initialValues.type ?? "A");
-  const [dueDate, setDueDate] = useState(initialValues.dueDate ?? "2026-12-31");
+  const [dueDate, setDueDate] = useState(
+    toDateInputValue(initialValues.dueDate) || "2026-12-31",
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -879,7 +890,7 @@ function OrderFormModal({
         name: name.trim(),
         quantity: quantity.trim(),
         type: isCreate ? type.trim() : undefined,
-        dueDate: isCreate ? dueDate : undefined,
+        dueDate,
         orderId: initialValues.orderId,
         status: initialValues.status,
       });
@@ -900,7 +911,7 @@ function OrderFormModal({
             <p className="mt-1 text-xs text-gray-500">
               {isCreate
                 ? "Create a new sales order using the current production style."
-                : "Update the order name or quantity and save the change."}
+                : "Update the order name, quantity, or due date and save the change."}
             </p>
           </div>
           <button
@@ -967,17 +978,15 @@ function OrderFormModal({
             </label>
           )}
 
-          {isCreate && (
-            <label className="block text-sm font-medium text-gray-700">
-              Due Date
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-              />
-            </label>
-          )}
+          <label className="block text-sm font-medium text-gray-700">
+            Due Date
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />
+          </label>
 
           <label className="block text-sm font-medium text-gray-700">
             Quantity
@@ -1708,8 +1717,12 @@ export default function SchedulePage() {
       body.quantity = quantity;
     }
 
+    if (values.dueDate) {
+      body.dueDate = new Date(values.dueDate).toISOString();
+    }
+
     if (Object.keys(body).length === 0) {
-      throw new Error("Name or quantity is required.");
+      throw new Error("Name, quantity, or due date is required.");
     }
 
     const res = await fetch(`/api/orders/${editOrder.orderId}`, {
