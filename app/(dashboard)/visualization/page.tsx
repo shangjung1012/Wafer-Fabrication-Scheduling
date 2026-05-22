@@ -611,13 +611,56 @@ function PendingSidebar({
   today,
   onEditOrder,
   onCreate,
+  selectedOrderIds,
+  setSelectedOrderIds,
+  onPreviewSelected,
+  previewLoading = false,
 }: {
   orders: PendingOrderInfo[];
   today: string;
   onEditOrder: (order: OrderEditorValues) => void;
   onCreate?: () => void;
+  selectedOrderIds?: Set<string>;
+  setSelectedOrderIds?: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onPreviewSelected?: (targetOrderIds: string[]) => void;
+  previewLoading?: boolean;
 }) {
+  const multiSelectEnabled = Boolean(setSelectedOrderIds && onPreviewSelected);
+  const selected = selectedOrderIds ?? new Set<string>();
   const pending = orders.filter((o) => o.status === "PENDING");
+  const pendingIds = pending.map((o) => o.id);
+  const allSelected =
+    pendingIds.length > 0 && pendingIds.every((id) => selected.has(id));
+  const someSelected =
+    !allSelected && pendingIds.some((id) => selected.has(id));
+  const selectedCount = selected.size;
+
+  const toggleOne = (id: string) => {
+    if (!setSelectedOrderIds) return;
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (!setSelectedOrderIds) return;
+    setSelectedOrderIds((prev) => {
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const id of pendingIds) next.delete(id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const id of pendingIds) next.add(id);
+      return next;
+    });
+  };
 
   const riskDot = (risk: OrderRisk) => {
     if (risk === "OVERDUE")
@@ -647,9 +690,24 @@ function PendingSidebar({
         className={`bg-white rounded-lg p-3 text-xs space-y-1 shadow-sm ${borderColor(o.risk)}`}
       >
         <div className="flex items-start justify-between gap-1">
-          <span className="font-medium text-gray-900 leading-tight">
-            {o.name}
-          </span>
+          {multiSelectEnabled ? (
+            <label className="flex items-start gap-1.5 cursor-pointer flex-1 min-w-0">
+              <input
+                type="checkbox"
+                checked={selected.has(o.id)}
+                onChange={() => toggleOne(o.id)}
+                className="mt-0.5 h-3 w-3 shrink-0 cursor-pointer accent-indigo-600"
+                aria-label={`Select order ${o.name}`}
+              />
+              <span className="font-medium text-gray-900 leading-tight">
+                {o.name}
+              </span>
+            </label>
+          ) : (
+            <span className="font-medium text-gray-900 leading-tight flex-1 min-w-0">
+              {o.name}
+            </span>
+          )}
           {riskDot(o.risk)}
         </div>
         <div className="flex justify-between text-gray-500">
@@ -715,6 +773,39 @@ function PendingSidebar({
           )}
         </div>
       </div>
+      {multiSelectEnabled && pending.length > 0 && (
+        <div className="px-3 py-2 border-b border-gray-200 bg-white space-y-2">
+          <button
+            type="button"
+            onClick={() => onPreviewSelected?.(Array.from(selected))}
+            disabled={selectedCount === 0 || previewLoading}
+            className={`w-full text-xs font-semibold px-2 py-1.5 rounded border transition-colors ${
+              selectedCount === 0 || previewLoading
+                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
+            }`}
+          >
+            {previewLoading
+              ? "Previewing…"
+              : selectedCount === 0
+                ? "Preview Selected"
+                : `🔍 Preview Selected (${selectedCount})`}
+          </button>
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someSelected;
+              }}
+              onChange={toggleAll}
+              className="h-3 w-3 cursor-pointer accent-indigo-600"
+              aria-label="Select all pending orders"
+            />
+            <span className="font-medium">Select all ({pending.length})</span>
+          </label>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {orders.length === 0 && (
           <p className="text-xs text-gray-400 text-center pt-4">
@@ -1112,6 +1203,11 @@ export default function SchedulePage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorState | null>(null);
 
+  // T4A: multi-select pending orders for targeted preview.
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
   // Fetch timeline data
   useEffect(() => {
     if (session === null) {
@@ -1180,25 +1276,29 @@ export default function SchedulePage() {
     }
   };
 
-  const handlePreviewSchedule = async () => {
+  const handlePreviewSchedule = async (targetOrderIds?: string[]) => {
     if (!productionType) return;
     setPreviewLoading(true);
     setPreviewError(null);
     try {
+      const baseConfig: Record<string, unknown> = {
+        reschedulePolicy,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+      if (targetOrderIds && targetOrderIds.length > 0) {
+        baseConfig.targetOrderIds = targetOrderIds;
+      }
       const res = await fetch("/api/schedule/preview", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: productionType,
-          config: {
-            reschedulePolicy,
-            frozenDays: 0,
-            productionDays: 1,
-            bufferDays: 0,
-            algorithm: "GREEDY_BEST_FIT",
-            splittable: true,
-          },
+          config: baseConfig,
         }),
       });
       if (!res.ok) {
@@ -1275,6 +1375,7 @@ export default function SchedulePage() {
       // Success — clear preview state and refetch timeline.
       setPreviewData(null);
       setPreviewId(null);
+      setSelectedOrderIds(new Set());
       setScheduleStatus("success");
       setTimeout(() => setScheduleStatus("idle"), 4000);
       setLoading(true);
@@ -1920,7 +2021,7 @@ export default function SchedulePage() {
             </label>
 
             <button
-              onClick={handlePreviewSchedule}
+              onClick={() => handlePreviewSchedule()}
               disabled={
                 previewLoading || editMode || scheduleStatus === "running"
               }
@@ -2123,6 +2224,12 @@ export default function SchedulePage() {
                 .length
             }
             .
+            {selectedOrderIds.size > 0 && (
+              <span className="ml-2 font-medium">
+                Targeted {selectedOrderIds.size} order
+                {selectedOrderIds.size === 1 ? "" : "s"}.
+              </span>
+            )}
           </span>
           <div className="ml-auto flex items-center gap-2">
             <button

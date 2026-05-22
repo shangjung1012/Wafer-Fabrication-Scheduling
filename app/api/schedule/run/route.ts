@@ -5,11 +5,9 @@ import {
   UnauthorizedError,
 } from "@/modules/auth/require-auth";
 import { z } from "zod";
-import { runSchedule } from "@/modules/schedule/run";
+import { runScheduleWithIssues } from "@/modules/order/schedule-orchestrator";
 import { type SchedulingConfig } from "@/modules/schedule/strategy";
 import { getTime } from "@/lib/get-time";
-import { createIssuesForFailedOrders } from "@/modules/order/conflict-issue-service";
-import { prisma } from "@/lib/prisma";
 
 const SchedulingConfigSchema = z
   .object({
@@ -77,32 +75,12 @@ export async function POST(request: Request) {
       config.startDate = defaultStartDate;
     }
 
-    // Execute the actual scheduling engine logic
-    const { failedIds } = await runSchedule(
+    await runScheduleWithIssues({
       type,
-      config as SchedulingConfig,
+      config: config as SchedulingConfig,
       currentDate,
-      ctx.user.id,
-    );
-
-    if (failedIds.length > 0) {
-      // Fire-and-forget: do NOT await — response must not block on issue
-      // creation / email side effects. Cron worker calls `runSchedule`
-      // directly (see scripts/cron.ts), bypassing this route, so the actor
-      // here is always the authenticated admin from requireAuth.
-      void createIssuesForFailedOrders({
-        failedOrderIds: failedIds,
-        actorId: ctx.user.id,
-        runConfig: config as SchedulingConfig,
-        runAt: currentDate,
-        prisma,
-      }).catch((err) => {
-        console.error(
-          "[run] createIssuesForFailedOrders unexpected error:",
-          err,
-        );
-      });
-    }
+      operatorId: ctx.user.id,
+    });
 
     return NextResponse.json({ message: "Schedule run successfully" });
   } catch (error: unknown) {

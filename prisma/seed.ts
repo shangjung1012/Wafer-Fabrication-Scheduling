@@ -16,7 +16,7 @@
  *   - factory-A1 2026-05-17: 900 IN_PRODUCTION → only 100 free
  *   - factory-A2 2026-05-17: 1000 IN_PRODUCTION → 0 free
  *   - factory-A3 2026-05-17: 1000 IN_PRODUCTION → 0 free
- *   - ord-seed-013 (Wafer-CF4-Base): APPROVED, qty=80, dueDate=May 17
+ *   - ord-seed-013 (Wafer-CF4-Base): PENDING, qty=80, dueDate=May 17
  *     → on schedule run, takes the 100 free slots on A1, leaves 20
  *   - ord-seed-016 (Wafer-CF4-New):  PENDING,  qty=30, dueDate=May 17
  *     → admin approves it, then a single schedule run produces the conflict
@@ -810,7 +810,7 @@ async function main() {
   console.log("  factory-A2 2026-05-17: 1000 IN_PRODUCTION → 0 free");
   console.log("  factory-A3 2026-05-17: 1000 IN_PRODUCTION → 0 free");
   console.log(
-    "  ord-seed-013 Wafer-CF4-Base  APPROVED  qty=80  due 2026-05-17",
+    "  ord-seed-013 Wafer-CF4-Base  PENDING   qty=80  due 2026-05-17",
   );
   console.log(
     "  ord-seed-016 Wafer-CF4-New   PENDING   qty=30  due 2026-05-17",

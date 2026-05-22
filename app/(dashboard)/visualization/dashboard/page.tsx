@@ -291,7 +291,6 @@ export default function DashboardPage() {
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       PENDING: 0,
-      APPROVED: 0,
       SCHEDULED: 0,
       IN_PRODUCTION: 0,
       COMPLETED: 0,

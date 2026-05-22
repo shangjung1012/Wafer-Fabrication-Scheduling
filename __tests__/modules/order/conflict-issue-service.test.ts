@@ -210,7 +210,10 @@ describe("createIssuesForFailedOrders", () => {
 
   it("falls back to a factory admin id when applicantId is null", async () => {
     vi.mocked(orderRepo.findOrderForIssueCreation).mockResolvedValue(
-      makeOrder({ applicantId: null, applicant: null }),
+      makeOrder({
+        applicantId: null as unknown as string,
+        applicant: null as unknown as NonNullable<OrderFixture>["applicant"],
+      }),
     );
 
     const res = await createIssuesForFailedOrders({

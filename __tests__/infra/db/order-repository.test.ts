@@ -14,7 +14,7 @@ vi.mock("@/infra/redis/schedule-store", () => ({
 
 describe("order-repository", () => {
   describe("findOrdersForScheduling", () => {
-    it("should query orders by type and valid statuses without APPROVED and FAILED", async () => {
+    it("should query orders by type and valid statuses without FAILED", async () => {
       const mockDb = {
         order: {
           findMany: vi.fn().mockResolvedValue([]),

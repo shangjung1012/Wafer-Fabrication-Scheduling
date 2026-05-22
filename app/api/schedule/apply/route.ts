@@ -5,7 +5,7 @@ import {
   UnauthorizedError,
 } from "@/modules/auth/require-auth";
 import { z } from "zod";
-import { applyScheduleTransaction } from "@/modules/schedule/core";
+import { applyScheduleTransactionWithIssues } from "@/modules/order/schedule-orchestrator";
 import {
   type SchedulingConfig,
   type StrategyResult,
@@ -16,9 +16,7 @@ import {
   deletePreview,
   incrementScheduleVersion,
 } from "@/infra/redis/schedule-store";
-import { createIssuesForFailedOrders } from "@/modules/order/conflict-issue-service";
 import { getTime } from "@/lib/get-time";
-import { prisma } from "@/lib/prisma";
 
 const ApplyScheduleSchema = z.object({
   previewId: z.string().min(1, "Preview ID is required"),
@@ -76,32 +74,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const { failedIds } = await applyScheduleTransaction(
+    await applyScheduleTransactionWithIssues({
       type,
       config,
       result,
-      ctx.user.id,
-    );
+      operatorId: ctx.user.id,
+      runAt: await getTime(),
+    });
     await incrementScheduleVersion(type);
     await deletePreview(previewId);
-
-    if (failedIds.length > 0) {
-      // Fire-and-forget: do NOT await — response must not block on issue
-      // creation / email side effects. The service swallows per-order
-      // failures; .catch is defensive against unexpected top-level throws.
-      void createIssuesForFailedOrders({
-        failedOrderIds: failedIds,
-        actorId: ctx.user.id,
-        runConfig: config,
-        runAt: await getTime(),
-        prisma,
-      }).catch((err) => {
-        console.error(
-          "[apply] createIssuesForFailedOrders unexpected error:",
-          err,
-        );
-      });
-    }
 
     return NextResponse.json({ message: "Schedule applied successfully" });
   } catch (error: unknown) {

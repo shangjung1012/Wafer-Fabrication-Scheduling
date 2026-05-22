@@ -93,7 +93,6 @@ model User {
   orders             Order[]            @relation("OrderApplicant")
   modifiedOrders     Order[]            @relation("OrderModifier")
   managedFactories   Factory[]          @relation("FactoryAdmins")
-  requests           OrderRequest[]     @relation("RequestApplicant")
   refreshTokens      RefreshToken[]
   invitations        UserInvitation[]   @relation("InvitationUser")
   createdInvitations UserInvitation[]   @relation("InvitationCreator")
@@ -206,7 +205,6 @@ model Order {
 
   // Relations
   assignments    OrderAssignment[] // 記錄這筆訂單被拆分成哪些派工單
-  requests       OrderRequest[]
   conflictIssues ConflictIssue[]
 
   @@map("order")
@@ -226,19 +224,6 @@ model OrderAssignment {
   factory Factory @relation(fields: [factoryId], references: [id], onDelete: Restrict)
 
   @@map("order_assignment")
-}
-
-model OrderRequest {
-  id          String @id @default(cuid())
-  applicantId String
-  orderId     String
-  message     String
-  payload     Json?
-
-  applicant User  @relation("RequestApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
-  order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@map("order_request")
 }
 
 // =========================

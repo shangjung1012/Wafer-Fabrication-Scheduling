@@ -322,98 +322,6 @@ paths:
                 $ref: "#/components/schemas/Order"
 
   # ==========================================================
-  # Order Requests API (FR-02: 業務提出插單/改單申請)
-  # ==========================================================
-  /requests:
-    get:
-      summary: 取得訂單申請清單
-      description: 業務可檢視自己提出的申請，管理員可檢視負責工廠內的申請。
-      tags:
-        - Requests
-      responses:
-        "200":
-          description: 申請清單
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/OrderRequest"
-    post:
-      summary: 提出插單或改單申請
-      tags:
-        - Requests
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [orderId, message]
-              properties:
-                orderId:
-                  type: string
-                  description: 關聯的訂單 ID
-                message:
-                  type: string
-                  description: 申請理由或說明
-                payload:
-                  type: object
-                  description: 變更內容 (JSON)
-      responses:
-        "201":
-          description: 申請建立成功
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrderRequest"
-
-  /requests/{id}:
-    put:
-      summary: 修改尚未核准的申請
-      tags:
-        - Requests
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-                payload:
-                  type: object
-      responses:
-        "200":
-          description: 申請更新成功
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrderRequest"
-
-  /requests/{id}/approve:
-    post:
-      summary: 核准申請 (僅管理員可用)
-      tags:
-        - Requests
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: 已核准並套用變更
-
-  # ==========================================================
   # Schedule API (FR-05: 管理員修改排程)
   # ==========================================================
   /schedule/run:
@@ -1008,20 +916,6 @@ components:
           format: date-time
         assignedQuantity:
           type: integer
-
-    OrderRequest:
-      type: object
-      properties:
-        id:
-          type: string
-        applicantId:
-          type: string
-        orderId:
-          type: string
-        message:
-          type: string
-        payload:
-          type: object
 
     OrderCreateInput:
       type: object

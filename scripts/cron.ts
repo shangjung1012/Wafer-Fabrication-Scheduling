@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { prisma } from "@/lib/prisma";
-import { runSchedule } from "@/modules/schedule/run";
+import { runScheduleWithIssues } from "@/modules/order/schedule-orchestrator";
 import { advanceOrderStatuses } from "@/modules/schedule/daily-execution";
 import { findPendingOrderTypes } from "@/infra/db/order-repository";
 import { findUserByUsername } from "@/infra/db/user-repository";
@@ -46,8 +46,14 @@ async function runAutoScheduler() {
           splittable: config.splittable,
         };
 
-        // runSchedule natively handles its own locks securely
-        await runSchedule(type, scheduleConfig, currentDate, systemUser.id);
+        // runScheduleWithIssues delegates locking to runSchedule and fires
+        // ConflictIssue creation for any FAILED orders fire-and-forget.
+        await runScheduleWithIssues({
+          type,
+          config: scheduleConfig,
+          currentDate,
+          operatorId: systemUser.id,
+        });
         console.log(`[Cron] Successfully ran schedule for type ${type}`);
       } catch (error) {
         const err = error as Error;

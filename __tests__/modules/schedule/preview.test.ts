@@ -27,7 +27,7 @@ describe("Schedule Engine - Preview", () => {
       orders: [
         {
           id: "O1",
-          status: "APPROVED",
+          status: "PENDING",
           dueDate: new Date(),
           quantity: 100,
           createdAt: new Date(),

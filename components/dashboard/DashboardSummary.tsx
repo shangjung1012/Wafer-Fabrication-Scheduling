@@ -12,7 +12,6 @@ type SummaryConflict = {
 
 type StatusCounts = {
   PENDING?: number;
-  APPROVED?: number;
   SCHEDULED?: number;
   IN_PRODUCTION?: number;
   COMPLETED?: number;
