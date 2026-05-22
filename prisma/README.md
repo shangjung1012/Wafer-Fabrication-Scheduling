@@ -35,7 +35,7 @@ productionType A
 | ------------ | --------------------------------------------------- |
 | `SUPERADMIN` | 管理同 type 下所有工廠與 Admin；擁有 Admin 全部權限 |
 | `ADMIN`      | 管理單一工廠的訂單、排程、派工、Sales               |
-| `SALES`      | 建立訂單（PENDING）；提交修改申請；只能看受限訂單   |
+| `SALES`      | 建立訂單（PENDING）；只能看受限訂單                 |
 
 scope 來源：
 
@@ -60,7 +60,6 @@ Relations：
 - `managedFactories`：ADMIN/SUPERADMIN 管理的工廠（透過 `Factory.adminId` 反推）
 - `orders`：此 user 提出的訂單
 - `permissions`：細粒度訂單可見清單（`OrderPermission`）
-- `requests`：此 user 提出的修改申請
 
 ---
 
@@ -113,34 +112,31 @@ Relations：
 #### 狀態機
 
 ```
-PENDING ──── Admin 核准 ──────────► APPROVED
-                                        │
-                                  排程確認生效
-                                        │
-                                        ▼
-                                   SCHEDULED
-                                        │
-                                   開始生產
-                                        │
-                                        ▼
-                                  IN_PRODUCTION
-                                        │
-                                   生產完成
-                                        │
-                                        ▼
-                                   COMPLETED（不可回退）
+PENDING ──── 排程成功 ───────────► SCHEDULED
+   │                                   │
+   │                              開始生產
+   │                                   │
+   │                                   ▼
+   │                              IN_PRODUCTION
+   │                                   │
+   │                              生產完成
+   │                                   │
+   │                                   ▼
+   │                              COMPLETED（不可回退）
+   │
+   └──── 排程後無容量可放 ──────► FAILED（不可回退）
 
-PENDING / APPROVED / SCHEDULED / IN_PRODUCTION ──► CANCELLED（不可回退）
+PENDING / SCHEDULED / IN_PRODUCTION ──► CANCELLED（不可回退）
 ```
 
-| 狀態            | 意義             | Sales 能改?           | Admin 能改?  |
-| --------------- | ---------------- | --------------------- | ------------ |
-| `PENDING`       | Sales 剛建立     | 可直接改（自己的）    | 可           |
-| `APPROVED`      | Admin 核准，鎖定 | 只能送 `OrderRequest` | 可           |
-| `SCHEDULED`     | 已排程           | 只能送 `OrderRequest` | 可（需重排） |
-| `IN_PRODUCTION` | 生產中           | 只能送 `OrderRequest` | 可（需重排） |
-| `COMPLETED`     | 完成             | 不可                  | 不可         |
-| `CANCELLED`     | 取消             | 不可                  | 不可         |
+| 狀態            | 意義                       | Sales 能改?        | Admin 能改?                                   |
+| --------------- | -------------------------- | ------------------ | --------------------------------------------- |
+| `PENDING`       | Sales 剛建立               | 可直接改（自己的） | 可                                            |
+| `SCHEDULED`     | 已排程                     | 不可               | 可（`PUT /api/orders/:id` 或 拖拉派工單重排） |
+| `IN_PRODUCTION` | 生產中                     | 不可               | 一般不動 order；僅在 assignment 層調整        |
+| `COMPLETED`     | 完成                       | 不可               | 不可                                          |
+| `CANCELLED`     | 取消                       | 不可               | 不可                                          |
+| `FAILED`        | 排程後仍無容量可放，已退回 | 不可               | 不可（須建立新訂單）                          |
 
 ---
 
@@ -165,19 +161,13 @@ SALES 細粒度訂單可見清單。`(userId, orderId)` 聯合唯一。
 
 ---
 
-### `OrderRequest`
-
-SALES 對「已鎖定訂單」提出的修改申請。由 `payload: Json?` 帶入希望修改的欄位內容，交由 Admin/Superadmin 審核後執行。
-
----
-
 ## 關係圖（主要 relations）
 
 ```
-User ─────────────────────────────────────────────────────────────────┐
- │  managedFactories              applicant / lastModifiedBy / requests│
- │                                                                      │
-Factory ──── DailyCapacity                        Order ──── OrderRequest
+User ──────────────────────────────────────────────────────┐
+ │  managedFactories              applicant / lastModifiedBy│
+ │                                                           │
+Factory ──── DailyCapacity                        Order
  │                                                  │
  └──────── OrderAssignment ─────────────────────────┘
                (orderId + factoryId + date + qty)

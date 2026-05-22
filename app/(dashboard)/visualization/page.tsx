@@ -2337,13 +2337,27 @@ export default function SchedulePage() {
 
       {/* Gantt body */}
       <div className="flex-1 overflow-hidden flex">
-        {/* Pending sidebar (SALES only) */}
+        {/* Pending sidebar — SALES: read-only listing of their own orders */}
         {isSales && data?.salesContext && !loading && !fetchError && (
           <PendingSidebar
             orders={data.salesContext.pendingOrders}
             today={data.today}
             onEditOrder={(order) => setEditOrder(order)}
             onCreate={() => setCreateOpen(true)}
+          />
+        )}
+        {/* Pending sidebar — ADMIN/SUPERADMIN: multi-select for targeted preview (T4A-C / T8) */}
+        {!isSales && data?.adminContext && !loading && !fetchError && (
+          <PendingSidebar
+            orders={data.adminContext.pendingOrders}
+            today={data.today}
+            onEditOrder={(order) => setEditOrder(order)}
+            selectedOrderIds={selectedOrderIds}
+            setSelectedOrderIds={setSelectedOrderIds}
+            onPreviewSelected={(targetOrderIds) =>
+              handlePreviewSchedule(targetOrderIds)
+            }
+            previewLoading={previewLoading}
           />
         )}
 
