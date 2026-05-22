@@ -1064,18 +1064,6 @@ const DEFAULT_END = "2026-05-23";
 
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
-type NotifyStatus = "idle" | "sending" | "sent" | "error";
-
-type ConflictOrderInfo = {
-  id: string;
-  name: string;
-  quantity: number;
-  dueDate: string;
-  applicantEmail: string | null;
-  applicantUsername: string | null;
-  adminEmail: string | null;
-  adminUsername: string | null;
-};
 
 type AssignmentMove = {
   factoryId: string;
@@ -1100,12 +1088,6 @@ export default function SchedulePage() {
   } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>("idle");
-  const [scheduleConflicts, setScheduleConflicts] = useState<
-    ConflictOrderInfo[]
-  >([]);
-  const [emailsAutoSent, setEmailsAutoSent] = useState(false);
-  const [notifyStatus, setNotifyStatus] = useState<NotifyStatus>("idle");
-  const [notifiedCount, setNotifiedCount] = useState<number>(0);
 
   // Reschedule policy selector + preview state
   const [reschedulePolicy, setReschedulePolicy] = useState<
@@ -1175,9 +1157,6 @@ export default function SchedulePage() {
     if (!productionType) return;
     const algorithm = algorithmOverride ?? reschedulePolicy;
     setScheduleStatus("running");
-    setScheduleConflicts([]);
-    setEmailsAutoSent(false);
-    setNotifyStatus("idle");
     try {
       const res = await fetch("/api/schedule/run", {
         method: "POST",
@@ -1242,9 +1221,6 @@ export default function SchedulePage() {
         newSchedule = [],
         affectedOrders = [],
         failedOrderIds = [],
-        conflictOrderIds = [],
-        conflictOrders = [],
-        conflictWarnings = [],
       } = previewBody ?? {};
 
       // Adapter: convert hydrated newSchedule -> SchedulePreviewResponse view model.
@@ -1258,21 +1234,6 @@ export default function SchedulePage() {
 
       setPreviewId(nextPreviewId ?? null);
       setPreviewData(preview);
-      // T4D: conflict banner is driven by preview. Hydrated conflictOrders
-      // (with applicant + admin email) feed scheduleConflicts; Notify button
-      // POSTs them to /api/schedule/notify. Reset notify state so the amber
-      // (action-required) banner shows on each fresh preview.
-      if (Array.isArray(conflictOrders) && conflictOrders.length > 0) {
-        setScheduleConflicts(conflictOrders as ConflictOrderInfo[]);
-        setNotifyStatus("idle");
-        setEmailsAutoSent(false);
-      } else {
-        setScheduleConflicts([]);
-      }
-      // conflictOrderIds / conflictWarnings are intentionally unused here:
-      // the hydrated conflictOrders payload already covers the banner.
-      void conflictOrderIds;
-      void conflictWarnings;
     } catch {
       setPreviewError("Network error");
     } finally {
@@ -1459,45 +1420,6 @@ export default function SchedulePage() {
       }
       return next;
     });
-  };
-
-  // Manual notify handler — POSTs scheduleConflicts to /api/schedule/notify.
-  // Banner is preview-driven (T4D); run no longer emits conflicts.
-  const handleSendNotifications = async () => {
-    if (scheduleConflicts.length === 0) return;
-    setNotifyStatus("sending");
-    // Notify schema requires applicantEmail to be a string|null but at least
-    // one of applicant/admin email needs to exist for a real send. Drop
-    // entries with neither so we never POST orders the server would silently
-    // skip (and so a 100%-skip set doesn't read as "sent").
-    const payloadOrders = scheduleConflicts.filter(
-      (o) => o.applicantEmail || o.adminEmail,
-    );
-    if (payloadOrders.length === 0) {
-      setNotifyStatus("error");
-      return;
-    }
-    try {
-      const res = await fetch("/api/schedule/notify", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orders: payloadOrders }),
-      });
-      if (res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const failedCount = Array.isArray(body.failed) ? body.failed.length : 0;
-        const sentCount = Array.isArray(body.sent)
-          ? body.sent.length
-          : payloadOrders.length;
-        setNotifiedCount(sentCount);
-        setNotifyStatus(failedCount === 0 && sentCount > 0 ? "sent" : "error");
-      } else {
-        setNotifyStatus("error");
-      }
-    } catch {
-      setNotifyStatus("error");
-    }
   };
 
   const handleLogout = async () => {
@@ -2275,95 +2197,11 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* Scheduling conflict notification panel */}
-      {scheduleConflicts.length > 0 && (
-        <div
-          className={`flex-none px-6 py-3 border-b text-xs ${
-            emailsAutoSent || notifyStatus === "sent"
-              ? "bg-green-50 border-green-200"
-              : "bg-amber-50 border-amber-200"
-          }`}
-        >
-          {emailsAutoSent || notifyStatus === "sent" ? (
-            <div className="flex items-center justify-between">
-              <span className="text-green-700 font-medium">
-                {`已寄出 ${
-                  notifyStatus === "sent"
-                    ? notifiedCount || scheduleConflicts.length
-                    : scheduleConflicts.length
-                } 封通知 (Notification emails sent for ${
-                  notifyStatus === "sent"
-                    ? notifiedCount || scheduleConflicts.length
-                    : scheduleConflicts.length
-                } order(s) that could not be scheduled.)`}
-              </span>
-              <button
-                type="button"
-                onClick={() => setScheduleConflicts([])}
-                className="text-green-400 hover:text-green-600 shrink-0"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-amber-800 font-semibold">
-                    {scheduleConflicts.length} order(s) could not be scheduled:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleSendNotifications}
-                    disabled={
-                      notifyStatus === "sending" ||
-                      scheduleConflicts.length === 0
-                    }
-                    className={`px-2.5 py-1 rounded border font-medium transition-colors ${
-                      notifyStatus === "sending" ||
-                      scheduleConflicts.length === 0
-                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                        : "bg-amber-700 text-white border-amber-700 hover:bg-amber-800"
-                    }`}
-                  >
-                    {notifyStatus === "sending" ? "Sending…" : "Notify"}
-                  </button>
-                  {notifyStatus === "error" && (
-                    <span className="text-red-600 font-medium">
-                      Some emails failed — check server logs.
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setScheduleConflicts([])}
-                  className="text-amber-400 hover:text-amber-600 shrink-0"
-                >
-                  ✕
-                </button>
-              </div>
-              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-amber-700">
-                {scheduleConflicts.map((o) => (
-                  <li key={o.id}>
-                    <span className="font-medium">{o.name}</span>
-                    {" — qty "}
-                    <span>{o.quantity}</span>
-                    {", due "}
-                    <span>{o.dueDate}</span>
-                    {o.applicantEmail && (
-                      <>
-                        {" ("}
-                        <span className="text-amber-600">
-                          {o.applicantEmail}
-                        </span>
-                        {")"}
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+      {/* Preview-driven FAILED hint — auto-issue + email fires on apply */}
+      {previewData && previewData.unscheduledOrders.length > 0 && (
+        <div className="flex-none px-6 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
+          {previewData.unscheduledOrders.length} order(s) cannot be scheduled —
+          applying will automatically open conflict issues.
         </div>
       )}
 
