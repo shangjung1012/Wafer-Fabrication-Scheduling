@@ -209,11 +209,17 @@ function generateOrdersAndAssignments() {
   }
 
   // Rule 5 & 6 (Pending Orders / Guaranteed Failure):
-  // Total Remaining Capacity: 9000 (across 9 factories per day) * 7 days = 63,000.
-  // Generated Pending Quantity: 30 * 2500 = 75,000 (exceeds 63,000 by 12,000)
-  const pendingDueDate = d("2026-06-15"); // Give plenty of room for scheduling attempts
+  // We want to force failures even under GLOBAL_OPTIMIZE.
+  // GLOBAL_OPTIMIZE can push existing SCHEDULED orders up to their due dates (max 06-12).
+  // Total capacity per type across 9 days (06-04 to 06-12) = 9 days * 3 factories * 10,000 = 270,000.
+  // Existing SCHEDULED demand per type = 7 days * 27,000 = 189,000.
+  // Remaining absolute capacity = 81,000 per type.
+  // By adding 35 pending orders per type of quantity 2500 (87,500 demand per type) with dueDate 06-10,
+  // the total demand (189,000 + 87,500 = 276,500) slightly exceeds the absolute 9-day capacity (270,000) by 6,500.
+  // This mathematically guarantees 2 or 3 FAILED orders per type (6,500 / 2500).
+  const pendingDueDate = d("2026-06-10"); // Tight deadline to force FAILED
   for (const t of PRODUCTION_TYPES) {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 35; i++) {
       addOrder(t, 2500, pendingDueDate, "PENDING");
     }
   }
@@ -478,10 +484,10 @@ async function main() {
     "  - Rule 4: 2026-06-04 to 06-10 scheduled with 1000 remaining per day",
   );
   console.log(
-    "  - Rule 6 Guaranteed Failure: 30 PENDING orders (total 75k) vs 63k remaining cap.",
+    "  - Rule 6 Guaranteed Failure: 105 PENDING orders (total 262.5k) vs 243k absolute remaining cap.",
   );
   console.log(
-    "  Running schedule engine should trigger failures automatically.",
+    "  Running schedule engine should trigger exactly 2-3 failures per type.",
   );
   console.log("");
   console.log("Login examples:");
