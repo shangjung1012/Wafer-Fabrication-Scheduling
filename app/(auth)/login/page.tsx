@@ -87,7 +87,7 @@ export default function LoginPage() {
 
       const nextSession = result.body as ClientAuthSession;
       persistClientAuthSession(nextSession);
-      router.replace("/visualization");
+      router.replace("/visualization/dashboard");
     } finally {
       setLoading(null);
     }
