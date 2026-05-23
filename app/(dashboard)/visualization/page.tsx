@@ -1202,6 +1202,11 @@ export default function SchedulePage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  // After a successful apply, if the preview contained FAILED orders, surface
+  // a persistent banner so the user knows ConflictIssues were auto-created.
+  const [applyConflictNotice, setApplyConflictNotice] = useState<{
+    failedCount: number;
+  } | null>(null);
 
   // Edit-mode state
   const [editMode, setEditMode] = useState(false);
@@ -1393,12 +1398,17 @@ export default function SchedulePage() {
         return;
       }
 
-      // Success — clear preview state and refetch timeline.
+      // Success — capture FAILED count from the preview before clearing it,
+      // so we can surface a persistent notice pointing the user to issues.
+      const failedCount = previewData?.unscheduledOrders.length ?? 0;
       setPreviewData(null);
       setPreviewId(null);
       setSelectedOrderIds(new Set());
       setScheduleStatus("success");
       setTimeout(() => setScheduleStatus("idle"), 4000);
+      if (failedCount > 0) {
+        setApplyConflictNotice({ failedCount });
+      }
       setLoading(true);
       setFetchError(null);
       setRefreshKey((k) => k + 1);
@@ -2336,6 +2346,31 @@ export default function SchedulePage() {
         <div className="flex-none px-6 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
           {previewData.unscheduledOrders.length} order(s) cannot be scheduled —
           applying will automatically open conflict issues.
+        </div>
+      )}
+
+      {/* Post-apply conflict notice — persistent until dismissed */}
+      {applyConflictNotice && (
+        <div className="flex-none px-6 py-2 bg-amber-100 border-b border-amber-300 flex items-center justify-between gap-3 text-xs text-amber-900">
+          <span>
+            ⚠️ 排程已套用,但 {applyConflictNotice.failedCount} 筆訂單無法排入,
+            已自動建立 ConflictIssue。請至{" "}
+            <Link
+              href="/conflict-issues"
+              className="font-semibold underline hover:text-amber-700"
+            >
+              issue 介面
+            </Link>{" "}
+            查看並協商解決方案。
+          </span>
+          <button
+            type="button"
+            onClick={() => setApplyConflictNotice(null)}
+            className="font-semibold px-2 py-0.5 rounded border border-amber-300 bg-white hover:bg-amber-50"
+            aria-label="Dismiss"
+          >
+            知道了
+          </button>
         </div>
       )}
 

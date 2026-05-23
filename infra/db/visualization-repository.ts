@@ -187,7 +187,7 @@ export async function findPendingOrdersForSales(
   const rows = await db.order.findMany({
     where: {
       applicantId,
-      status: { in: ["PENDING", "FAILED"] },
+      status: "PENDING",
     },
     select: {
       id: true,
@@ -217,6 +217,10 @@ export async function findPendingOrdersForSales(
  * which matches the admin's `productionType` (A/B/C). This mirrors how
  * `getAdminTimeline` scopes factories and how the auto-scheduler iterates
  * pending types.
+ *
+ * FAILED orders are intentionally excluded — they have a dedicated surface
+ * (ConflictIssue auto-created by the schedule route), so showing them in
+ * the pending sidebar would double-count and mislead users.
  */
 export async function findPendingOrdersForAdmin(
   db: PrismaClient,
@@ -225,7 +229,7 @@ export async function findPendingOrdersForAdmin(
   const rows = await db.order.findMany({
     where: {
       type: productionType,
-      status: { in: ["PENDING", "FAILED"] },
+      status: "PENDING",
     },
     select: {
       id: true,
