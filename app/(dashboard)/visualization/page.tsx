@@ -107,6 +107,7 @@ function convertNewScheduleToPreview(args: {
   // Build TimelineItem[] from every assignment on every order in newSchedule.
   const timeline: TimelineItem[] = [];
   let synthAssignmentSeq = 0;
+  const previewedOrderIds = new Set(newSchedule.map((o) => o.id));
   for (const order of newSchedule) {
     for (const a of order.assignments ?? []) {
       if (!a.factoryId || !a.productionDate) continue;
@@ -122,6 +123,15 @@ function convertNewScheduleToPreview(args: {
         applicantId: order.applicantId ?? "",
         lastModifiedById: order.lastModifiedById ?? null,
       });
+    }
+  }
+
+  // When previewing a subset (targetOrderIds), the API only returns those orders.
+  // Carry over the baseline timeline items for everything else so existing
+  // scheduled orders stay visible on the preview.
+  for (const t of baseTimeline?.timeline ?? []) {
+    if (!previewedOrderIds.has(t.orderId)) {
+      timeline.push(t);
     }
   }
 
@@ -1010,6 +1020,7 @@ function OrderFormModal({
 function GanttCell({
   cell,
   hasRescheduled,
+  hasNewlyPlaced,
   isMyOrder,
   isSales,
   editMode,
@@ -1018,6 +1029,7 @@ function GanttCell({
 }: {
   cell: CellData;
   hasRescheduled: boolean;
+  hasNewlyPlaced: boolean;
   isMyOrder: boolean;
   isSales: boolean;
   editMode: boolean;
@@ -1083,7 +1095,7 @@ function GanttCell({
     <td className="border border-gray-100 w-[72px] min-w-[72px] h-14 p-0">
       <button
         onClick={onClick}
-        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""}`}
+        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""} ${hasNewlyPlaced && !isMyOrder ? "ring-2 ring-inset ring-emerald-500" : ""}`}
       >
         {/* Conflict marker */}
         {hasConflict && (
@@ -1101,6 +1113,15 @@ function GanttCell({
         {hasRescheduled && hasConflict && (
           <span className="absolute top-1 right-4 text-[9px] leading-none text-purple-500 font-bold">
             ↕
+          </span>
+        )}
+
+        {/* Newly placed (preview) marker */}
+        {hasNewlyPlaced && (
+          <span
+            className={`absolute ${hasRescheduled || hasConflict ? "top-1 right-7" : "top-1 right-1"} text-[10px] leading-none text-emerald-600 font-bold`}
+          >
+            +
           </span>
         )}
 
@@ -1853,11 +1874,26 @@ export default function SchedulePage() {
     return map;
   }, [effective, myOrderIdSet]);
 
-  // Per-cell: does it contain any rescheduled order?
+  // Per-cell: does it contain any rescheduled order (was already scheduled,
+  // moved to a different date)?
   const rescheduledCells = useMemo(() => {
     const set = new Set<string>();
     for (const item of effective?.timeline ?? []) {
-      if (diffByOrderId.has(item.orderId)) {
+      const d = diffByOrderId.get(item.orderId);
+      if (d && d.before !== "") {
+        set.add(`${item.factoryId}__${item.productionDate}`);
+      }
+    }
+    return set;
+  }, [effective, diffByOrderId]);
+
+  // Per-cell: does it contain any newly placed order (had no previous schedule,
+  // first placed by this preview)? Used for the preview "newly added" highlight.
+  const newlyPlacedCells = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of effective?.timeline ?? []) {
+      const d = diffByOrderId.get(item.orderId);
+      if (d && d.before === "") {
         set.add(`${item.factoryId}__${item.productionDate}`);
       }
     }
@@ -2330,6 +2366,10 @@ export default function SchedulePage() {
           Rescheduled
         </span>
         <span className="flex items-center gap-1.5">
+          <span className="text-[10px] font-bold text-emerald-600">+</span>{" "}
+          Newly placed
+        </span>
+        <span className="flex items-center gap-1.5">
           <span className="text-[10px] font-bold text-gray-500">×N</span> Order
           count
         </span>
@@ -2460,6 +2500,7 @@ export default function SchedulePage() {
                                 key={key}
                                 cell={cell}
                                 hasRescheduled={rescheduledCells.has(key)}
+                                hasNewlyPlaced={newlyPlacedCells.has(key)}
                                 isMyOrder={isMyOrder}
                                 isSales={isSales}
                                 editMode={editMode}
