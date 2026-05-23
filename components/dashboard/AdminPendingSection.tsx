@@ -1,175 +1,130 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 
-type RequestInfo = {
-  id: string;
-  name: string;
-  type: string;
-  status: string;
-  applicantId: string;
-  createdAt: string;
-  dueDate: string | null;
-  quantity: number;
-  lastModifiedById: string | null;
+type FactoryDailyCell = {
+  date: string;
+  orderCount: number;
+  totalQuantity: number;
+  percent: number;
+};
+
+type FactoryMatrixRow = {
+  factoryId: string;
+  label: string;
+  productionType: string;
+  totalQuantity: number;
+  totalOrders: number;
+  cells: FactoryDailyCell[];
 };
 
 export function AdminPendingSection({
-  requests,
-  onRequestsChange,
+  rows,
+  dateColumns,
+  dateRangeLabel,
 }: {
-  requests: RequestInfo[];
-  onRequestsChange: (updated: RequestInfo[]) => void;
+  rows: FactoryMatrixRow[];
+  dateColumns: string[];
+  dateRangeLabel: string;
 }) {
-  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const handleApprove = async (req: RequestInfo) => {
-    setActionLoading((s) => ({ ...s, [req.id]: true }));
-    setErrors((s) => {
-      const c = { ...s };
-      delete c[req.id];
-      return c;
-    });
-    try {
-      const res = await fetch(`/api/orders/${req.id}`, {
-        method: "PUT",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "SCHEDULED" }),
-      });
-      if (res.ok) {
-        onRequestsChange(requests.filter((r) => r.id !== req.id));
-      } else {
-        const body = (await res.json().catch(() => ({}))) as {
-          message?: string;
-          code?: string;
-        };
-        setErrors((s) => ({
-          ...s,
-          [req.id]: body.message ?? body.code ?? "Approve failed.",
-        }));
-      }
-    } catch {
-      setErrors((s) => ({ ...s, [req.id]: "Network error." }));
-    } finally {
-      setActionLoading((s) => {
-        const copy = { ...s };
-        delete copy[req.id];
-        return copy;
-      });
-    }
-  };
-
-  const handleReject = async (req: RequestInfo) => {
-    setActionLoading((s) => ({ ...s, [req.id]: true }));
-    setErrors((s) => {
-      const c = { ...s };
-      delete c[req.id];
-      return c;
-    });
-    try {
-      const res = await fetch(`/api/orders/${req.id}`, {
-        method: "PUT",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "CANCELLED" }),
-      });
-      if (res.ok) {
-        onRequestsChange(requests.filter((r) => r.id !== req.id));
-      } else {
-        const body = (await res.json().catch(() => ({}))) as {
-          message?: string;
-          code?: string;
-        };
-        setErrors((s) => ({
-          ...s,
-          [req.id]: body.message ?? body.code ?? "Reject failed.",
-        }));
-      }
-    } catch {
-      setErrors((s) => ({ ...s, [req.id]: "Network error." }));
-    } finally {
-      setActionLoading((s) => {
-        const copy = { ...s };
-        delete copy[req.id];
-        return copy;
-      });
-    }
-  };
+  const totalQuantity = rows.reduce((sum, row) => sum + row.totalQuantity, 0);
+  const totalOrders = rows.reduce((sum, row) => sum + row.totalOrders, 0);
 
   return (
     <>
-      <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-          待處理申請 (Pending Requests)
-        </h2>
+      <div className="border-b border-gray-100 bg-gray-50/50 px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
+              未來 7 天工廠總覽
+            </h2>
+            <p className="mt-1 text-xs text-gray-500">
+              {dateRangeLabel || "Next 7 days"}
+            </p>
+          </div>
+          <div className="text-right text-xs text-gray-500">
+            <div>
+              Orders:{" "}
+              <span className="font-semibold text-gray-700">
+                {totalOrders.toLocaleString()}
+              </span>
+            </div>
+            <div>
+              Qty:{" "}
+              <span className="font-semibold text-gray-700">
+                {totalQuantity.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-5">
-        {requests.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center mt-10">
-            No pending requests.
+
+      <div className="flex-1 overflow-auto p-5">
+        {rows.length === 0 ? (
+          <p className="mt-10 text-center text-sm text-gray-400">
+            No production data for the next 7 days.
           </p>
         ) : (
-          <div className="space-y-3">
-            {requests.map((req) => (
-              <div
-                key={req.id}
-                className="border border-gray-100 rounded-lg p-3 hover:border-blue-200 transition-colors"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <span className="font-semibold text-gray-800 text-sm">
-                    {req.name}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-                      {req.type}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        disabled={!!actionLoading[req.id]}
-                        onClick={() => handleApprove(req)}
-                        className="text-xs font-medium px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <table className="min-w-full border-collapse text-xs">
+              <thead className="sticky top-0 z-10 bg-gray-50">
+                <tr>
+                  <th className="sticky left-0 z-20 border-b border-gray-200 bg-gray-50 px-4 py-3 text-left font-semibold text-gray-500">
+                    Factory
+                  </th>
+                  {dateColumns.map((date) => (
+                    <th
+                      key={date}
+                      className="border-b border-gray-200 px-3 py-3 text-center font-semibold text-gray-500"
+                    >
+                      {date.slice(5)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => (
+                  <tr
+                    key={row.factoryId}
+                    className={index % 2 === 0 ? "bg-white" : "bg-gray-50/40"}
+                  >
+                    <td className="sticky left-0 z-10 border-b border-gray-100 bg-inherit px-4 py-3 align-top">
+                      <div className="flex flex-col gap-1">
+                        <span className="font-semibold text-gray-800">
+                          {row.label}
+                        </span>
+                      </div>
+                    </td>
+                    {row.cells.map((cell) => (
+                      <td
+                        key={`${row.factoryId}__${cell.date}`}
+                        className="border-b border-gray-100 px-3 py-3 align-middle"
                       >
-                        Approve
-                      </button>
-                      <button
-                        disabled={!!actionLoading[req.id]}
-                        onClick={() => handleReject(req)}
-                        className="text-xs font-medium px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500 space-y-1">
-                  <div className="flex justify-between">
-                    <span>Applicant:</span>
-                    <span className="font-mono text-gray-700">
-                      {req.applicantId}
-                    </span>
-                  </div>
-                  {req.dueDate && (
-                    <div className="flex justify-between">
-                      <span>Due Date:</span>
-                      <span className="font-medium text-gray-700">
-                        {req.dueDate}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span>Created:</span>
-                    <span>{new Date(req.createdAt).toLocaleDateString()}</span>
-                  </div>
-                </div>
-                {errors[req.id] && (
-                  <p className="text-xs text-red-600 mt-2">{errors[req.id]}</p>
-                )}
-              </div>
-            ))}
+                        <div
+                          className="rounded-xl border border-gray-100 bg-gray-50 px-2 py-2 text-center shadow-sm transition-colors hover:border-blue-200"
+                          title={`${cell.orderCount} orders, ${cell.totalQuantity.toLocaleString()} qty`}
+                        >
+                          <div className="text-sm font-semibold text-gray-900">
+                            {cell.orderCount.toLocaleString()}
+                          </div>
+                          <div className="mt-0.5 text-[10px] text-gray-500">
+                            {cell.percent.toFixed(0)}%
+                          </div>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-blue-500"
+                              style={{
+                                width: `${Math.min(100, cell.percent)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
