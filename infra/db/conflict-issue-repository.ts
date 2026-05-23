@@ -100,6 +100,16 @@ export type UpdateIssueInput = {
   closedAt?: Date | null;
 };
 
+export type CreateIssueInput = {
+  orderId: string;
+  title: string;
+  status?: ConflictIssueStatus;
+  resolution?: ConflictResolution | null;
+  createdById: string;
+  assigneeId: string;
+  contextSnapshot: unknown;
+};
+
 export type IssueFilters = {
   status?: ConflictIssueStatus;
   assigneeId?: string; // SALES: own issues
@@ -290,9 +300,47 @@ export async function findCommentById(db: PrismaClient, commentId: string) {
   });
 }
 
+/**
+ * Find an open (OPEN or IN_DISCUSSION) ConflictIssue for an order, if any.
+ * Used for duplicate detection when auto-creating issues for failed orders.
+ */
+export async function findOpenIssueByOrderId(
+  db: PrismaClient,
+  orderId: string,
+): Promise<{ id: string; status: ConflictIssueStatus } | null> {
+  return db.conflictIssue.findFirst({
+    where: {
+      orderId,
+      status: {
+        in: [ConflictIssueStatus.OPEN, ConflictIssueStatus.IN_DISCUSSION],
+      },
+    },
+    select: { id: true, status: true },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
+
+export async function createConflictIssue(
+  db: PrismaClient,
+  input: CreateIssueInput,
+): Promise<{ id: string; number: number; createdAt: Date }> {
+  return db.conflictIssue.create({
+    data: {
+      orderId: input.orderId,
+      title: input.title,
+      status: input.status ?? ConflictIssueStatus.OPEN,
+      resolution: input.resolution ?? null,
+      createdById: input.createdById,
+      assigneeId: input.assigneeId,
+      contextSnapshot: input.contextSnapshot as object,
+    },
+    select: { id: true, number: true, createdAt: true },
+  });
+}
 
 export async function createConflictIssueComment(
   db: PrismaClient,

@@ -1,7 +1,7 @@
 /**
  * tests/rbac/order-rbac.test.ts
  *
- * Integration tests for Order & Request RBAC.
+ * Integration tests for Order RBAC.
  * Runs against the real dev DB — make sure `pnpm db:seed` has been run first.
  *
  * Run: pnpm test
@@ -17,10 +17,6 @@ import {
   updateOrderService,
   deleteOrdersService,
 } from "@/modules/order/order-service";
-import {
-  createRequestService,
-  approveRequest,
-} from "@/modules/order/request-service";
 import { ForbiddenError } from "@/modules/auth/rbac";
 
 // ---------------------------------------------------------------------------
@@ -44,16 +40,9 @@ const adminB1 = ctx("admin-B1", "ADMIN");
 // Cleanup helpers
 // ---------------------------------------------------------------------------
 
-const createdRequestIds: string[] = [];
 const createdOrderIds: string[] = [];
 
 afterEach(async () => {
-  if (createdRequestIds.length) {
-    await prisma.orderRequest.deleteMany({
-      where: { id: { in: [...createdRequestIds] } },
-    });
-    createdRequestIds.length = 0;
-  }
   if (createdOrderIds.length) {
     await prisma.order.deleteMany({
       where: { id: { in: [...createdOrderIds] } },
@@ -135,42 +124,6 @@ describe("流程一：正常訂單生命週期", () => {
     await expect(
       updateOrderService(salesA, prisma, order.id, { name: "改名" }),
     ).rejects.toBeInstanceOf(ForbiddenError);
-  });
-
-  it("5. SALES 對 SCHEDULED 訂單提修改申請 → 201", async () => {
-    const order = await seedOrderA();
-    await updateOrderService(adminA1, prisma, order.id, {
-      status: "SCHEDULED",
-    });
-
-    const request = await createRequestService(salesA, prisma, {
-      orderId: order.id,
-      message: "請幫我改數量",
-      payload: { quantity: 200 },
-    });
-    createdRequestIds.push(request.id);
-
-    expect(request.id).toBeDefined();
-    expect(request.orderId).toBe(order.id);
-  });
-
-  it("6. ADMIN 核准申請後 quantity 更新為 200", async () => {
-    const order = await seedOrderA();
-    await updateOrderService(adminA1, prisma, order.id, {
-      status: "SCHEDULED",
-    });
-
-    const request = await createRequestService(salesA, prisma, {
-      orderId: order.id,
-      message: "請幫我改數量",
-      payload: { quantity: 200 },
-    });
-    createdRequestIds.push(request.id);
-
-    await approveRequest(adminA1, prisma, request.id);
-
-    const updated = await getOrder(adminA1, prisma, order.id);
-    expect(updated.quantity).toBe(200);
   });
 });
 

@@ -10,6 +10,7 @@ import {
   findDailyCapacitiesForVisualization,
   findSalesAssignments,
   findPendingOrdersForSales,
+  findPendingOrdersForAdmin,
 } from "@/infra/db/visualization-repository";
 import { differenceInDays, parseISO, format } from "date-fns";
 import type {
@@ -42,13 +43,16 @@ export async function getTimeline(
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
 
   // Both ADMIN and SUPERADMIN see all factories in their production type
-  const scopedFilters = { ...filters, productionType: getScopeGroup(scope) };
+  const productionType = getScopeGroup(scope);
+  const scopedFilters = { ...filters, productionType };
 
-  const [factoryRows, assignmentRows, capacityRows] = await Promise.all([
-    findFactoriesForVisualization(db, scopedFilters),
-    findAssignmentsForVisualization(db, scopedFilters),
-    findDailyCapacitiesForVisualization(db, scopedFilters),
-  ]);
+  const [factoryRows, assignmentRows, capacityRows, pendingRows] =
+    await Promise.all([
+      findFactoriesForVisualization(db, scopedFilters),
+      findAssignmentsForVisualization(db, scopedFilters),
+      findDailyCapacitiesForVisualization(db, scopedFilters),
+      findPendingOrdersForAdmin(db, productionType),
+    ]);
 
   const factories = mapFactories(factoryRows);
   const timeline = mapTimeline(assignmentRows);
@@ -56,7 +60,25 @@ export async function getTimeline(
   const conflicts = detectConflicts(timeline, capacityRows);
   const today = format(await getTime(), "yyyy-MM-dd");
 
-  return { factories, timeline, conflicts, dailyCapacities, diffs: [], today };
+  const pendingOrders: PendingOrderInfo[] = pendingRows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    status: "PENDING",
+    quantity: r.quantity,
+    dueDate: r.dueDate,
+    createdAt: r.createdAt,
+    risk: calcRisk(r.dueDate, today),
+  }));
+
+  return {
+    factories,
+    timeline,
+    conflicts,
+    dailyCapacities,
+    diffs: [],
+    today,
+    adminContext: { pendingOrders },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +100,7 @@ async function getSalesTimeline(
   const pendingOrders: PendingOrderInfo[] = pendingRows.map((r) => ({
     id: r.id,
     name: r.name,
-    status: r.status as "PENDING" | "APPROVED",
+    status: "PENDING",
     quantity: r.quantity,
     dueDate: r.dueDate,
     createdAt: r.createdAt,

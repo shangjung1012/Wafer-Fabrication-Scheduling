@@ -140,7 +140,7 @@
          │                                       ▲
          ▼                                       │
    回傳 previewId、newSchedule、               以 previewId 套用
-   failedOrderIds、conflictWarnings            並做 OCC 版本檢查
+   failedOrderIds                              並做 OCC 版本檢查
 ```
 
 ### A. `/api/schedule/preview`
@@ -158,7 +158,6 @@
     newSchedule: ProcessedOrder[], // hydrated，含 newAssignments
     affectedOrders: string[],
     failedOrderIds: string[],      // 衝突訂單 ID（status === FAILED）
-    conflictWarnings: string[],
   }
 }
 ```
@@ -184,8 +183,6 @@
 
 ## 7. 衝突偵測與通知 (Conflict Detection & Notify)
 
-> 詳細實作紀錄請見 [`conflict.md`](./conflict.md)；具體測試案例請見 [`conflict_testcase.md`](./conflict_testcase.md)。
-
 ### A. 衝突定義
 
 當以下三條件同時成立時，視為排程衝突：
@@ -203,14 +200,12 @@
 
 ### C. 回傳路徑（preview only）
 
-- `/api/schedule/preview` 回傳 `data.failedOrderIds`（與 `conflictWarnings` 文字摘要）。
+- `/api/schedule/preview` 回傳 `data.failedOrderIds`。
 - 前端拿到 ID 後可進一步 hydrate 訂單詳情（名稱、quantity、dueDate、申請人 email、admin email）以呈現衝突 banner 或寄信清單。
 
-### D. 寄信流程 (`/api/schedule/notify`)
+### D. Conflict issue 自動建立（取代手動 notify）
 
-- **不會自動寄信**。`/api/schedule/run` 不會寄；`/api/schedule/apply` 也不會寄。
-- 前端把整理好的 conflict orders payload（含 `applicantEmail` / `adminEmail`）POST 給 `/api/schedule/notify`，由 server 端用 `kickOutTemplate` 寄信。
-- 設計理由：把「衝突發生」與「實際通知」解耦，避免 cron 自動排程每 10 分鐘把同一份警示信重複寄出。
+`apply` / `run` 寫入 DB 之後，route 會 fire-and-forget 呼叫 `createIssuesForFailedOrders`，對每筆新 FAILED order 建立 `ConflictIssue` 並寄信給 applicant + factory admin。詳見 `modules/order/conflict-issue-service.ts`。
 
 ---
 
@@ -228,8 +223,57 @@
 
 ### A. 自動排程
 
-- 外部 cron service 每 10 分鐘 POST `/api/schedule/run`，帶 `Authorization: Bearer <CRON_SECRET>`。
-- 預設使用 `reschedulePolicy = GAP_FILLING`，避免高頻重排把既有 SCHEDULED 訂單甩來甩去。
+兩條路徑都可以驅動引擎，目前生產環境以 in-process worker 為主：
+
+1. **In-process node-cron worker（`scripts/cron.ts`）** — 與 Next.js 部署在同一映像，啟動後常駐：
+   - `0 */2 * * *` → `runAutoScheduler`（每兩小時整點觸發）
+   - `0 0 * * *` → `runDailyExecution`（每日 00:00，呼叫 `advanceOrderStatuses` 推進訂單／派工單狀態）
+2. **外部 cron service（保留路徑）** — POST `/api/schedule/run`，帶 `Authorization: Bearer <CRON_SECRET>`，走完整 HTTP route。
+
+兩條路徑都預設 `reschedulePolicy = GAP_FILLING`（in-process 來自 per-type 設定預設值），避免高頻重排把既有 SCHEDULED 訂單甩來甩去。
+
+#### A.1 `runAutoScheduler` 行為
+
+1. `findPendingOrderTypes(prisma)` 回傳所有有 PENDING 訂單的 type；無 pending 就直接 return。
+2. `findUserByUsername(prisma, "AutoScheduler")` 取得系統使用者；找不到則直接 return（不會 fallback 到其他帳號）。`operatorId` 一律記為這位 system user。
+3. 對每個 type 讀取 `AutoSchedulerConfig`。若沒有設定或 `isOperating=false`，記 log 後 skip。
+4. 組 `SchedulingConfig`：`startDate = getTime() 的隔日 00:00`，其餘欄位（`frozenDays / productionDays / bufferDays / reschedulePolicy / algorithm / splittable`）直接套用 config row。
+5. 呼叫 `runSchedule(type, scheduleConfig, currentDate, systemUser.id)` —— **直接呼叫 service 層，跳過 `/api/schedule/run` route**。
+6. 錯誤訊息含 `already running`（Redis 鎖被持有）就記 log 後跳過該 type；其他錯誤記 `console.error` 後繼續下一個 type。沒有重試與退避。
+
+#### A.2 `AutoSchedulerConfig` 結構
+
+每個訂單 type 一筆設定列，schema 定義於 `prisma/schema.prisma` 的 `AutoSchedulerConfig` model：
+
+| 欄位               | 型別      | 預設值              | 意義                                                                 |
+| :----------------- | :-------- | :------------------ | :------------------------------------------------------------------- |
+| `type`             | `String`  | —（unique）         | 對應 `Order.type`，每個 type 一筆設定                                |
+| `isOperating`      | `Boolean` | `true`              | 該 type 的自動排程開關；`false` 時 cron 略過該 type                  |
+| `frozenDays`       | `Int`     | `0`                 | 直接餵給 `SchedulingConfig.frozenDays`，定義不可變動的前緣天數       |
+| `productionDays`   | `Int`     | `1`                 | 每張單最小生產天數                                                   |
+| `bufferDays`       | `Int`     | `0`                 | 完工到 dueDate 之間的緩衝                                            |
+| `reschedulePolicy` | `String`  | `"GAP_FILLING"`     | `GAP_FILLING` / `PRIORITY_RETAIN` / `GLOBAL_OPTIMIZE`，行為見第 3 節 |
+| `algorithm`        | `String`  | `"GREEDY_BEST_FIT"` | 目前只支援 `GREEDY_BEST_FIT`                                         |
+| `splittable`       | `Boolean` | `true`              | 是否允許跨工廠／跨日切單，對應 `SchedulingConfig.splittable`         |
+
+#### A.3 開關操作
+
+- 讀取與更新都走 `/api/system/auto-scheduler`：
+  - `GET` — 任何已登入使用者可呼叫，回傳所有 type 的 config 陣列。
+  - `PATCH` — 限 `SUPERADMIN` / `ADMIN`，body 走 Zod schema 驗證（`type` 必填，其餘欄位皆 optional）。`isOperating: false` 即關掉該 type 的自動排程；下一輪 cron tick 立刻生效。
+- Repository 的 `updateAutoSchedulerConfig` 用 `upsert`，所以第一次設定不存在的 type 也會自動建立 row。
+
+#### A.4 與 preview / apply 的併發互動
+
+`runSchedule` 在內部用 `withScheduleLock(type, ...)` 取得 `schedule:lock:<type>`（`SET NX EX 300`），與 `/api/schedule/apply`、`/api/schedule/run` 共用同一支 key——cron 寫入與管理員手動寫入互斥。
+
+- cron tick 撞到管理員正在 apply：`runSchedule` 內 `redis.set NX` 失敗，丟出 `already running`，cron 的 per-type catch 略過此 type 並記 log。
+- 管理員按 apply 撞到 cron：`/api/schedule/apply` 回 409 Conflict，UI 應提示重新預覽。
+- **OCC `scheduleVersion`**：cron 路徑不經過 preview 快取，但 `_applyScheduleTransaction` 一樣會更新 `scheduleVersion`。任何「在 cron tick 期間建立的 preview」會在使用者按 apply 時被 OCC 擋下，要求重新預覽。
+
+#### A.5 與自動 issue 建立的關係
+
+第 7.D 節提到的 `createIssuesForFailedOrders` 是 **route-handler-level 副作用**——只在 `/api/schedule/run` 與 `/api/schedule/apply` 寫入成功後 fire-and-forget。`scripts/cron.ts` 直接呼叫 `runSchedule`，**跳過 route**，因此 cron 觸發產生的新 FAILED order **不會自動開 `ConflictIssue`、也不會寄信**。若希望 cron 路徑同樣自動開 issue，需在 `runSchedule` 或 `scripts/cron.ts` 內額外掛上這支 service。
 
 ### B. 管理員手動
 

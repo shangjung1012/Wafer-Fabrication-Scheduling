@@ -5,6 +5,7 @@ import {
   updateAssignmentSlot,
 } from "@/infra/db/assignment-repository";
 import { upsertDailyCapacityDelta } from "@/infra/db/capacity-repository";
+import { withScheduleLock } from "@/infra/redis/schedule-store";
 
 export type AssignmentMove = {
   assignmentId: string;
@@ -84,48 +85,65 @@ export async function applyAssignmentMoves(
 
   const orderIdsTouched = new Set<string>();
 
-  await db.$transaction(async (tx) => {
-    const txDb = tx as unknown as PrismaClient;
-    for (const { move, assignment } of validMoves) {
-      const oldDate = new Date(assignment.productionDate);
-      const newDate = toMidnight(move.productionDate);
-      const sameSlot =
-        assignment.factoryId === move.factoryId &&
-        oldDate.getTime() === newDate.getTime();
-      if (sameSlot) continue;
+  const types = Array.from(
+    new Set(
+      validMoves
+        .map((v) => v.assignment.order.type)
+        .filter((t): t is string => Boolean(t)),
+    ),
+  );
 
-      const qty = assignment.assignedQuantity;
+  await withScheduleLock(types, async () => {
+    await db.$transaction(async (tx) => {
+      const txDb = tx as unknown as PrismaClient;
+      for (const { move, assignment } of validMoves) {
+        const oldDate = new Date(assignment.productionDate);
+        const newDate = toMidnight(move.productionDate);
+        const sameSlot =
+          assignment.factoryId === move.factoryId &&
+          oldDate.getTime() === newDate.getTime();
+        if (sameSlot) continue;
 
-      await upsertDailyCapacityDelta(
-        txDb,
-        assignment.factoryId,
-        oldDate,
-        +qty,
-        factoryMaxById.get(assignment.factoryId) ?? 0,
-      );
-      await upsertDailyCapacityDelta(
-        txDb,
-        move.factoryId,
-        newDate,
-        -qty,
-        factoryMaxById.get(move.factoryId) ?? 0,
-      );
+        const qty = assignment.assignedQuantity;
 
-      await updateAssignmentSlot(
-        txDb,
-        move.assignmentId,
-        move.factoryId,
-        newDate,
-      );
-      orderIdsTouched.add(assignment.orderId);
-    }
+        // Calculate shift in days to update completion date
+        const timeDiff = newDate.getTime() - oldDate.getTime();
+        const newCompletionDate = new Date(
+          assignment.completionDate.getTime() + timeDiff,
+        );
 
-    if (orderIdsTouched.size > 0) {
-      await txDb.order.updateMany({
-        where: { id: { in: Array.from(orderIdsTouched) } },
-        data: { lastModifiedById: actorUserId },
-      });
-    }
+        await upsertDailyCapacityDelta(
+          txDb,
+          assignment.factoryId,
+          oldDate,
+          +qty,
+          factoryMaxById.get(assignment.factoryId) ?? 0,
+        );
+        await upsertDailyCapacityDelta(
+          txDb,
+          move.factoryId,
+          newDate,
+          -qty,
+          factoryMaxById.get(move.factoryId) ?? 0,
+        );
+
+        await updateAssignmentSlot(
+          txDb,
+          move.assignmentId,
+          move.factoryId,
+          newDate,
+          newCompletionDate,
+        );
+        orderIdsTouched.add(assignment.orderId);
+      }
+
+      if (orderIdsTouched.size > 0) {
+        await txDb.order.updateMany({
+          where: { id: { in: Array.from(orderIdsTouched) } },
+          data: { lastModifiedById: actorUserId },
+        });
+      }
+    });
   });
 
   return { applied: validMoves.length, errors };

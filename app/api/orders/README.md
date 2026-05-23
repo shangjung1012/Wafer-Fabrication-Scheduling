@@ -1,6 +1,6 @@
-# /api/orders & /api/requests
+# /api/orders
 
-訂單（Orders）與修改申請（Requests）的 10 支 API。
+訂單（Orders）API。
 
 ---
 
@@ -17,15 +17,6 @@
 | DELETE | `/api/orders`        | 批次軟刪除訂單（body: `{ids:[...]}`）          | ADMIN              |
 | POST   | `/api/orders/import` | 匯入 CSV 批次建立訂單                          | ADMIN / SUPERADMIN |
 
-### Requests
-
-| Method | Path                        | 說明                              | 權限               |
-| ------ | --------------------------- | --------------------------------- | ------------------ |
-| GET    | `/api/requests`             | 列出修改申請                      | ALL                |
-| POST   | `/api/requests`             | 建立修改申請                      | SALES              |
-| PUT    | `/api/requests/:id`         | 修改申請內容（message / payload） | SALES              |
-| POST   | `/api/requests/:id/approve` | 核准申請，將 payload 套用到訂單   | ADMIN / SUPERADMIN |
-
 ---
 
 ## 資料結構
@@ -37,7 +28,7 @@
   id: string;
   name: string;
   type: string; // production group: "A" | "B" | "C"
-  status: OrderStatus; // PENDING | APPROVED | SCHEDULED | IN_PRODUCTION | COMPLETED | CANCELLED
+  status: OrderStatus; // PENDING | SCHEDULED | IN_PRODUCTION | COMPLETED | CANCELLED | FAILED
   dueDate: Date;
   quantity: number;
   applicantId: string; // SALES user who created it
@@ -50,26 +41,19 @@
 ### Order Status Machine
 
 ```
-PENDING → APPROVED → SCHEDULED → IN_PRODUCTION → COMPLETED
-                                               ↘ CANCELLED
+PENDING ─┬─► SCHEDULED ─► IN_PRODUCTION ─► COMPLETED
+         │       │
+         │       └─► CANCELLED
+         └─► FAILED
 ```
 
 - `PENDING`：SALES 剛建立，SALES 還可以直接 `PUT /orders/:id` 修改欄位
-- `APPROVED` 之後：SALES 不能直接改，只能送 `OrderRequest`；Admin 管理
-
-### OrderRequest
-
-```ts
-{
-  id: string;
-  orderId: string;
-  requesterId: string;
-  message: string;
-  payload: Record<string, unknown>; // 想改的欄位，例如 { quantity: 2000 }
-  createdAt: Date;
-  updatedAt: Date;
-}
-```
+- `PENDING → SCHEDULED`：scheduling engine 成功把訂單排進產能
+- `PENDING → FAILED`：engine rollback 後仍找不到可放入的窗口
+- `SCHEDULED → IN_PRODUCTION`：任一 `OrderAssignment` 進入 IN_PRODUCTION
+- `SCHEDULED → CANCELLED`：admin 取消
+- `IN_PRODUCTION → COMPLETED`：所有未取消的 assignment 全部完成
+- `CANCELLED` / `COMPLETED` / `FAILED` 為終態
 
 ---
 
@@ -83,9 +67,6 @@ PENDING → APPROVED → SCHEDULED → IN_PRODUCTION → COMPLETED
 | 修改訂單     | ✓ 自己的 PENDING，不能改 status | ✓ 同 group，可改 status | —                 |
 | 刪除訂單     | —                               | ✓                       | —                 |
 | 匯入 CSV     | —                               | ✓                       | ✓                 |
-| 建立申請     | ✓ 自己建立的訂單                | —                       | —                 |
-| 修改申請     | ✓ 自己的申請                    | —                       | —                 |
-| 核准申請     | —                               | ✓                       | ✓                 |
 
 ---
 
@@ -146,10 +127,10 @@ service → route handler → `NextResponse.json(updatedOrder)`，HTTP 200。
 route handler
     → requireAuth()              # 確認是誰
     → zod safeParse              # 驗輸入格式
-    → order-service / request-service
+    → order-service
         → requireRole()          # role gate
         → getCallerGroup()       # group scope gate（ADMIN/SUPERADMIN 用）
-        → order-repository / request-repository
+        → order-repository
     ← 回傳 response
 ```
 
@@ -169,19 +150,6 @@ CustomerOrderB,B,2026-07-15,200
 - `quantity` 必須是正整數
 - 欄位缺失或格式錯誤的 row 會進 `errorList`，不影響其他 row
 - 回傳：`{ successCount: number, errorList: string[] }`
-
----
-
-## 申請核准邏輯（Approve Request）
-
-`POST /api/requests/:id/approve` 呼叫後：
-
-1. 載入申請的 `payload`（JSON，例如 `{ quantity: 2000 }`）
-2. 把 payload 的欄位套用到關聯的 order（呼叫 `updateOrder`）
-3. 只允許安全欄位（`quantity`, `name`, `type`, `dueDate`, `status`）；其他 payload key 忽略
-4. 記錄 `lastModifiedById = ctx.user.id`
-
-申請本身沒有「已核准」狀態，approve 是一次性動作直接改訂單。
 
 ---
 

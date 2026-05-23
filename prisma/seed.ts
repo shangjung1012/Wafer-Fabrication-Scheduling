@@ -16,7 +16,7 @@
  *   - factory-A1 2026-05-17: 900 IN_PRODUCTION → only 100 free
  *   - factory-A2 2026-05-17: 1000 IN_PRODUCTION → 0 free
  *   - factory-A3 2026-05-17: 1000 IN_PRODUCTION → 0 free
- *   - ord-seed-013 (Wafer-CF4-Base): APPROVED, qty=80, dueDate=May 17
+ *   - ord-seed-013 (Wafer-CF4-Base): PENDING, qty=80, dueDate=May 17
  *     → on schedule run, takes the 100 free slots on A1, leaves 20
  *   - ord-seed-016 (Wafer-CF4-New):  PENDING,  qty=30, dueDate=May 17
  *     → admin approves it, then a single schedule run produces the conflict
@@ -203,13 +203,16 @@ function buildOrders(): SeedOrder[] {
       applicantId: "sales-A",
       status: "SCHEDULED",
     },
-    // ord-seed-cf4: locks factory-A1(900) + A2(1000) + A3(1000) on May 17
-    // IN_PRODUCTION so its assignments are never freed by the scheduler
+    // ord-seed-cf4: IN_PRODUCTION lock order so its assignments are never
+    // freed by the scheduler. Locks:
+    //   - 2026-05-09: A1(1000) + A2(1000) + A3(1000) — forces FAIL for the
+    //     two Case 4 PENDING orders below (their dueDate = 2026-05-09)
+    //   - 2026-05-17: A1(900) + A2(1000) + A3(1000) — original Case 4 locks
     {
       id: "ord-seed-cf4",
       name: "Wafer-CF4-Lock",
       type: "A",
-      quantity: 2900,
+      quantity: 5900,
       dueDate: d("2026-05-25"),
       applicantId: "sales-A",
       status: "IN_PRODUCTION",
@@ -289,15 +292,16 @@ function buildOrders(): SeedOrder[] {
       status: "SCHEDULED",
     },
 
-    // --- PENDING (no assignments — ready for schedule engine or approval) ---
-    // Case 4 base order: on schedule run, takes the 100 free slots on
-    // factory-A1 May 17 (80 used, 20 remaining).
+    // --- PENDING (no assignments — ready for schedule engine) ---
+    // Case 4 base: dueDate = startDate (sim date + 1), so the window is a
+    // single day. Combined with the 3 IN_PRODUCTION locks on 2026-05-09 below,
+    // the engine has zero free capacity → FAILED → auto ConflictIssue.
     {
       id: "ord-seed-013",
       name: "Wafer-CF4-Base",
       type: "A",
       quantity: 80,
-      dueDate: d("2026-05-17"),
+      dueDate: d("2026-05-09"),
       applicantId: "sales-A",
       status: "PENDING",
     },
@@ -320,17 +324,14 @@ function buildOrders(): SeedOrder[] {
       status: "PENDING",
     },
 
-    // --- PENDING (awaiting admin approval) ---
-    // Case 4 trigger order: same dueDate as ord-seed-013 but lower quantity,
-    // so it gets lower priority. After ord-seed-013 takes 80 of the 100 free
-    // slots on factory-A1 May 17, only 20 remain — this 30-qty order cannot
-    // fit, triggering a true conflict (window total 20 < required 30).
+    // Case 4 second order: same single-day window, same locked factories.
+    // Both PENDING orders FAIL on schedule run, producing 2 ConflictIssues.
     {
       id: "ord-seed-016",
       name: "Wafer-CF4-New",
       type: "A",
       quantity: 30,
-      dueDate: d("2026-05-17"),
+      dueDate: d("2026-05-09"),
       applicantId: "sales-A",
       status: "PENDING",
     },
@@ -422,8 +423,40 @@ function buildAssignments(): SeedAssignment[] {
     },
 
     // -----------------------------------------------------------------------
-    // Case 4 capacity locks — IN_PRODUCTION on 2026-05-17
-    // factory-A1: 900/1000 locked → 100 free (ord-seed-013 will use 80)
+    // Case 4 capacity locks — IN_PRODUCTION on 2026-05-09
+    // factory-A1/A2/A3: 1000 each → 0 free on 2026-05-09. With sim date
+    // 2026-05-08 the window for ord-seed-013/016 is exactly this one day,
+    // so both PENDING orders FAIL → auto ConflictIssue creation.
+    // -----------------------------------------------------------------------
+    {
+      id: "asgn-cf4-04",
+      orderId: "ord-seed-cf4",
+      factoryId: "factory-A1",
+      productionDate: d("2026-05-09"),
+      assignedQuantity: 1000,
+      status: "IN_PRODUCTION",
+    },
+    {
+      id: "asgn-cf4-05",
+      orderId: "ord-seed-cf4",
+      factoryId: "factory-A2",
+      productionDate: d("2026-05-09"),
+      assignedQuantity: 1000,
+      status: "IN_PRODUCTION",
+    },
+    {
+      id: "asgn-cf4-06",
+      orderId: "ord-seed-cf4",
+      factoryId: "factory-A3",
+      productionDate: d("2026-05-09"),
+      assignedQuantity: 1000,
+      status: "IN_PRODUCTION",
+    },
+
+    // -----------------------------------------------------------------------
+    // Original Case 4 locks on 2026-05-17 (kept for the visualization demo:
+    // capacity bar should show factories fully utilized that day too)
+    // factory-A1: 900/1000 locked → 100 free
     // factory-A2: 1000/1000 locked → 0 free
     // factory-A3: 1000/1000 locked → 0 free
     // -----------------------------------------------------------------------
@@ -698,6 +731,10 @@ async function seedOrders(orders: SeedOrder[]) {
 async function seedAssignments(assignments: SeedAssignment[]) {
   console.log(`  Upserting ${assignments.length} assignments…`);
   for (const a of assignments) {
+    // Determine a dummy completion date (e.g., next day)
+    const dummyCompletionDate = new Date(a.productionDate);
+    dummyCompletionDate.setDate(dummyCompletionDate.getDate() + 1);
+
     await prisma.orderAssignment.upsert({
       where: { id: a.id },
       create: {
@@ -705,6 +742,7 @@ async function seedAssignments(assignments: SeedAssignment[]) {
         order: { connect: { id: a.orderId } },
         factory: { connect: { id: a.factoryId } },
         productionDate: a.productionDate,
+        completionDate: dummyCompletionDate,
         assignedQuantity: a.assignedQuantity,
         status: a.status,
       },
@@ -712,6 +750,7 @@ async function seedAssignments(assignments: SeedAssignment[]) {
         order: { connect: { id: a.orderId } },
         factory: { connect: { id: a.factoryId } },
         productionDate: a.productionDate,
+        completionDate: dummyCompletionDate,
         assignedQuantity: a.assignedQuantity,
         status: a.status,
       },
@@ -738,6 +777,72 @@ async function seedDailyCapacities(capacities: SeedDailyCapacity[]) {
   }
 }
 
+async function cleanupStaleState(seedAssignmentIds: Set<string>) {
+  console.log("  Cleaning stale state…");
+
+  // ConflictIssue tables are pure outputs of past failed runs — wipe fully so
+  // each demo run lands in a clean state and we can verify the auto-issue path
+  // produced exactly the expected number of rows.
+  const eventsDeleted = await prisma.conflictIssueEvent.deleteMany({});
+  const commentsDeleted = await prisma.conflictIssueComment.deleteMany({});
+  const issuesDeleted = await prisma.conflictIssue.deleteMany({});
+
+  // Drop any OrderAssignment row that wasn't created by this seed file. These
+  // are typically leftovers from schedule engine runs after a previous seed.
+  const assignmentsDeleted = await prisma.orderAssignment.deleteMany({
+    where: { id: { notIn: [...seedAssignmentIds] } },
+  });
+
+  // Rebuild DailyCapacity from scratch — buildDailyCapacities() recomputes the
+  // canonical set from the seed assignments and seedDailyCapacities() upserts
+  // them. Wiping first avoids stale rows / past unique-key anomalies.
+  const capacitiesDeleted = await prisma.dailyCapacity.deleteMany({});
+
+  console.log(
+    `  Deleted: events=${eventsDeleted.count}, comments=${commentsDeleted.count}, ` +
+      `issues=${issuesDeleted.count}, assignments=${assignmentsDeleted.count}, ` +
+      `capacities=${capacitiesDeleted.count}`,
+  );
+}
+
+async function seedSystemAndConfigs() {
+  console.log(`  Upserting SYSTEM user and AutoSchedulerConfigs…`);
+  const systemUser = await prisma.user.upsert({
+    where: { email: "system@wafer.com" },
+    update: {},
+    create: {
+      id: "system-user",
+      email: "system@wafer.com",
+      username: "AutoScheduler",
+      role: "SYSTEM",
+      group: "SYSTEM",
+      failedLoginCount: 0,
+    },
+  });
+  console.log(`  Upserted SYSTEM user: ${systemUser.email}`);
+
+  const defaultTypes = ["A", "B", "C"];
+  for (const type of defaultTypes) {
+    await prisma.autoSchedulerConfig.upsert({
+      where: { type },
+      update: {},
+      create: {
+        type,
+        isOperating: true,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GAP_FILLING",
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      },
+    });
+  }
+  console.log(
+    `  Upserted AutoSchedulerConfigs for types: ${defaultTypes.join(", ")}`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -751,32 +856,29 @@ async function main() {
   const assignments = buildAssignments();
   const capacities = buildDailyCapacities(assignments);
 
+  await cleanupStaleState(new Set(assignments.map((a) => a.id)));
   await seedUsers(users);
   await seedFactories(factories);
   await seedOrders(orders);
   await seedAssignments(assignments);
   await seedDailyCapacities(capacities);
+  await seedSystemAndConfigs();
 
   console.log("");
   console.log("✅ Seed complete.");
   console.log("");
-  console.log("Case 4 conflict demo (Type A):");
-  console.log("  factory-A1 2026-05-17: 900 IN_PRODUCTION → 100 free");
-  console.log("  factory-A2 2026-05-17: 1000 IN_PRODUCTION → 0 free");
-  console.log("  factory-A3 2026-05-17: 1000 IN_PRODUCTION → 0 free");
+  console.log("Case 4 FAILED-order demo (Type A, sim date 2026-05-08):");
   console.log(
-    "  ord-seed-013 Wafer-CF4-Base  APPROVED  qty=80  due 2026-05-17",
+    "  factory-A1/A2/A3 2026-05-09: 1000 each IN_PRODUCTION → 0 free",
   );
   console.log(
-    "  ord-seed-016 Wafer-CF4-New   PENDING   qty=30  due 2026-05-17",
-  );
-  console.log("");
-  console.log("PENDING orders (ready for schedule engine after approval):");
-  console.log(
-    "       - Wafer-CF4-Base (qty 80, higher priority) scheduled on A1 → 20 left",
+    "  ord-seed-013 Wafer-CF4-Base  PENDING  qty=80  due 2026-05-09  → will FAIL",
   );
   console.log(
-    "       - Wafer-CF4-New  (qty 30) cannot fit (window total 20 < 30) → CONFLICT",
+    "  ord-seed-016 Wafer-CF4-New   PENDING  qty=30  due 2026-05-09  → will FAIL",
+  );
+  console.log(
+    "  Running schedule on Type A produces 2 FAILED orders + 2 ConflictIssues.",
   );
   console.log("");
   console.log("Login examples:");

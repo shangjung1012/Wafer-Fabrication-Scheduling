@@ -116,6 +116,7 @@ function convertNewScheduleToPreview(args: {
   // Build TimelineItem[] from every assignment on every order in newSchedule.
   const timeline: TimelineItem[] = [];
   let synthAssignmentSeq = 0;
+  const previewedOrderIds = new Set(newSchedule.map((o) => o.id));
   for (const order of newSchedule) {
     for (const a of order.assignments ?? []) {
       if (!a.factoryId || !a.productionDate) continue;
@@ -131,6 +132,15 @@ function convertNewScheduleToPreview(args: {
         applicantId: order.applicantId ?? "",
         lastModifiedById: order.lastModifiedById ?? null,
       });
+    }
+  }
+
+  // When previewing a subset (targetOrderIds), the API only returns those orders.
+  // Carry over the baseline timeline items for everything else so existing
+  // scheduled orders stay visible on the preview.
+  for (const t of baseTimeline?.timeline ?? []) {
+    if (!previewedOrderIds.has(t.orderId)) {
+      timeline.push(t);
     }
   }
 
@@ -620,14 +630,56 @@ function PendingSidebar({
   today,
   onEditOrder,
   onCreate,
+  selectedOrderIds,
+  setSelectedOrderIds,
+  onPreviewSelected,
+  previewLoading = false,
 }: {
   orders: PendingOrderInfo[];
   today: string;
   onEditOrder: (order: OrderEditorValues) => void;
   onCreate?: () => void;
+  selectedOrderIds?: Set<string>;
+  setSelectedOrderIds?: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onPreviewSelected?: (targetOrderIds: string[]) => void;
+  previewLoading?: boolean;
 }) {
+  const multiSelectEnabled = Boolean(setSelectedOrderIds && onPreviewSelected);
+  const selected = selectedOrderIds ?? new Set<string>();
   const pending = orders.filter((o) => o.status === "PENDING");
-  const approved = orders.filter((o) => o.status === "APPROVED");
+  const pendingIds = pending.map((o) => o.id);
+  const allSelected =
+    pendingIds.length > 0 && pendingIds.every((id) => selected.has(id));
+  const someSelected =
+    !allSelected && pendingIds.some((id) => selected.has(id));
+  const selectedCount = selected.size;
+
+  const toggleOne = (id: string) => {
+    if (!setSelectedOrderIds) return;
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (!setSelectedOrderIds) return;
+    setSelectedOrderIds((prev) => {
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const id of pendingIds) next.delete(id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const id of pendingIds) next.add(id);
+      return next;
+    });
+  };
 
   const riskDot = (risk: OrderRisk) => {
     if (risk === "OVERDUE")
@@ -657,9 +709,24 @@ function PendingSidebar({
         className={`bg-white rounded-lg p-3 text-xs space-y-1 shadow-sm ${borderColor(o.risk)}`}
       >
         <div className="flex items-start justify-between gap-1">
-          <span className="font-medium text-gray-900 leading-tight">
-            {o.name}
-          </span>
+          {multiSelectEnabled ? (
+            <label className="flex items-start gap-1.5 cursor-pointer flex-1 min-w-0">
+              <input
+                type="checkbox"
+                checked={selected.has(o.id)}
+                onChange={() => toggleOne(o.id)}
+                className="mt-0.5 h-3 w-3 shrink-0 cursor-pointer accent-indigo-600"
+                aria-label={`Select order ${o.name}`}
+              />
+              <span className="font-medium text-gray-900 leading-tight">
+                {o.name}
+              </span>
+            </label>
+          ) : (
+            <span className="font-medium text-gray-900 leading-tight flex-1 min-w-0">
+              {o.name}
+            </span>
+          )}
           {riskDot(o.risk)}
         </div>
         <div className="flex justify-between text-gray-500">
@@ -725,6 +792,39 @@ function PendingSidebar({
           )}
         </div>
       </div>
+      {multiSelectEnabled && pending.length > 0 && (
+        <div className="px-3 py-2 border-b border-gray-200 bg-white space-y-2">
+          <button
+            type="button"
+            onClick={() => onPreviewSelected?.(Array.from(selected))}
+            disabled={selectedCount === 0 || previewLoading}
+            className={`w-full text-xs font-semibold px-2 py-1.5 rounded border transition-colors ${
+              selectedCount === 0 || previewLoading
+                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
+            }`}
+          >
+            {previewLoading
+              ? "Previewing…"
+              : selectedCount === 0
+                ? "Preview Selected"
+                : `🔍 Preview Selected (${selectedCount})`}
+          </button>
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someSelected;
+              }}
+              onChange={toggleAll}
+              className="h-3 w-3 cursor-pointer accent-indigo-600"
+              aria-label="Select all pending orders"
+            />
+            <span className="font-medium">Select all ({pending.length})</span>
+          </label>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {orders.length === 0 && (
           <p className="text-xs text-gray-400 text-center pt-4">
@@ -734,17 +834,9 @@ function PendingSidebar({
         {pending.length > 0 && (
           <div className="space-y-2">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Awaiting Approval
+              My Pending Orders
             </p>
             {renderOrders(pending)}
-          </div>
-        )}
-        {approved.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Awaiting Schedule
-            </p>
-            {renderOrders(approved)}
           </div>
         )}
       </div>
@@ -937,6 +1029,7 @@ function OrderFormModal({
 function GanttCell({
   cell,
   hasRescheduled,
+  hasNewlyPlaced,
   isMyOrder,
   isSales,
   editMode,
@@ -945,6 +1038,7 @@ function GanttCell({
 }: {
   cell: CellData;
   hasRescheduled: boolean;
+  hasNewlyPlaced: boolean;
   isMyOrder: boolean;
   isSales: boolean;
   editMode: boolean;
@@ -1010,7 +1104,7 @@ function GanttCell({
     <td className="border border-gray-100 w-[72px] min-w-[72px] h-14 p-0">
       <button
         onClick={onClick}
-        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""}`}
+        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""} ${hasNewlyPlaced && !isMyOrder ? "ring-2 ring-inset ring-emerald-500" : ""}`}
       >
         {/* Conflict marker */}
         {hasConflict && (
@@ -1028,6 +1122,15 @@ function GanttCell({
         {hasRescheduled && hasConflict && (
           <span className="absolute top-1 right-4 text-[9px] leading-none text-purple-500 font-bold">
             ↕
+          </span>
+        )}
+
+        {/* Newly placed (preview) marker */}
+        {hasNewlyPlaced && (
+          <span
+            className={`absolute ${hasRescheduled || hasConflict ? "top-1 right-7" : "top-1 right-1"} text-[10px] leading-none text-emerald-600 font-bold`}
+          >
+            +
           </span>
         )}
 
@@ -1073,18 +1176,6 @@ const DEFAULT_END = "2026-05-23";
 
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
-type NotifyStatus = "idle" | "sending" | "sent" | "error";
-
-type ConflictOrderInfo = {
-  id: string;
-  name: string;
-  quantity: number;
-  dueDate: string;
-  applicantEmail: string | null;
-  applicantUsername: string | null;
-  adminEmail: string | null;
-  adminUsername: string | null;
-};
 
 type AssignmentMove = {
   factoryId: string;
@@ -1109,12 +1200,6 @@ export default function SchedulePage() {
   } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>("idle");
-  const [scheduleConflicts, setScheduleConflicts] = useState<
-    ConflictOrderInfo[]
-  >([]);
-  const [emailsAutoSent, setEmailsAutoSent] = useState(false);
-  const [notifyStatus, setNotifyStatus] = useState<NotifyStatus>("idle");
-  const [notifiedCount, setNotifiedCount] = useState<number>(0);
 
   // Reschedule policy selector + preview state
   const [reschedulePolicy, setReschedulePolicy] = useState<
@@ -1126,6 +1211,11 @@ export default function SchedulePage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  // After a successful apply, if the preview contained FAILED orders, surface
+  // a persistent banner so the user knows ConflictIssues were auto-created.
+  const [applyConflictNotice, setApplyConflictNotice] = useState<{
+    failedCount: number;
+  } | null>(null);
 
   // Edit-mode state
   const [editMode, setEditMode] = useState(false);
@@ -1147,6 +1237,11 @@ export default function SchedulePage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorState | null>(null);
+
+  // T4A: multi-select pending orders for targeted preview.
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   // Fetch timeline data
   useEffect(() => {
@@ -1184,9 +1279,6 @@ export default function SchedulePage() {
     if (!productionType) return;
     const algorithm = algorithmOverride ?? reschedulePolicy;
     setScheduleStatus("running");
-    setScheduleConflicts([]);
-    setEmailsAutoSent(false);
-    setNotifyStatus("idle");
     try {
       const res = await fetch("/api/schedule/run", {
         method: "POST",
@@ -1219,25 +1311,29 @@ export default function SchedulePage() {
     }
   };
 
-  const handlePreviewSchedule = async () => {
+  const handlePreviewSchedule = async (targetOrderIds?: string[]) => {
     if (!productionType) return;
     setPreviewLoading(true);
     setPreviewError(null);
     try {
+      const baseConfig: Record<string, unknown> = {
+        reschedulePolicy,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+      if (targetOrderIds && targetOrderIds.length > 0) {
+        baseConfig.targetOrderIds = targetOrderIds;
+      }
       const res = await fetch("/api/schedule/preview", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: productionType,
-          config: {
-            reschedulePolicy,
-            frozenDays: 0,
-            productionDays: 1,
-            bufferDays: 0,
-            algorithm: "GREEDY_BEST_FIT",
-            splittable: true,
-          },
+          config: baseConfig,
         }),
       });
       if (!res.ok) {
@@ -1251,9 +1347,6 @@ export default function SchedulePage() {
         newSchedule = [],
         affectedOrders = [],
         failedOrderIds = [],
-        conflictOrderIds = [],
-        conflictOrders = [],
-        conflictWarnings = [],
       } = previewBody ?? {};
 
       // Adapter: convert hydrated newSchedule -> SchedulePreviewResponse view model.
@@ -1267,21 +1360,6 @@ export default function SchedulePage() {
 
       setPreviewId(nextPreviewId ?? null);
       setPreviewData(preview);
-      // T4D: conflict banner is driven by preview. Hydrated conflictOrders
-      // (with applicant + admin email) feed scheduleConflicts; Notify button
-      // POSTs them to /api/schedule/notify. Reset notify state so the amber
-      // (action-required) banner shows on each fresh preview.
-      if (Array.isArray(conflictOrders) && conflictOrders.length > 0) {
-        setScheduleConflicts(conflictOrders as ConflictOrderInfo[]);
-        setNotifyStatus("idle");
-        setEmailsAutoSent(false);
-      } else {
-        setScheduleConflicts([]);
-      }
-      // conflictOrderIds / conflictWarnings are intentionally unused here:
-      // the hydrated conflictOrders payload already covers the banner.
-      void conflictOrderIds;
-      void conflictWarnings;
     } catch {
       setPreviewError("Network error");
     } finally {
@@ -1329,11 +1407,17 @@ export default function SchedulePage() {
         return;
       }
 
-      // Success — clear preview state and refetch timeline.
+      // Success — capture FAILED count from the preview before clearing it,
+      // so we can surface a persistent notice pointing the user to issues.
+      const failedCount = previewData?.unscheduledOrders.length ?? 0;
       setPreviewData(null);
       setPreviewId(null);
+      setSelectedOrderIds(new Set());
       setScheduleStatus("success");
       setTimeout(() => setScheduleStatus("idle"), 4000);
+      if (failedCount > 0) {
+        setApplyConflictNotice({ failedCount });
+      }
       setLoading(true);
       setFetchError(null);
       setRefreshKey((k) => k + 1);
@@ -1468,45 +1552,6 @@ export default function SchedulePage() {
       }
       return next;
     });
-  };
-
-  // Manual notify handler — POSTs scheduleConflicts to /api/schedule/notify.
-  // Banner is preview-driven (T4D); run no longer emits conflicts.
-  const handleSendNotifications = async () => {
-    if (scheduleConflicts.length === 0) return;
-    setNotifyStatus("sending");
-    // Notify schema requires applicantEmail to be a string|null but at least
-    // one of applicant/admin email needs to exist for a real send. Drop
-    // entries with neither so we never POST orders the server would silently
-    // skip (and so a 100%-skip set doesn't read as "sent").
-    const payloadOrders = scheduleConflicts.filter(
-      (o) => o.applicantEmail || o.adminEmail,
-    );
-    if (payloadOrders.length === 0) {
-      setNotifyStatus("error");
-      return;
-    }
-    try {
-      const res = await fetch("/api/schedule/notify", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orders: payloadOrders }),
-      });
-      if (res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const failedCount = Array.isArray(body.failed) ? body.failed.length : 0;
-        const sentCount = Array.isArray(body.sent)
-          ? body.sent.length
-          : payloadOrders.length;
-        setNotifiedCount(sentCount);
-        setNotifyStatus(failedCount === 0 && sentCount > 0 ? "sent" : "error");
-      } else {
-        setNotifyStatus("error");
-      }
-    } catch {
-      setNotifyStatus("error");
-    }
   };
 
   const handleLogout = async () => {
@@ -1852,11 +1897,26 @@ export default function SchedulePage() {
     return map;
   }, [effective, myOrderIdSet]);
 
-  // Per-cell: does it contain any rescheduled order?
+  // Per-cell: does it contain any rescheduled order (was already scheduled,
+  // moved to a different date)?
   const rescheduledCells = useMemo(() => {
     const set = new Set<string>();
     for (const item of effective?.timeline ?? []) {
-      if (diffByOrderId.has(item.orderId)) {
+      const d = diffByOrderId.get(item.orderId);
+      if (d && d.before !== "") {
+        set.add(`${item.factoryId}__${item.productionDate}`);
+      }
+    }
+    return set;
+  }, [effective, diffByOrderId]);
+
+  // Per-cell: does it contain any newly placed order (had no previous schedule,
+  // first placed by this preview)? Used for the preview "newly added" highlight.
+  const newlyPlacedCells = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of effective?.timeline ?? []) {
+      const d = diffByOrderId.get(item.orderId);
+      if (d && d.before === "") {
         set.add(`${item.factoryId}__${item.productionDate}`);
       }
     }
@@ -2020,7 +2080,7 @@ export default function SchedulePage() {
             </label>
 
             <button
-              onClick={handlePreviewSchedule}
+              onClick={() => handlePreviewSchedule()}
               disabled={
                 previewLoading || editMode || scheduleStatus === "running"
               }
@@ -2223,6 +2283,12 @@ export default function SchedulePage() {
                 .length
             }
             .
+            {selectedOrderIds.size > 0 && (
+              <span className="ml-2 font-medium">
+                Targeted {selectedOrderIds.size} order
+                {selectedOrderIds.size === 1 ? "" : "s"}.
+              </span>
+            )}
           </span>
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -2288,95 +2354,36 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* Scheduling conflict notification panel */}
-      {scheduleConflicts.length > 0 && (
-        <div
-          className={`flex-none px-6 py-3 border-b text-xs ${
-            emailsAutoSent || notifyStatus === "sent"
-              ? "bg-green-50 border-green-200"
-              : "bg-amber-50 border-amber-200"
-          }`}
-        >
-          {emailsAutoSent || notifyStatus === "sent" ? (
-            <div className="flex items-center justify-between">
-              <span className="text-green-700 font-medium">
-                {`已寄出 ${
-                  notifyStatus === "sent"
-                    ? notifiedCount || scheduleConflicts.length
-                    : scheduleConflicts.length
-                } 封通知 (Notification emails sent for ${
-                  notifyStatus === "sent"
-                    ? notifiedCount || scheduleConflicts.length
-                    : scheduleConflicts.length
-                } order(s) that could not be scheduled.)`}
-              </span>
-              <button
-                type="button"
-                onClick={() => setScheduleConflicts([])}
-                className="text-green-400 hover:text-green-600 shrink-0"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-amber-800 font-semibold">
-                    {scheduleConflicts.length} order(s) could not be scheduled:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleSendNotifications}
-                    disabled={
-                      notifyStatus === "sending" ||
-                      scheduleConflicts.length === 0
-                    }
-                    className={`px-2.5 py-1 rounded border font-medium transition-colors ${
-                      notifyStatus === "sending" ||
-                      scheduleConflicts.length === 0
-                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                        : "bg-amber-700 text-white border-amber-700 hover:bg-amber-800"
-                    }`}
-                  >
-                    {notifyStatus === "sending" ? "Sending…" : "Notify"}
-                  </button>
-                  {notifyStatus === "error" && (
-                    <span className="text-red-600 font-medium">
-                      Some emails failed — check server logs.
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setScheduleConflicts([])}
-                  className="text-amber-400 hover:text-amber-600 shrink-0"
-                >
-                  ✕
-                </button>
-              </div>
-              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-amber-700">
-                {scheduleConflicts.map((o) => (
-                  <li key={o.id}>
-                    <span className="font-medium">{o.name}</span>
-                    {" — qty "}
-                    <span>{o.quantity}</span>
-                    {", due "}
-                    <span>{o.dueDate}</span>
-                    {o.applicantEmail && (
-                      <>
-                        {" ("}
-                        <span className="text-amber-600">
-                          {o.applicantEmail}
-                        </span>
-                        {")"}
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+      {/* Preview-driven FAILED hint — auto-issue + email fires on apply */}
+      {previewData && previewData.unscheduledOrders.length > 0 && (
+        <div className="flex-none px-6 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
+          {previewData.unscheduledOrders.length} order(s) cannot be scheduled —
+          applying will automatically open conflict issues.
+        </div>
+      )}
+
+      {/* Post-apply conflict notice — persistent until dismissed */}
+      {applyConflictNotice && (
+        <div className="flex-none px-6 py-2 bg-amber-100 border-b border-amber-300 flex items-center justify-between gap-3 text-xs text-amber-900">
+          <span>
+            ⚠️ 排程已套用,但 {applyConflictNotice.failedCount} 筆訂單無法排入,
+            已自動建立 ConflictIssue。請至{" "}
+            <Link
+              href="/conflict-issues"
+              className="font-semibold underline hover:text-amber-700"
+            >
+              issue 介面
+            </Link>{" "}
+            查看並協商解決方案。
+          </span>
+          <button
+            type="button"
+            onClick={() => setApplyConflictNotice(null)}
+            className="font-semibold px-2 py-0.5 rounded border border-amber-300 bg-white hover:bg-amber-50"
+            aria-label="Dismiss"
+          >
+            知道了
+          </button>
         </div>
       )}
 
@@ -2407,6 +2414,10 @@ export default function SchedulePage() {
           Rescheduled
         </span>
         <span className="flex items-center gap-1.5">
+          <span className="text-[10px] font-bold text-emerald-600">+</span>{" "}
+          Newly placed
+        </span>
+        <span className="flex items-center gap-1.5">
           <span className="text-[10px] font-bold text-gray-500">×N</span> Order
           count
         </span>
@@ -2414,13 +2425,27 @@ export default function SchedulePage() {
 
       {/* Gantt body */}
       <div className="flex-1 overflow-hidden flex">
-        {/* Pending sidebar (SALES only) */}
+        {/* Pending sidebar — SALES: read-only listing of their own orders */}
         {isSales && data?.salesContext && !loading && !fetchError && (
           <PendingSidebar
             orders={data.salesContext.pendingOrders}
             today={data.today}
             onEditOrder={(order) => setEditOrder(order)}
             onCreate={() => setCreateOpen(true)}
+          />
+        )}
+        {/* Pending sidebar — ADMIN/SUPERADMIN: multi-select for targeted preview (T4A-C / T8) */}
+        {!isSales && data?.adminContext && !loading && !fetchError && (
+          <PendingSidebar
+            orders={data.adminContext.pendingOrders}
+            today={data.today}
+            onEditOrder={(order) => setEditOrder(order)}
+            selectedOrderIds={selectedOrderIds}
+            setSelectedOrderIds={setSelectedOrderIds}
+            onPreviewSelected={(targetOrderIds) =>
+              handlePreviewSchedule(targetOrderIds)
+            }
+            previewLoading={previewLoading}
           />
         )}
 
@@ -2523,6 +2548,7 @@ export default function SchedulePage() {
                                 key={key}
                                 cell={cell}
                                 hasRescheduled={rescheduledCells.has(key)}
+                                hasNewlyPlaced={newlyPlacedCells.has(key)}
                                 isMyOrder={isMyOrder}
                                 isSales={isSales}
                                 editMode={editMode}

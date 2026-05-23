@@ -124,7 +124,6 @@ type OrderRow = {
 
 const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   PENDING: { bg: "#fef9c3", color: "#854d0e" },
-  APPROVED: { bg: "#dbeafe", color: "#1e40af" },
   SCHEDULED: { bg: "#e0f2fe", color: "#075985" },
   IN_PRODUCTION: { bg: "#dcfce7", color: "#166534" },
   COMPLETED: { bg: "#f3f4f6", color: "#374151" },
@@ -337,14 +336,12 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 // ---------------------------------------------------------------------------
 // Role-access matrix
 //
-// SALES:      List Orders, Get Order, Create Order, Update Order (no status),
-//             List Requests, Create Request, Update Request
+// SALES:      List Orders, Get Order, Create Order, Update Order (no status)
 //
 // ADMIN:      List Orders, Get Order, Update Order (with status), Delete Orders,
-//             Import CSV, List Requests, Approve Request
+//             Import CSV
 //
-// SUPERADMIN: List Orders, Get Order, Import CSV,
-//             List Requests, Approve Request
+// SUPERADMIN: List Orders, Get Order, Import CSV
 // ---------------------------------------------------------------------------
 
 export default function OrdersPage() {
@@ -471,80 +468,6 @@ export default function OrdersPage() {
     setImportResult(await res.json());
     setImportStatus(`${res.status}`);
   }, [csvFile]);
-
-  // ---- List Requests ----
-  const [listReqResult, setListReqResult] = useState<unknown>(null);
-  const [listReqStatus, setListReqStatus] = useState("");
-
-  const doListRequests = useCallback(async () => {
-    const res = await apiFetch("/api/requests");
-    setListReqResult(await res.json());
-    setListReqStatus(`${res.status}`);
-  }, []);
-
-  // ---- Create Request (SALES) ----
-  const [reqOrderId, setReqOrderId] = useState("");
-  const [reqMessage, setReqMessage] = useState("");
-  const [reqPayload, setReqPayload] = useState("{}");
-  const [createReqResult, setCreateReqResult] = useState<unknown>(null);
-  const [createReqStatus, setCreateReqStatus] = useState("");
-
-  const doCreateRequest = useCallback(async () => {
-    let payload: unknown;
-    try {
-      payload = JSON.parse(reqPayload);
-    } catch {
-      payload = {};
-    }
-    const res = await apiFetch("/api/requests", {
-      method: "POST",
-      body: JSON.stringify({
-        orderId: reqOrderId,
-        message: reqMessage,
-        payload,
-      }),
-    });
-    setCreateReqResult(await res.json());
-    setCreateReqStatus(`${res.status}`);
-  }, [reqOrderId, reqMessage, reqPayload]);
-
-  // ---- Update Request (SALES) ----
-  const [updateReqId, setUpdateReqId] = useState("");
-  const [updateReqMessage, setUpdateReqMessage] = useState("");
-  const [updateReqPayload, setUpdateReqPayload] = useState("");
-  const [updateReqResult, setUpdateReqResult] = useState<unknown>(null);
-  const [updateReqStatus, setUpdateReqStatus] = useState("");
-
-  const doUpdateRequest = useCallback(async () => {
-    const body: Record<string, unknown> = {};
-    if (updateReqMessage) body.message = updateReqMessage;
-    if (updateReqPayload.trim()) {
-      try {
-        body.payload = JSON.parse(updateReqPayload);
-      } catch {
-        body.payload = updateReqPayload;
-      }
-    }
-    const res = await apiFetch(`/api/requests/${updateReqId}`, {
-      method: "PUT",
-      body: JSON.stringify(body),
-    });
-    setUpdateReqResult(await res.json());
-    setUpdateReqStatus(`${res.status}`);
-  }, [updateReqId, updateReqMessage, updateReqPayload]);
-
-  // ---- Approve Request (ADMIN + SUPERADMIN) ----
-  const [approveReqId, setApproveReqId] = useState("");
-  const [approveResult, setApproveResult] = useState<unknown>(null);
-  const [approveStatus, setApproveStatus] = useState("");
-
-  const doApprove = useCallback(async () => {
-    const res = await apiFetch(`/api/requests/${approveReqId}/approve`, {
-      method: "POST",
-    });
-    setApproveResult(await res.json());
-    setApproveStatus(`${res.status}`);
-  }, [approveReqId]);
 
   const handleLogout = useCallback(async () => {
     await logoutClientAuthSession();
@@ -686,19 +609,19 @@ export default function OrdersPage() {
         {isSales && (
           <span>
             As <strong>SALES</strong>: view orders, create &amp; edit your own
-            orders, submit and edit change requests.
+            orders.
           </span>
         )}
         {isAdmin && (
           <span>
             As <strong>ADMIN</strong>: view orders in your group, update order
-            status, delete orders, import CSV, approve requests.
+            status, delete orders, import CSV.
           </span>
         )}
         {isSuperAdmin && (
           <span>
             As <strong>SUPERADMIN</strong>: view all orders in your production
-            type, import CSV, approve requests.
+            type, import CSV.
           </span>
         )}
       </div>
@@ -828,7 +751,6 @@ export default function OrdersPage() {
               >
                 <option value="">(leave unchanged)</option>
                 <option value="PENDING">PENDING</option>
-                <option value="APPROVED">APPROVED</option>
                 <option value="SCHEDULED">SCHEDULED</option>
                 <option value="IN_PRODUCTION">IN_PRODUCTION</option>
                 <option value="COMPLETED">COMPLETED</option>
@@ -896,145 +818,6 @@ export default function OrdersPage() {
             </span>
           )}
           <Result data={importResult} />
-        </Section>
-      )}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Requests section                                                    */}
-      {/* ------------------------------------------------------------------ */}
-      <SectionHeading>Requests</SectionHeading>
-
-      {/* 7. List Requests — all roles */}
-      <Section title="List Requests — GET /api/requests">
-        <Btn onClick={doListRequests}>Send</Btn>
-        {listReqStatus && (
-          <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
-            HTTP {listReqStatus}
-          </span>
-        )}
-        <Result data={listReqResult} />
-      </Section>
-
-      {/* 8. Create Request — SALES only */}
-      {isSales && (
-        <Section title="Create Request — POST /api/requests" badge="SALES">
-          <Input
-            label="Order ID"
-            value={reqOrderId}
-            onChange={(e) => setReqOrderId(e.target.value)}
-            placeholder="order id"
-          />
-          <Input
-            label="Message"
-            value={reqMessage}
-            onChange={(e) => setReqMessage(e.target.value)}
-            placeholder="reason for request"
-          />
-          <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>
-            Payload (JSON — fields to change on the order)
-            <textarea
-              value={reqPayload}
-              onChange={(e) => setReqPayload(e.target.value)}
-              rows={3}
-              style={{
-                display: "block",
-                width: "100%",
-                padding: "4px 8px",
-                marginTop: 2,
-                border: "1px solid #cbd5e1",
-                borderRadius: 4,
-                fontSize: 12,
-                fontFamily: "monospace",
-                boxSizing: "border-box",
-              }}
-            />
-          </label>
-          <Btn onClick={doCreateRequest}>Send</Btn>
-          {createReqStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
-              HTTP {createReqStatus}
-            </span>
-          )}
-          <Result data={createReqResult} />
-        </Section>
-      )}
-
-      {/* 9. Update Request — SALES only */}
-      {isSales && (
-        <Section title="Update Request — PUT /api/requests/:id" badge="SALES">
-          <Input
-            label="Request ID"
-            value={updateReqId}
-            onChange={(e) => setUpdateReqId(e.target.value)}
-            placeholder="request id"
-          />
-          <Input
-            label="New Message"
-            value={updateReqMessage}
-            onChange={(e) => setUpdateReqMessage(e.target.value)}
-            placeholder="updated message (optional)"
-          />
-          <label
-            style={{
-              display: "block",
-              marginBottom: 6,
-              fontSize: 13,
-              color: "#334155",
-              fontWeight: 650,
-            }}
-          >
-            Payload (JSON, optional)
-            <textarea
-              value={updateReqPayload}
-              onChange={(e) => setUpdateReqPayload(e.target.value)}
-              placeholder='{"field": "value"}'
-              rows={3}
-              style={{
-                display: "block",
-                width: "100%",
-                padding: "4px 8px",
-                marginTop: 2,
-                border: "1px solid #cbd5e1",
-                borderRadius: 4,
-                fontSize: 12,
-                fontFamily: "monospace",
-                boxSizing: "border-box",
-                resize: "vertical",
-              }}
-            />
-          </label>
-          <Btn onClick={doUpdateRequest}>Send</Btn>
-          {updateReqStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
-              HTTP {updateReqStatus}
-            </span>
-          )}
-          <Result data={updateReqResult} />
-        </Section>
-      )}
-
-      {/* 10. Approve Request — ADMIN + SUPERADMIN */}
-      {isAdminOrSuper && (
-        <Section
-          title="Approve Request — POST /api/requests/:id/approve"
-          badge={isAdmin ? "ADMIN" : "SUPERADMIN"}
-        >
-          <p style={{ fontSize: 12, color: "#475569", margin: "0 0 8px" }}>
-            Applies the request&apos;s payload fields to the linked order.
-          </p>
-          <Input
-            label="Request ID"
-            value={approveReqId}
-            onChange={(e) => setApproveReqId(e.target.value)}
-            placeholder="request id"
-          />
-          <Btn onClick={doApprove}>Send</Btn>
-          {approveStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
-              HTTP {approveStatus}
-            </span>
-          )}
-          <Result data={approveResult} />
         </Section>
       )}
     </div>

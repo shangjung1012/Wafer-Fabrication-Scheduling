@@ -11,6 +11,7 @@ describe("requireAuth", () => {
   });
 
   afterEach(() => {
+    // @ts-expect-error Resetting NODE_ENV for tests
     process.env.NODE_ENV = originalNodeEnv;
     delete process.env.DEV_STATIC_TOKEN;
   });
@@ -140,6 +141,7 @@ describe("requireAuth", () => {
   });
 
   it("rejects old development dev role tokens", async () => {
+    // @ts-expect-error Resetting NODE_ENV for tests
     process.env.NODE_ENV = "development";
     const request = new Request("http://localhost/api/users", {
       headers: {
@@ -155,6 +157,7 @@ describe("requireAuth", () => {
   });
 
   it("rejects old static dev tokens", async () => {
+    // @ts-expect-error Resetting NODE_ENV for tests
     process.env.NODE_ENV = "development";
     process.env.DEV_STATIC_TOKEN = "dev-superadmin-static-token";
     const request = new Request("http://localhost/api/users", {

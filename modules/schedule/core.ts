@@ -19,6 +19,7 @@ import {
   updateDailyCapacityById,
 } from "@/infra/db/capacity-repository";
 import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
+import { withScheduleLock } from "@/infra/redis/schedule-store";
 
 export async function prepareSchedulingData(
   type: string,
@@ -87,11 +88,12 @@ export async function prepareSchedulingData(
   return { orders, factories, capacities };
 }
 
-export async function applyScheduleTransaction(
+export async function _applyScheduleTransaction(
   type: string,
   config: SchedulingConfig,
   strategyResult: StrategyResult,
-) {
+  operatorId: string = "system-user",
+): Promise<{ failedIds: string[] }> {
   const scheduledIds = strategyResult.processedOrders
     .filter((o) => o.status === OrderStatus.SCHEDULED)
     .map((o) => o.id);
@@ -124,7 +126,7 @@ export async function applyScheduleTransaction(
       }
     }
 
-    await applyScheduleOrdersUpdate(db, scheduledIds, failedIds);
+    await applyScheduleOrdersUpdate(db, scheduledIds, failedIds, operatorId);
 
     await createDailyCapacities(db, strategyResult.newCapacities);
 
@@ -133,5 +135,18 @@ export async function applyScheduleTransaction(
     }
 
     await createAssignments(db, strategyResult.newAssignments);
+  });
+
+  return { failedIds };
+}
+
+export async function applyScheduleTransaction(
+  type: string,
+  config: SchedulingConfig,
+  strategyResult: StrategyResult,
+  operatorId: string = "system-user",
+): Promise<{ failedIds: string[] }> {
+  return withScheduleLock(type, async () => {
+    return _applyScheduleTransaction(type, config, strategyResult, operatorId);
   });
 }

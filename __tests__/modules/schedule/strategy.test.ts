@@ -743,3 +743,49 @@ describe("Greedy Best-Fit Strategy", () => {
     );
   });
 });
+
+describe("greedyBestFitStrategy - completionDate", () => {
+  it("should calculate completionDate as productionDate + productionDays", () => {
+    const orders: SchedulingOrderInput[] = [
+      {
+        id: "o1",
+        status: OrderStatus.PENDING,
+        dueDate: new Date("2026-06-01"),
+        quantity: 100,
+        createdAt: new Date(),
+        isFixed: false,
+        isPrioritized: false,
+        assignments: [],
+      },
+    ];
+    const factories: SchedulingFactoryInput[] = [
+      { id: "f1", maxCapacity: 1000 },
+    ];
+    const config: SchedulingConfig = {
+      startDate: new Date("2026-05-01"),
+      frozenDays: 0,
+      productionDays: 3,
+      bufferDays: 0,
+      reschedulePolicy: "GAP_FILLING",
+      algorithm: "GREEDY_BEST_FIT",
+      splittable: true,
+    };
+
+    const result = greedyBestFitStrategy.execute(
+      orders,
+      factories,
+      [],
+      config,
+      new Date("2026-05-01"),
+    );
+
+    expect(result.newAssignments.length).toBeGreaterThan(0);
+    const assignment = result.newAssignments[0];
+    const expectedCompletion = new Date(assignment.productionDate!);
+    expectedCompletion.setDate(expectedCompletion.getDate() + 3);
+
+    expect(assignment.completionDate!.getTime()).toBe(
+      expectedCompletion.getTime(),
+    );
+  });
+});

@@ -7,6 +7,7 @@ export interface OrderAssignmentDraft {
   orderId: string;
   factoryId: string;
   productionDate: Date;
+  completionDate: Date;
   assignedQuantity: number;
   status: typeof AssignmentStatus.SCHEDULED;
 }
@@ -57,7 +58,6 @@ export interface StrategyResult {
   newAssignments: OrderAssignmentDraft[];
   updatedCapacities: ExistingCapacityDraft[];
   newCapacities: CapacityDraft[];
-  conflictOrderIds: string[];
 }
 
 export interface IScheduleStrategy {
@@ -98,7 +98,7 @@ function toDateString(d: Date | string): string {
 // Used to detect "hard conflicts" — orders whose remaining quantity exceeds
 // the total schedulable capacity within their due-date window, meaning no
 // future rerun can resolve them.
-function computeTotalAvailableCapacity(
+export function computeTotalAvailableCapacity(
   windowStart: Date,
   windowEnd: Date,
   factories: SchedulingFactoryInput[],
@@ -141,7 +141,6 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
       newAssignments: [],
       updatedCapacities: [],
       newCapacities: [],
-      conflictOrderIds: [],
     };
 
     // 1. Separate immutable and mutable orders
@@ -317,10 +316,16 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
                 wasCreated: false,
               });
 
+              const completionDate = new Date(currentIterDate);
+              completionDate.setDate(
+                completionDate.getDate() + config.productionDays,
+              );
+
               virtualAssignments.push({
                 orderId: order.id,
                 factoryId: cap.factoryId,
                 productionDate: new Date(currentIterDate),
+                completionDate: completionDate,
                 assignedQuantity: allocated,
                 status: AssignmentStatus.SCHEDULED,
               });
@@ -375,10 +380,16 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
                   wasCreated: false,
                 });
 
+                const completionDate = new Date(currentIterDate);
+                completionDate.setDate(
+                  completionDate.getDate() + config.productionDays,
+                );
+
                 virtualAssignments.push({
                   orderId: order.id,
                   factoryId: cap.factoryId,
                   productionDate: new Date(currentIterDate),
+                  completionDate: completionDate,
                   assignedQuantity: remainingQty,
                   status: AssignmentStatus.SCHEDULED,
                 });
@@ -421,22 +432,6 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
 
         // Mutable order that failed becomes FAILED
         result.processedOrders.push({ ...order, status: OrderStatus.FAILED });
-
-        // Detect "hard conflict": even with all factories' total available
-        // capacity in the entire [windowStart, windowEnd] window, the order's
-        // remaining quantity still cannot be covered. Such orders cannot be
-        // resolved by any future rerun and are reported separately from FAILED.
-        if (startingRemainingQty > 0) {
-          const totalAvailable = computeTotalAvailableCapacity(
-            windowStart,
-            windowEnd,
-            factories,
-            capacityMap,
-          );
-          if (totalAvailable < startingRemainingQty) {
-            result.conflictOrderIds.push(order.id);
-          }
-        }
       }
     }
 
