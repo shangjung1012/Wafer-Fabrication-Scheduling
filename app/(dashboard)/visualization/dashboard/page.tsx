@@ -2,15 +2,17 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { addDays, format, parseISO } from "date-fns";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { DashboardSummary } from "@/components/dashboard/DashboardSummary";
-import { AdminPendingSection } from "@/components/dashboard/AdminPendingSection";
+import { AdminPendingSection } from "../../../../components/dashboard/AdminPendingSection";
 import { SalesOrdersSection } from "@/components/dashboard/SalesOrdersSection";
 import { MessagesSection } from "@/components/dashboard/MessagesSection";
 
 // Types
 type TimelineResponse = {
+  today?: string;
   conflicts: {
     factoryId: string;
     date: string;
@@ -22,10 +24,13 @@ type TimelineResponse = {
     id: string;
     label: string;
     productionType: string;
+    maxCapacity?: number;
   }[];
   timeline?: {
     orderId: string;
+    factoryId: string;
     productionDate: string;
+    assignedQuantity: number;
   }[];
 };
 
@@ -42,7 +47,21 @@ type OrderRow = {
   lastModifiedById: string | null;
 };
 
-type RequestInfo = OrderRow;
+type FactoryDailyCell = {
+  date: string;
+  orderCount: number;
+  totalQuantity: number;
+  percent: number;
+};
+
+type FactoryMatrixRow = {
+  factoryId: string;
+  label: string;
+  productionType: string;
+  totalQuantity: number;
+  totalOrders: number;
+  cells: FactoryDailyCell[];
+};
 
 type OrderEditorValues = {
   orderId?: string;
@@ -228,7 +247,6 @@ export default function DashboardPage() {
     null,
   );
   const [orders, setOrders] = useState<OrderRow[]>([]);
-  const [pendingRequests, setPendingRequests] = useState<RequestInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorValues | null>(null);
@@ -261,9 +279,6 @@ export default function DashboardPage() {
         if (cancelled) return;
         setOrders(ordersRes);
         setTimelineData(timelineRes);
-        setPendingRequests(
-          ordersRes.filter((req: OrderRow) => req.status === "PENDING"),
-        );
         setLoading(false);
       })
       .catch((err) => {
@@ -304,6 +319,85 @@ export default function DashboardPage() {
     }
     return counts;
   }, [orders]);
+
+  const dateColumns = useMemo(() => {
+    const today = timelineData?.today ?? format(new Date(), "yyyy-MM-dd");
+    return Array.from({ length: 7 }, (_, index) =>
+      format(addDays(parseISO(today), index), "yyyy-MM-dd"),
+    );
+  }, [timelineData]);
+
+  const factoryMatrix = useMemo(() => {
+    const factories = timelineData?.factories ?? [];
+    const dateSet = new Set(dateColumns);
+
+    const rows = new Map<string, FactoryMatrixRow>(
+      factories.map((factory) => [
+        factory.id,
+        {
+          factoryId: factory.id,
+          label: factory.label,
+          productionType: factory.productionType,
+          totalQuantity: 0,
+          totalOrders: 0,
+          cells: dateColumns.map((date) => ({
+            date,
+            orderCount: 0,
+            totalQuantity: 0,
+            percent: 0,
+          })),
+        },
+      ]),
+    );
+
+    const orderIdsByFactory = new Map<string, Set<string>>();
+    const orderIdsByFactoryAndDate = new Map<string, Set<string>>();
+
+    for (const item of timelineData?.timeline ?? []) {
+      if (!dateSet.has(item.productionDate)) continue;
+
+      const row = rows.get(item.factoryId);
+      if (!row) continue;
+
+      const cell = row.cells.find(
+        (entry) => entry.date === item.productionDate,
+      );
+      if (!cell) continue;
+
+      row.totalQuantity += item.assignedQuantity;
+      const rowOrderIds =
+        orderIdsByFactory.get(item.factoryId) ?? new Set<string>();
+      rowOrderIds.add(item.orderId);
+      orderIdsByFactory.set(item.factoryId, rowOrderIds);
+
+      const cellKey = `${item.factoryId}__${item.productionDate}`;
+      const cellOrderIds =
+        orderIdsByFactoryAndDate.get(cellKey) ?? new Set<string>();
+      cellOrderIds.add(item.orderId);
+      orderIdsByFactoryAndDate.set(cellKey, cellOrderIds);
+
+      cell.totalQuantity += item.assignedQuantity;
+    }
+
+    for (const row of rows.values()) {
+      row.totalOrders = orderIdsByFactory.get(row.factoryId)?.size ?? 0;
+      for (const cell of row.cells) {
+        const cellKey = `${row.factoryId}__${cell.date}`;
+        cell.orderCount = orderIdsByFactoryAndDate.get(cellKey)?.size ?? 0;
+        cell.percent =
+          row.totalQuantity > 0
+            ? (cell.totalQuantity / row.totalQuantity) * 100
+            : 0;
+      }
+    }
+
+    return Array.from(rows.values()).sort((a, b) => {
+      if (b.totalQuantity !== a.totalQuantity) {
+        return b.totalQuantity - a.totalQuantity;
+      }
+      return a.label.localeCompare(b.label);
+    });
+  }, [timelineData, dateColumns]);
 
   const handleCreateOrder = async (values: OrderEditorValues) => {
     const name = values.name.trim();
@@ -401,8 +495,13 @@ export default function DashboardPage() {
       />
     ) : (
       <AdminPendingSection
-        requests={pendingRequests}
-        onRequestsChange={setPendingRequests}
+        rows={factoryMatrix}
+        dateColumns={dateColumns}
+        dateRangeLabel={
+          timelineData
+            ? `${timelineData.today ?? format(new Date(), "yyyy-MM-dd")} ~ ${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), 6), "yyyy-MM-dd")}`
+            : ""
+        }
       />
     );
 
@@ -415,7 +514,7 @@ export default function DashboardPage() {
         subtitle={
           isSales && !isAdmin
             ? "Manage your orders and approvals"
-            : "Review pending orders and production status"
+            : "Review next 7 days factory load and production status"
         }
         topSection={
           <DashboardSummary conflicts={conflicts} statusCounts={statusCounts} />
