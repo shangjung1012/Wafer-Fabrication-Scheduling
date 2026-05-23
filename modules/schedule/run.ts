@@ -19,11 +19,8 @@ export async function runSchedule(
   return withScheduleLock(type, async () => {
     const actualDate = currentDate ?? (await getTime());
 
-    const { orders, factories, capacities } = await prepareSchedulingData(
-      type,
-      config,
-      actualDate,
-    );
+    const { orders, factories, capacities, dbCapacities } =
+      await prepareSchedulingData(type, config, actualDate);
 
     const strategyResult = greedyBestFitStrategy.execute(
       orders,
@@ -31,6 +28,7 @@ export async function runSchedule(
       capacities,
       config,
       actualDate,
+      dbCapacities,
     );
 
     return _applyScheduleTransaction(type, config, strategyResult, operatorId);

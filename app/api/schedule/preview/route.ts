@@ -68,13 +68,6 @@ export async function POST(request: Request) {
     const { type, config } = parsed.data;
 
     const currentDate = await getTime();
-    currentDate.setHours(0, 0, 0, 0);
-
-    if (!config.startDate) {
-      const defaultStartDate = new Date(currentDate);
-      defaultStartDate.setDate(defaultStartDate.getDate() + 1);
-      config.startDate = defaultStartDate;
-    }
 
     const strategyResult = await previewSchedule(
       type,

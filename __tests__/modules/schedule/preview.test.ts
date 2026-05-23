@@ -79,6 +79,7 @@ describe("Schedule Engine - Preview", () => {
       mockData.capacities,
       dummyConfig,
       currentDate,
+      undefined,
     );
     expect(result).toBe(mockStrategyResult);
   });

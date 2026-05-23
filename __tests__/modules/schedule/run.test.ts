@@ -86,6 +86,7 @@ describe("Schedule Engine - Run", () => {
       mockData.capacities,
       dummyConfig,
       currentDate,
+      undefined,
     );
     expect(core._applyScheduleTransaction).toHaveBeenCalledWith(
       "Type A",

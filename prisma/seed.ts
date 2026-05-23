@@ -8,6 +8,8 @@
  * All factories forced to 10000 max capacity.
  */
 
+process.env.TZ = "UTC";
+
 import "dotenv/config";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -351,7 +353,7 @@ async function seedAssignments(assignments: SeedAssignment[]) {
   console.log(`  Upserting ${assignments.length} assignments…`);
   for (const a of assignments) {
     const dummyCompletionDate = new Date(a.productionDate);
-    dummyCompletionDate.setDate(dummyCompletionDate.getDate() + 1);
+    dummyCompletionDate.setUTCDate(dummyCompletionDate.getUTCDate() + 1);
 
     await prisma.orderAssignment.upsert({
       where: { id: a.id },

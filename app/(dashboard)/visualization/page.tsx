@@ -45,7 +45,7 @@ function toDateStr(d: Date) {
 }
 
 function dateInputToIso(value: string) {
-  return new Date(`${value}T00:00:00`).toISOString();
+  return `${value}T00:00:00.000Z`;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,14 +94,15 @@ function convertNewScheduleToPreview(args: {
 
   const toIsoDate = (d: string | Date | undefined): string => {
     if (!d) return "";
-    if (d instanceof Date) return format(d, "yyyy-MM-dd");
-    // Accept both ISO and already-yyyy-MM-dd strings.
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-    try {
-      return format(parseISO(d), "yyyy-MM-dd");
-    } catch {
-      return String(d).slice(0, 10);
+    if (typeof d === "string") {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      if (d.includes("T")) return d.split("T")[0];
+      return d.slice(0, 10);
     }
+    if (d instanceof Date) {
+      return format(d, "yyyy-MM-dd");
+    }
+    return String(d).slice(0, 10);
   };
 
   // Build TimelineItem[] from every assignment on every order in newSchedule.
@@ -1268,16 +1269,25 @@ export default function SchedulePage() {
   // Run schedule handler (applies the selected algorithm directly)
   const handleRunSchedule = async (algorithmOverride?: string) => {
     if (!productionType) return;
-    const algorithm = algorithmOverride ?? reschedulePolicy;
+    const policy = algorithmOverride ?? reschedulePolicy;
     setScheduleStatus("running");
     try {
+      const baseConfig: Record<string, unknown> = {
+        reschedulePolicy: policy,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+
       const res = await fetch("/api/schedule/run", {
         method: "POST",
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ type: productionType, algorithm }),
+        body: JSON.stringify({ type: productionType, config: baseConfig }),
       });
       if (res.status === 409) {
         setScheduleStatus("conflict");
@@ -1678,7 +1688,7 @@ export default function SchedulePage() {
       body: JSON.stringify({
         name: values.name,
         type: values.type,
-        dueDate: new Date(values.dueDate).toISOString(),
+        dueDate: `${values.dueDate}T00:00:00.000Z`,
         quantity,
       }),
     });
@@ -1739,7 +1749,7 @@ export default function SchedulePage() {
       .then((body) => {
         setSimMode(!!body.isSimulationMode);
         if (body.simulationDate) {
-          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+          setSimDate(body.simulationDate.split("T")[0]);
         }
       })
       .catch(() => {});
@@ -1770,7 +1780,7 @@ export default function SchedulePage() {
         const body = await res.json();
         setSimMode(!!body.isSimulationMode);
         if (body.simulationDate) {
-          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+          setSimDate(body.simulationDate.split("T")[0]);
         } else {
           setSimDate("");
         }
@@ -1807,13 +1817,12 @@ export default function SchedulePage() {
   };
 
   const stepSimDate = (days: number) => {
-    const base = simDate
-      ? new Date(simDate)
-      : parseISO(data?.today ?? format(new Date(), "yyyy-MM-dd"));
-    base.setDate(base.getDate() + days);
-    const next = format(base, "yyyy-MM-dd");
+    const baseStr = simDate || data?.today || format(new Date(), "yyyy-MM-dd");
+    const base = new Date(`${baseStr}T00:00:00.000Z`);
+    base.setUTCDate(base.getUTCDate() + days);
+    const next = base.toISOString().split("T")[0];
     setSimDate(next);
-    patchSim({ simulationDate: dateInputToIso(next) });
+    patchSim({ simulationDate: `${next}T00:00:00.000Z` });
   };
 
   // Build date columns

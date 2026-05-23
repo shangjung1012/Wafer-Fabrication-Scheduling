@@ -82,7 +82,10 @@ export async function PATCH(request: Request) {
         ? patch.simulationDate
         : currentState.simulationDate;
     if (nextIsSimulationMode && nextSimulationDate == null) {
-      patch.simulationDate = new Date();
+      const now = new Date();
+      patch.simulationDate = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+      );
     }
 
     const state = await upsertSystemState(prisma, patch);

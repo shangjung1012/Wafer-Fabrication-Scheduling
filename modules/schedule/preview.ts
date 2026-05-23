@@ -14,11 +14,8 @@ export async function previewSchedule(
 ): Promise<StrategyResult> {
   const actualDate = currentDate ?? (await getTime());
 
-  const { orders, factories, capacities } = await prepareSchedulingData(
-    type,
-    config,
-    actualDate,
-  );
+  const { orders, factories, capacities, dbCapacities } =
+    await prepareSchedulingData(type, config, actualDate);
 
   return greedyBestFitStrategy.execute(
     orders,
@@ -26,5 +23,6 @@ export async function previewSchedule(
     capacities,
     config,
     actualDate,
+    dbCapacities,
   );
 }
