@@ -1,5 +1,6 @@
 import { OrderStatus, AssignmentStatus } from "@/lib/generated/prisma/client";
 import { type SchedulingConfig } from "./config";
+import { calculateOrderDeadline } from "./validation-utils";
 
 export type { SchedulingConfig };
 
@@ -235,18 +236,8 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
         ),
       );
 
-      const windowEnd = new Date(
-        Date.UTC(
-          new Date(order.dueDate).getUTCFullYear(),
-          new Date(order.dueDate).getUTCMonth(),
-          new Date(order.dueDate).getUTCDate(),
-        ),
-      );
-      windowEnd.setUTCDate(
-        windowEnd.getUTCDate() -
-          config.bufferDays -
-          (config.productionDays - 1),
-      );
+      const windowEnd = calculateOrderDeadline(new Date(order.dueDate), config);
+
       if (config.endDate) {
         const configEnd = new Date(
           Date.UTC(

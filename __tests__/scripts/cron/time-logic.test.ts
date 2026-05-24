@@ -6,6 +6,7 @@ import { findFactoriesWithCapacities } from "@/infra/db/factory-repository";
 import { FactoryStatus } from "@/lib/generated/prisma";
 import { handleSimulationTimeAdvance } from "@/modules/schedule/simulation-service";
 import { runAutoSchedulerCron, runDailyExecutionCron } from "@/scripts/cron";
+import { SystemState } from "@/lib/generated/prisma";
 
 // Mock dependencies
 vi.mock("@/lib/prisma", () => ({
@@ -44,7 +45,7 @@ describe("Time Logic and Cron Jobs", () => {
         isSimulationMode: true,
         simulationDate: null,
         updatedAt: new Date(),
-      } as any);
+      } as SystemState);
 
       await runDailyExecutionCron();
       await runAutoSchedulerCron();
@@ -59,7 +60,7 @@ describe("Time Logic and Cron Jobs", () => {
         isSimulationMode: false,
         simulationDate: null,
         updatedAt: new Date(),
-      } as any);
+      } as SystemState);
 
       // Set a specific fake time
       const mockNow = new Date("2026-06-03T12:00:00.000Z");
@@ -103,7 +104,11 @@ describe("Time Logic and Cron Jobs", () => {
       const currentDate = new Date("2026-06-03T15:30:00.000Z");
       const expectedMidnight = new Date("2026-06-03T00:00:00.000Z");
 
-      await findFactoriesWithCapacities(prisma as any, "A", currentDate);
+      await findFactoriesWithCapacities(
+        prisma as unknown as Parameters<typeof findFactoriesWithCapacities>[0],
+        "A",
+        currentDate,
+      );
 
       expect(prisma.factory.findMany).toHaveBeenCalledWith({
         where: {
