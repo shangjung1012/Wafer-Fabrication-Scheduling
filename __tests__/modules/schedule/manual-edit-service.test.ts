@@ -155,7 +155,7 @@ describe("applyAssignmentMoves", () => {
   it("should block a move that violates the calculated deadline", async () => {
     // dueDate = 2026-06-10
     // config: bufferDays = 2, productionDays = 3
-    // windowEnd = 2026-06-10 - 2 - (3 - 1) = 2026-06-06
+    // windowEnd = 2026-06-10 - 2 - 3 = 2026-06-05
     // Requested productionDate = 2026-06-07 -> Should violate
 
     const move: AssignmentMove = {
