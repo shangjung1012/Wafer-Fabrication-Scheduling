@@ -8,7 +8,7 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { DashboardSummary } from "@/components/dashboard/DashboardSummary";
 import { AdminPendingSection } from "../../../../components/dashboard/AdminPendingSection";
 import { SalesOrdersSection } from "@/components/dashboard/SalesOrdersSection";
-import { MessagesSection } from "@/components/dashboard/MessagesSection";
+import { ConflictIssueSection } from "@/components/dashboard/ConflictIssueSection";
 
 // Types
 type TimelineResponse = {
@@ -504,7 +504,7 @@ export default function DashboardPage() {
       />
     );
 
-  const rightSection = <MessagesSection />;
+  const rightSection = <ConflictIssueSection />;
 
   return (
     <>
