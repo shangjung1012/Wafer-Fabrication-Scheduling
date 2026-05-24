@@ -63,22 +63,24 @@ export function ConflictIssueSection() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
-    const urls =
-      activeTab === "open"
-        ? [
-            "/api/conflict-issues?status=OPEN",
-            "/api/conflict-issues?status=IN_DISCUSSION",
-          ]
-        : [
-            "/api/conflict-issues?status=RESOLVED",
-            "/api/conflict-issues?status=CLOSED",
-          ];
+    void (async () => {
+      setLoading(true);
+      setError(null);
 
-    Promise.all(urls.map((u) => apiFetch(u)))
-      .then(async ([res1, res2]) => {
+      const urls =
+        activeTab === "open"
+          ? [
+              "/api/conflict-issues?status=OPEN",
+              "/api/conflict-issues?status=IN_DISCUSSION",
+            ]
+          : [
+              "/api/conflict-issues?status=RESOLVED",
+              "/api/conflict-issues?status=CLOSED",
+            ];
+
+      try {
+        const [res1, res2] = await Promise.all(urls.map((u) => apiFetch(u)));
         if (cancelled) return;
         if (!res1.ok || !res2.ok) {
           setError("Failed to load conflict issues.");
@@ -93,13 +95,12 @@ export function ConflictIssueSection() {
               new Date(y.updatedAt).getTime() - new Date(x.updatedAt).getTime(),
           ),
         );
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setError("Network error.");
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
