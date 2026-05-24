@@ -62,6 +62,8 @@ type SeedOrder = {
   dueDate: Date;
   applicantId: string;
   status: OrderStatus;
+  isFixed?: boolean;
+  isPrioritized?: boolean;
 };
 
 type SeedAssignment = {
@@ -148,6 +150,8 @@ function generateOrdersAndAssignments() {
     factoryId?: string,
     productionDate?: Date,
     asgnStatus?: AssignmentStatus,
+    isFixed?: boolean,
+    isPrioritized?: boolean,
   ) {
     const oid = `ord-seed-${String(orderCounter++).padStart(3, "0")}`;
     orders.push({
@@ -158,6 +162,8 @@ function generateOrdersAndAssignments() {
       dueDate,
       applicantId: `sales-${type}`,
       status,
+      isFixed,
+      isPrioritized,
     });
 
     if (factoryId && productionDate && asgnStatus) {
@@ -194,6 +200,7 @@ function generateOrdersAndAssignments() {
 
   // Rule 4 (Scheduled Load): Dates 2026-06-04 to 2026-06-10
   // Consume 9000 capacity -> 3 * 2500 + 1 * 1500, SCHEDULED
+  let fixedScheduledCreated = false;
   for (let day = 4; day <= 10; day++) {
     const prodDate = d(`2026-06-${String(day).padStart(2, "0")}`);
     const dueDate = d(`2026-06-${String(day + 2).padStart(2, "0")}`); // Due date 2 days after production
@@ -203,7 +210,22 @@ function generateOrdersAndAssignments() {
         for (let k = 0; k < 3; k++) {
           addOrder(t, 2500, dueDate, "SCHEDULED", fId, prodDate, "SCHEDULED");
         }
-        addOrder(t, 1500, dueDate, "SCHEDULED", fId, prodDate, "SCHEDULED");
+        if (!fixedScheduledCreated && t === "A" && day === 4 && i === 1) {
+          addOrder(
+            t,
+            2000,
+            dueDate,
+            "SCHEDULED",
+            fId,
+            prodDate,
+            "SCHEDULED",
+            true,
+            false,
+          );
+          fixedScheduledCreated = true;
+        } else {
+          addOrder(t, 1500, dueDate, "SCHEDULED", fId, prodDate, "SCHEDULED");
+        }
       }
     }
   }
@@ -218,9 +240,25 @@ function generateOrdersAndAssignments() {
   // the total demand (189,000 + 87,500 = 276,500) slightly exceeds the absolute 9-day capacity (270,000) by 6,500.
   // This mathematically guarantees 2 or 3 FAILED orders per type (6,500 / 2500).
   const pendingDueDate = d("2026-06-10"); // Tight deadline to force FAILED
+  let prioritizedPendingCreated = false;
   for (const t of PRODUCTION_TYPES) {
     for (let i = 0; i < 35; i++) {
-      addOrder(t, 2500, pendingDueDate, "PENDING");
+      if (!prioritizedPendingCreated && t === "A" && i === 0) {
+        addOrder(
+          t,
+          1700,
+          pendingDueDate,
+          "PENDING",
+          undefined,
+          undefined,
+          undefined,
+          false,
+          true,
+        );
+        prioritizedPendingCreated = true;
+      } else {
+        addOrder(t, 2500, pendingDueDate, "PENDING");
+      }
     }
   }
 
@@ -342,6 +380,8 @@ async function seedOrders(orders: SeedOrder[]) {
         dueDate: o.dueDate,
         applicant: { connect: { id: o.applicantId } },
         status: o.status,
+        isFixed: o.isFixed,
+        isPrioritized: o.isPrioritized,
       },
       update: {
         name: o.name,
@@ -350,6 +390,8 @@ async function seedOrders(orders: SeedOrder[]) {
         dueDate: o.dueDate,
         applicant: { connect: { id: o.applicantId } },
         status: o.status,
+        isFixed: o.isFixed,
+        isPrioritized: o.isPrioritized,
       },
     });
   }
