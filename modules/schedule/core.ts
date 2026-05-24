@@ -25,11 +25,13 @@ export async function prepareSchedulingData(
   type: string,
   config: SchedulingConfig,
   currentDate: Date,
+  fetchAllPending: boolean = false,
 ) {
   const orders = await findOrdersForScheduling(
     prisma,
     type,
     config.targetOrderIds,
+    fetchAllPending,
   );
   const factories = await findFactoriesWithCapacities(
     prisma,

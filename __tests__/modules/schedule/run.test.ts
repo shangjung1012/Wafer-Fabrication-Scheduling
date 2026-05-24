@@ -71,6 +71,7 @@ describe("Schedule Engine - Run", () => {
       reschedulePolicy: "GLOBAL_OPTIMIZE",
       algorithm: "GREEDY_BEST_FIT",
       splittable: true,
+      targetOrderIds: ["O1", "O2"],
     };
     const currentDate = new Date();
     await runSchedule("Type A", dummyConfig, currentDate);
@@ -79,6 +80,7 @@ describe("Schedule Engine - Run", () => {
       "Type A",
       dummyConfig,
       currentDate,
+      true, // fetchAllPending = true
     );
     expect(greedyBestFitStrategy.execute).toHaveBeenCalledWith(
       mockData.orders,

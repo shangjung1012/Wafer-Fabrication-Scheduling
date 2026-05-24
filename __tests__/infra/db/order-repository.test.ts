@@ -14,25 +14,29 @@ vi.mock("@/infra/redis/schedule-store", () => ({
 
 describe("order-repository", () => {
   describe("findOrdersForScheduling", () => {
-    it("should query orders by type and valid statuses without FAILED", async () => {
+    it("should fetch 0 PENDING orders if fetchAllPending is false and targetOrderIds is omitted", async () => {
       const mockDb = {
         order: {
           findMany: vi.fn().mockResolvedValue([]),
         },
       } as unknown as PrismaClient;
 
-      await findOrdersForScheduling(mockDb, "Type A");
+      await findOrdersForScheduling(mockDb, "Type A", undefined, false);
 
       expect(mockDb.order.findMany).toHaveBeenCalledWith({
         where: {
           type: "Type A",
-          status: {
-            in: [
-              OrderStatus.PENDING,
-              OrderStatus.SCHEDULED,
-              OrderStatus.IN_PRODUCTION,
-            ],
-          },
+          OR: [
+            {
+              status: {
+                in: [OrderStatus.SCHEDULED, OrderStatus.IN_PRODUCTION],
+              },
+            },
+            {
+              status: OrderStatus.PENDING,
+              id: { in: [] },
+            },
+          ],
         },
         include: {
           assignments: true,
@@ -41,28 +45,59 @@ describe("order-repository", () => {
       });
     });
 
-    it("should include targetOrderIds in query if provided", async () => {
+    it("should fetch PENDING orders by targetOrderIds if fetchAllPending is false", async () => {
       const mockDb = {
         order: {
           findMany: vi.fn().mockResolvedValue([]),
         },
       } as unknown as PrismaClient;
 
-      await findOrdersForScheduling(mockDb, "Type A", ["O1", "O2"]);
+      await findOrdersForScheduling(mockDb, "Type A", ["O1", "O2"], false);
 
       expect(mockDb.order.findMany).toHaveBeenCalledWith({
         where: {
           type: "Type A",
-          status: {
-            in: [
-              OrderStatus.PENDING,
-              OrderStatus.SCHEDULED,
-              OrderStatus.IN_PRODUCTION,
-            ],
-          },
-          id: {
-            in: ["O1", "O2"],
-          },
+          OR: [
+            {
+              status: {
+                in: [OrderStatus.SCHEDULED, OrderStatus.IN_PRODUCTION],
+              },
+            },
+            {
+              status: OrderStatus.PENDING,
+              id: { in: ["O1", "O2"] },
+            },
+          ],
+        },
+        include: {
+          assignments: true,
+          applicant: { select: { email: true, username: true } },
+        },
+      });
+    });
+
+    it("should fetch all PENDING orders if fetchAllPending is true, ignoring targetOrderIds", async () => {
+      const mockDb = {
+        order: {
+          findMany: vi.fn().mockResolvedValue([]),
+        },
+      } as unknown as PrismaClient;
+
+      await findOrdersForScheduling(mockDb, "Type A", ["O1", "O2"], true);
+
+      expect(mockDb.order.findMany).toHaveBeenCalledWith({
+        where: {
+          type: "Type A",
+          OR: [
+            {
+              status: {
+                in: [OrderStatus.SCHEDULED, OrderStatus.IN_PRODUCTION],
+              },
+            },
+            {
+              status: OrderStatus.PENDING,
+            },
+          ],
         },
         include: {
           assignments: true,

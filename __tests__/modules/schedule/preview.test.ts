@@ -72,6 +72,7 @@ describe("Schedule Engine - Preview", () => {
       "Type A",
       dummyConfig,
       currentDate,
+      false,
     );
     expect(greedyBestFitStrategy.execute).toHaveBeenCalledWith(
       mockData.orders,

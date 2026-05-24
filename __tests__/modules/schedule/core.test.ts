@@ -114,12 +114,14 @@ describe("Schedule Engine - Core", () => {
         "Type A",
         dummyConfig,
         fixedDate,
+        true,
       );
 
       expect(orderRepo.findOrdersForScheduling).toHaveBeenCalledWith(
         prisma,
         "Type A",
         undefined,
+        true,
       );
       expect(factoryRepo.findFactoriesWithCapacities).toHaveBeenCalledWith(
         prisma,

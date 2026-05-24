@@ -15,7 +15,7 @@ export async function previewSchedule(
   const actualDate = currentDate ?? (await getTime());
 
   const { orders, factories, capacities, dbCapacities } =
-    await prepareSchedulingData(type, config, actualDate);
+    await prepareSchedulingData(type, config, actualDate, false);
 
   return greedyBestFitStrategy.execute(
     orders,
