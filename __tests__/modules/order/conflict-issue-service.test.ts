@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createIssuesForFailedOrders } from "@/modules/order/conflict-issue-service";
+import {
+  acceptProposal,
+  createIssuesForFailedOrders,
+} from "@/modules/order/conflict-issue-service";
 import * as orderRepo from "@/infra/db/order-repository";
 import * as conflictRepo from "@/infra/db/conflict-issue-repository";
 import * as factoryRepo from "@/infra/db/factory-repository";
+import * as scopeModule from "@/modules/auth/scope";
 import * as mailTemplate from "@/modules/mail/mail-template";
 import * as strategy from "@/modules/schedule/strategy";
 import type { PrismaClient } from "@/lib/generated/prisma";
+import type { RequestContext } from "@/modules/auth/request-context";
 import type { SchedulingConfig } from "@/modules/schedule/config";
 
 vi.mock("@/infra/db/order-repository", async () => {
@@ -16,6 +21,7 @@ vi.mock("@/infra/db/order-repository", async () => {
     ...actual,
     findOrderForIssueCreation: vi.fn(),
     findCompetingScheduledOrders: vi.fn(),
+    updateOrder: vi.fn(),
   };
 });
 
@@ -28,6 +34,21 @@ vi.mock("@/infra/db/conflict-issue-repository", async () => {
     createConflictIssue: vi.fn(),
     createConflictIssueEvent: vi.fn(),
     findOpenIssueByOrderId: vi.fn(),
+    findCommentById: vi.fn(),
+    findConflictIssueById: vi.fn(),
+    updateCommentProposalStatus: vi.fn(),
+    staleOtherProposals: vi.fn(),
+    updateConflictIssue: vi.fn(),
+  };
+});
+
+vi.mock("@/modules/auth/scope", async () => {
+  const actual = await vi.importActual<typeof import("@/modules/auth/scope")>(
+    "@/modules/auth/scope",
+  );
+  return {
+    ...actual,
+    resolveActorScope: vi.fn(),
   };
 });
 
@@ -312,5 +333,268 @@ describe("createIssuesForFailedOrders", () => {
     expect(conflictRepo.createConflictIssueEvent).not.toHaveBeenCalled();
     expect(mailTemplate.renderAndSend).not.toHaveBeenCalled();
     expect(conflictRepo.findOpenIssueByOrderId).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// acceptProposal — OCC regression tests
+//
+// Regression: the conflict-issue UI used to pass ConflictIssue.updatedAt as
+// `expectedOrderUpdatedAt`, but the OCC check compares against Order.updatedAt.
+// The two timestamps are from different rows and almost never match, so every
+// Accept click marked the proposal STALE. The fix exposes Order.updatedAt as
+// ConflictIssueDetail.orderUpdatedAt; these tests pin the contract that the
+// OCC compares against Order.updatedAt, not the issue's updatedAt.
+// ---------------------------------------------------------------------------
+
+describe("acceptProposal — OCC", () => {
+  const ORDER_UPDATED_AT = new Date("2026-05-21T08:00:00Z");
+  const ISSUE_UPDATED_AT = new Date("2026-05-21T08:00:05Z"); // different from order
+
+  function makeComment(overrides: {
+    expectedOrderUpdatedAt: Date;
+    authorId?: string;
+    kind?: "REDUCE_QUANTITY" | "DELAY_DUE_DATE" | "CANCEL";
+    newQuantity?: number;
+    newDueDate?: string;
+    status?: "PENDING" | "ACCEPTED" | "REJECTED" | "STALE";
+  }) {
+    const {
+      expectedOrderUpdatedAt,
+      authorId = "SALES1",
+      kind = "DELAY_DUE_DATE",
+      newDueDate = "2026-05-10T00:00:00Z",
+      status = "PENDING",
+    } = overrides;
+
+    return {
+      id: "C1",
+      issueId: "ISSUE1",
+      authorId,
+      body: "Please delay the due date",
+      proposal: {
+        proposal: {
+          kind,
+          ...(kind === "DELAY_DUE_DATE" ? { newDueDate } : {}),
+        },
+        expectedOrderUpdatedAt: expectedOrderUpdatedAt.toISOString(),
+        status,
+      },
+      editedAt: null,
+      createdAt: new Date("2026-05-21T07:59:00Z"),
+      issue: {
+        id: "ISSUE1",
+        orderId: "O1",
+        status: conflictRepo.ConflictIssueStatus.IN_DISCUSSION,
+        order: {
+          type: "Type A",
+          updatedAt: ORDER_UPDATED_AT,
+          quantity: 1000,
+          dueDate: new Date("2026-05-20T00:00:00Z"),
+        },
+      },
+    };
+  }
+
+  const salesCtx: RequestContext = {
+    user: { id: "SALES1", role: "SALES", username: "sales-A" },
+    requestId: "req-1",
+  };
+
+  const adminCtx: RequestContext = {
+    user: { id: "ADMIN1", role: "ADMIN", username: "admin-A" },
+    requestId: "req-2",
+  };
+
+  beforeEach(() => {
+    // Default scope mock for admin path
+    vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
+      role: "ADMIN",
+      userId: "ADMIN1",
+      factoryIds: ["F1"],
+      productionType: "Type A",
+      group: "Type A",
+    });
+
+    // assertIssueAccess uses findConflictIssueById
+    vi.mocked(conflictRepo.findConflictIssueById).mockResolvedValue({
+      id: "ISSUE1",
+      orderId: "O1",
+      assigneeId: "SALES1",
+      status: conflictRepo.ConflictIssueStatus.IN_DISCUSSION,
+      order: { type: "Type A", updatedAt: ORDER_UPDATED_AT },
+    });
+
+    vi.mocked(orderRepo.updateOrder).mockResolvedValue(
+      undefined as unknown as Awaited<ReturnType<typeof orderRepo.updateOrder>>,
+    );
+    vi.mocked(conflictRepo.updateCommentProposalStatus).mockResolvedValue(
+      undefined as unknown as Awaited<
+        ReturnType<typeof conflictRepo.updateCommentProposalStatus>
+      >,
+    );
+    vi.mocked(conflictRepo.staleOtherProposals).mockResolvedValue(
+      undefined as unknown as Awaited<
+        ReturnType<typeof conflictRepo.staleOtherProposals>
+      >,
+    );
+    vi.mocked(conflictRepo.updateConflictIssue).mockResolvedValue(
+      undefined as unknown as Awaited<
+        ReturnType<typeof conflictRepo.updateConflictIssue>
+      >,
+    );
+    vi.mocked(conflictRepo.createConflictIssueEvent).mockResolvedValue(
+      undefined as unknown as Awaited<
+        ReturnType<typeof conflictRepo.createConflictIssueEvent>
+      >,
+    );
+  });
+
+  it("accepts when expectedOrderUpdatedAt matches Order.updatedAt (the fix path)", async () => {
+    // Sales captured Order.updatedAt at proposal time — the only correct value.
+    vi.mocked(conflictRepo.findCommentById).mockResolvedValue(
+      makeComment({
+        expectedOrderUpdatedAt: ORDER_UPDATED_AT,
+      }) as unknown as Awaited<ReturnType<typeof conflictRepo.findCommentById>>,
+    );
+
+    await expect(
+      acceptProposal(adminCtx, prisma, "C1"),
+    ).resolves.toBeUndefined();
+
+    // Proposal was ACCEPTED — NOT STALE
+    expect(conflictRepo.updateCommentProposalStatus).toHaveBeenCalledWith(
+      prisma,
+      "C1",
+      "ACCEPTED",
+    );
+    expect(conflictRepo.updateCommentProposalStatus).not.toHaveBeenCalledWith(
+      prisma,
+      "C1",
+      "STALE",
+    );
+
+    // Order was updated (DELAY_DUE_DATE applied)
+    expect(orderRepo.updateOrder).toHaveBeenCalledTimes(1);
+    const updateCall = vi.mocked(orderRepo.updateOrder).mock.calls[0];
+    expect(updateCall[1]).toBe("O1");
+    expect((updateCall[2] as { dueDate?: Date }).dueDate).toEqual(
+      new Date("2026-05-10T00:00:00Z"),
+    );
+
+    // Issue marked RESOLVED
+    expect(conflictRepo.updateConflictIssue).toHaveBeenCalledWith(
+      prisma,
+      "ISSUE1",
+      expect.objectContaining({
+        status: conflictRepo.ConflictIssueStatus.RESOLVED,
+      }),
+    );
+
+    // Other pending proposals stale-d
+    expect(conflictRepo.staleOtherProposals).toHaveBeenCalledWith(
+      prisma,
+      "ISSUE1",
+      "C1",
+    );
+  });
+
+  it("marks proposal STALE and throws 409 when expectedOrderUpdatedAt does NOT match Order.updatedAt", async () => {
+    // The bug case: frontend passed ConflictIssue.updatedAt (≠ Order.updatedAt).
+    vi.mocked(conflictRepo.findCommentById).mockResolvedValue(
+      makeComment({
+        expectedOrderUpdatedAt: ISSUE_UPDATED_AT,
+      }) as unknown as Awaited<ReturnType<typeof conflictRepo.findCommentById>>,
+    );
+
+    await expect(acceptProposal(adminCtx, prisma, "C1")).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining("modified"),
+    });
+
+    // Proposal marked STALE
+    expect(conflictRepo.updateCommentProposalStatus).toHaveBeenCalledWith(
+      prisma,
+      "C1",
+      "STALE",
+    );
+
+    // Order was NOT updated
+    expect(orderRepo.updateOrder).not.toHaveBeenCalled();
+    // Issue was NOT resolved
+    expect(conflictRepo.updateConflictIssue).not.toHaveBeenCalled();
+  });
+
+  it("regression: ConflictIssue.updatedAt is the WRONG OCC baseline (this is the original bug)", async () => {
+    // Documents the bug — if the UI ever regresses to passing issue.updatedAt
+    // instead of order.updatedAt, this test fails fast.
+    expect(ORDER_UPDATED_AT.getTime()).not.toBe(ISSUE_UPDATED_AT.getTime());
+
+    vi.mocked(conflictRepo.findCommentById).mockResolvedValue(
+      makeComment({
+        expectedOrderUpdatedAt: ISSUE_UPDATED_AT,
+      }) as unknown as Awaited<ReturnType<typeof conflictRepo.findCommentById>>,
+    );
+
+    await expect(acceptProposal(adminCtx, prisma, "C1")).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
+  it("rejects when the author tries to accept their own proposal", async () => {
+    vi.mocked(conflictRepo.findCommentById).mockResolvedValue(
+      makeComment({
+        expectedOrderUpdatedAt: ORDER_UPDATED_AT,
+        authorId: "ADMIN1", // same as adminCtx.user.id
+      }) as unknown as Awaited<ReturnType<typeof conflictRepo.findCommentById>>,
+    );
+
+    await expect(acceptProposal(adminCtx, prisma, "C1")).rejects.toThrow(
+      /your own proposal/i,
+    );
+    expect(orderRepo.updateOrder).not.toHaveBeenCalled();
+  });
+
+  it("rejects when proposal is already ACCEPTED (not PENDING)", async () => {
+    vi.mocked(conflictRepo.findCommentById).mockResolvedValue(
+      makeComment({
+        expectedOrderUpdatedAt: ORDER_UPDATED_AT,
+        status: "ACCEPTED",
+      }) as unknown as Awaited<ReturnType<typeof conflictRepo.findCommentById>>,
+    );
+
+    await expect(acceptProposal(adminCtx, prisma, "C1")).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(orderRepo.updateOrder).not.toHaveBeenCalled();
+  });
+
+  it("SALES can accept an ADMIN proposal when expectedOrderUpdatedAt matches", async () => {
+    // The reverse-direction acceptance flow — sales accepts admin's proposal.
+    vi.mocked(conflictRepo.findConflictIssueById).mockResolvedValue({
+      id: "ISSUE1",
+      orderId: "O1",
+      assigneeId: "SALES1", // sales is the assignee
+      status: conflictRepo.ConflictIssueStatus.IN_DISCUSSION,
+      order: { type: "Type A", updatedAt: ORDER_UPDATED_AT },
+    });
+    vi.mocked(conflictRepo.findCommentById).mockResolvedValue(
+      makeComment({
+        expectedOrderUpdatedAt: ORDER_UPDATED_AT,
+        authorId: "ADMIN1", // admin authored
+      }) as unknown as Awaited<ReturnType<typeof conflictRepo.findCommentById>>,
+    );
+
+    await expect(
+      acceptProposal(salesCtx, prisma, "C1"),
+    ).resolves.toBeUndefined();
+
+    expect(conflictRepo.updateCommentProposalStatus).toHaveBeenCalledWith(
+      prisma,
+      "C1",
+      "ACCEPTED",
+    );
+    // SALES path skips resolveActorScope entirely
+    expect(scopeModule.resolveActorScope).not.toHaveBeenCalled();
   });
 });

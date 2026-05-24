@@ -71,6 +71,7 @@ export type ConflictIssueDetail = ConflictIssueRow & {
   orderDueDate: Date;
   orderQuantity: number;
   orderStatus: string;
+  orderUpdatedAt: Date;
   timeline: TimelineItem[];
 };
 
@@ -179,6 +180,18 @@ export async function findConflictIssueByNumber(
     where: { number },
     select: {
       ...issueBaseSelect,
+      // Override order select to include updatedAt — required by the
+      // proposal OCC check (see acceptProposal in conflict-issue-service.ts).
+      order: {
+        select: {
+          name: true,
+          type: true,
+          dueDate: true,
+          quantity: true,
+          status: true,
+          updatedAt: true,
+        },
+      },
       comments: {
         select: {
           id: true,
@@ -243,6 +256,7 @@ export async function findConflictIssueByNumber(
     orderDueDate: row.order.dueDate,
     orderQuantity: row.order.quantity,
     orderStatus: row.order.status,
+    orderUpdatedAt: row.order.updatedAt,
     timeline,
   };
 }
