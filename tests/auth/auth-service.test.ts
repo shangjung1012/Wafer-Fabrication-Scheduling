@@ -15,6 +15,37 @@ import {
   verifyAccessToken,
 } from "@/modules/auth/token-service";
 
+vi.mock("@/modules/auth/session-store", () => ({
+  createAuthSession: vi.fn(async (user, now = new Date()) => ({
+    sessionId: `session-${user.id}`,
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  })),
+  deleteAuthSession: vi.fn(async () => undefined),
+  getAuthSession: vi.fn(async (sessionId) => ({
+    sessionId,
+    userId: "user-1",
+    username: "admin-A1",
+    role: "ADMIN",
+    createdAt: "2026-05-24T00:00:00.000Z",
+    expiresAt: "2026-05-31T00:00:00.000Z",
+  })),
+  touchAuthSession: vi.fn(async (session, now = new Date()) => ({
+    ...session,
+    expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  })),
+}));
+
+import {
+  createAuthSession,
+  deleteAuthSession,
+  getAuthSession,
+  touchAuthSession,
+} from "@/modules/auth/session-store";
+
 function createDb() {
   type Row = Record<string, unknown>;
   const users: Row[] = [];
@@ -148,6 +179,7 @@ function createDb() {
 describe("auth-service", () => {
   beforeEach(() => {
     process.env.JWT_SECRET = "test-secret-at-least-32-characters-long";
+    vi.clearAllMocks();
   });
 
   async function seedActiveUser(
@@ -198,10 +230,20 @@ describe("auth-service", () => {
       sub: "user-1",
       role: "ADMIN",
       username: "admin-A1",
+      sid: "session-user-1",
     });
     expect(result.refreshToken).toBeTypeOf("string");
     expect(refreshTokens[0].tokenHash).toBe(
       hashRefreshToken(result.refreshToken),
+    );
+    expect(refreshTokens[0].sessionId).toBe("session-user-1");
+    expect(createAuthSession).toHaveBeenCalledWith(
+      {
+        id: "user-1",
+        role: "ADMIN",
+        username: "admin-A1",
+      },
+      expect.any(Date),
     );
 
     await expect(
@@ -264,6 +306,19 @@ describe("auth-service", () => {
     });
 
     expect(refreshed.refreshToken).not.toBe(loginResult.refreshToken);
+    expect(getAuthSession).toHaveBeenCalledWith("session-user-1");
+    expect(touchAuthSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-user-1",
+        userId: "user-1",
+      }),
+      expect.any(Date),
+    );
+    await expect(
+      verifyAccessToken(refreshed.accessToken),
+    ).resolves.toMatchObject({
+      sid: "session-user-1",
+    });
     await expect(
       refresh(db as never, {
         refreshToken: loginResult.refreshToken,
@@ -271,9 +326,52 @@ describe("auth-service", () => {
     ).rejects.toThrow(InvalidRefreshTokenError);
 
     await logout(db as never, { refreshToken: refreshed.refreshToken });
+    expect(deleteAuthSession).toHaveBeenCalledWith("session-user-1");
     await expect(
       refresh(db as never, {
         refreshToken: refreshed.refreshToken,
+      }),
+    ).rejects.toThrow(InvalidRefreshTokenError);
+  });
+
+  it("rejects refresh tokens that do not belong to a Redis server session", async () => {
+    const { db, refreshTokens } = createDb();
+    await seedActiveUser(db, {
+      username: "admin-A1",
+      email: "admin-a1@mail.shangjung.com",
+      role: "ADMIN",
+      group: "A",
+    });
+    const loginResult = await login(db as never, {
+      username: "admin-A1",
+      password: "Password123!",
+    });
+    refreshTokens[0].sessionId = null;
+
+    await expect(
+      refresh(db as never, {
+        refreshToken: loginResult.refreshToken,
+      }),
+    ).rejects.toThrow(InvalidRefreshTokenError);
+  });
+
+  it("rejects refresh tokens when the Redis server session is gone", async () => {
+    const { db } = createDb();
+    await seedActiveUser(db, {
+      username: "admin-A1",
+      email: "admin-a1@mail.shangjung.com",
+      role: "ADMIN",
+      group: "A",
+    });
+    const loginResult = await login(db as never, {
+      username: "admin-A1",
+      password: "Password123!",
+    });
+    vi.mocked(getAuthSession).mockResolvedValueOnce(null);
+
+    await expect(
+      refresh(db as never, {
+        refreshToken: loginResult.refreshToken,
       }),
     ).rejects.toThrow(InvalidRefreshTokenError);
   });
