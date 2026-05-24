@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { runSchedule } from "@/modules/schedule/run";
 import { type SchedulingConfig } from "@/modules/schedule/strategy";
@@ -9,6 +9,10 @@ import {
   ConflictIssueStatus,
   ConflictIssueEventType,
 } from "@/lib/generated/prisma/client";
+
+vi.mock("@/modules/mail/mail-template", () => ({
+  renderAndSend: vi.fn().mockResolvedValue(undefined),
+}));
 
 // This file contains database integration tests for the auto-issue creation
 // flow added in Phase 3. A real PostgreSQL database must be running and
@@ -66,6 +70,7 @@ describe("Auto ConflictIssue creation — Database Integration", () => {
   }
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     try {
       await cleanup();
     } catch {

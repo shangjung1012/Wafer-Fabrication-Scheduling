@@ -211,11 +211,11 @@
 
 ## 8. 並發控制 (Concurrency Control)
 
-| 機制                    | 保護對象                                     | 行為                                                                                            |
-| :---------------------- | :------------------------------------------- | :---------------------------------------------------------------------------------------------- |
-| `schedule:lock:[type]`  | `/api/schedule/run` 與 `/api/schedule/apply` | Redis SET NX EX 300。已被持有時直接回 409 Conflict（fail-fast），避免同時兩個寫入導致競爭條件。 |
-| `scheduleVersion` (OCC) | `/api/schedule/apply`                        | 比對 preview 當下 version 與目前 version；不一致則拒絕套用、要求重新預覽。                      |
-| Prisma `$transaction`   | `applyScheduleTransaction`                   | 所有 DB 寫入（刪舊 assignment、更新母單、更新／新增 capacity、寫入新 assignment）原子化。       |
+| 機制                    | 保護對象                                     | 行為                                                                                                                                                     |
+| :---------------------- | :------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schedule:lock:[type]`  | `/api/schedule/run` 與 `/api/schedule/apply` | Redis SET NX EX 300 並寫入 owner token；釋放時用 Lua compare-and-delete，避免刪到其他 replica 重新取得的鎖。已被持有時直接回 409 Conflict（fail-fast）。 |
+| `scheduleVersion` (OCC) | `/api/schedule/apply`                        | 比對 preview 當下 version 與目前 version；不一致則拒絕套用、要求重新預覽。                                                                               |
+| Prisma `$transaction`   | `applyScheduleTransaction`                   | 所有 DB 寫入（刪舊 assignment、更新母單、更新／新增 capacity、寫入新 assignment）原子化。                                                                |
 
 ---
 
@@ -265,7 +265,7 @@
 
 #### A.4 與 preview / apply 的併發互動
 
-`runSchedule` 在內部用 `withScheduleLock(type, ...)` 取得 `schedule:lock:<type>`（`SET NX EX 300`），與 `/api/schedule/apply`、`/api/schedule/run` 共用同一支 key——cron 寫入與管理員手動寫入互斥。
+`runSchedule` 在內部用 `withScheduleLock(type, ...)` 取得 `schedule:lock:<type>`（`SET NX EX 300` + owner token），與 `/api/schedule/apply`、`/api/schedule/run` 共用同一支 key——cron 寫入與管理員手動寫入互斥。
 
 - cron tick 撞到管理員正在 apply：`runSchedule` 內 `redis.set NX` 失敗，丟出 `already running`，cron 的 per-type catch 略過此 type 並記 log。
 - 管理員按 apply 撞到 cron：`/api/schedule/apply` 回 409 Conflict，UI 應提示重新預覽。
