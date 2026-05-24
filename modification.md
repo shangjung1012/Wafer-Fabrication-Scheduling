@@ -75,3 +75,7 @@
 
 - **假計時器測試 (Task 0)**：
   新增 `__tests__/scripts/cron/time-logic.test.ts`。使用 `vi.setSystemTime` 驗證模擬模式防護。測試跨越午夜與未跨越午夜的情境。驗證產能查詢的地板時間計算正確。確保所有邏輯在 TDD 規範下實作且通過測試。
+
+## 5. preview邏輯修正
+
+- **修正**：現在如果不勾選任何pending order，preview就不會嘗試排程任何pending order。
