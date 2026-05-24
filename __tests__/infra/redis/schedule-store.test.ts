@@ -5,6 +5,7 @@ import {
   setPreview,
   getPreview,
   deletePreview,
+  withScheduleLock,
 } from "@/infra/redis/schedule-store";
 import { getRedis } from "@/lib/redis";
 
@@ -26,7 +27,9 @@ vi.mock("@/lib/redis", () => {
     get: vi.fn(),
     incr: vi.fn(),
     setex: vi.fn(),
+    set: vi.fn(),
     del: vi.fn(),
+    eval: vi.fn(),
   };
   return {
     getRedis: vi.fn(() => mockRedisClient),
@@ -100,6 +103,40 @@ describe("schedule-store (Redis)", () => {
     it("should delete preview", async () => {
       await deletePreview(previewId);
       expect(mockRedis.del).toHaveBeenCalledWith(`preview:${previewId}`);
+    });
+  });
+
+  describe("withScheduleLock", () => {
+    it("does not release a lock that was reacquired by another owner", async () => {
+      const lockKey = "schedule:lock:Type A";
+      const store = new Map<string, string>();
+
+      vi.mocked(mockRedis.set).mockImplementation(async (key, value) => {
+        store.set(String(key), String(value));
+        return "OK";
+      });
+      vi.mocked(mockRedis.del).mockImplementation(async (...keys) => {
+        let deleted = 0;
+        for (const key of keys) {
+          if (store.delete(String(key))) deleted++;
+        }
+        return deleted;
+      });
+      vi.mocked(mockRedis.eval).mockImplementation(async (...args) => {
+        const key = String(args[2]);
+        const expectedOwner = String(args[3]);
+        if (store.get(key) === expectedOwner) {
+          store.delete(key);
+          return 1;
+        }
+        return 0;
+      });
+
+      await withScheduleLock("Type A", async () => {
+        store.set(lockKey, "replacement-owner");
+      });
+
+      expect(store.get(lockKey)).toBe("replacement-owner");
     });
   });
 });
