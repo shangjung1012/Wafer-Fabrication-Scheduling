@@ -11,12 +11,14 @@ export type AccessTokenUser = {
   id: string;
   role: UserRole;
   username: string;
+  sessionId: string;
 };
 
 export type VerifiedAccessTokenPayload = JWTPayload & {
   sub: string;
   role: UserRole;
   username: string;
+  sid: string;
 };
 
 function jwtSecret(): Uint8Array {
@@ -65,6 +67,7 @@ export async function issueAccessToken(user: AccessTokenUser): Promise<string> {
   return new SignJWT({
     role: user.role,
     username: user.username,
+    sid: user.sessionId,
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setIssuedAt()
@@ -89,7 +92,9 @@ export async function verifyAccessToken(
     (payload.role !== "SUPERADMIN" &&
       payload.role !== "ADMIN" &&
       payload.role !== "SALES") ||
-    typeof payload.username !== "string"
+    typeof payload.username !== "string" ||
+    typeof payload.sid !== "string" ||
+    payload.sid.length === 0
   ) {
     throw new Error("Invalid access token payload.");
   }
