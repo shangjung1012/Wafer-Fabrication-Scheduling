@@ -8,6 +8,7 @@ import {
   eachDayOfInterval,
   parseISO,
   differenceInDays,
+  addDays,
 } from "date-fns";
 import {
   DndContext,
@@ -42,6 +43,13 @@ import {
 
 function toDateStr(d: Date) {
   return format(d, "yyyy-MM-dd");
+}
+
+/** Default window: 10 calendar days starting at anchor (anchor + 9 inclusive). */
+function defaultTimelineRange(anchorDayYmd: string) {
+  const startDate = anchorDayYmd.slice(0, 10);
+  const endDate = toDateStr(addDays(parseISO(startDate), 9));
+  return { startDate, endDate };
 }
 
 function dateInputToIso(value: string) {
@@ -1178,9 +1186,6 @@ function GanttCell({
 // Main page
 // ---------------------------------------------------------------------------
 
-const DEFAULT_START = "2026-05-10";
-const DEFAULT_END = "2026-05-23";
-
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
 
@@ -1196,8 +1201,8 @@ export default function SchedulePage() {
   const session = useClientAuthSession();
   const isSales = session?.user.role === "SALES";
   const productionType = session?.user.group ?? "";
-  const [startDate, setStartDate] = useState(DEFAULT_START);
-  const [endDate, setEndDate] = useState(DEFAULT_END);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [data, setData] = useState<TimelineResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<FetchError | null>(null);
@@ -1258,6 +1263,7 @@ export default function SchedulePage() {
       return;
     }
     if (session === undefined) return;
+    if (!startDate || !endDate) return;
 
     const params = new URLSearchParams({ startDate, endDate });
     fetch(`/api/visualization/timeline?${params}`, {
@@ -1272,7 +1278,19 @@ export default function SchedulePage() {
           });
           setData(null);
         } else {
-          setData(await r.json());
+          const payload = (await r.json()) as TimelineResponse;
+          setData(payload);
+          // Keep the Gantt aligned to system time (real-time or simulation) from the server.
+          if (payload.today) {
+            const nextStart = payload.today.slice(0, 10);
+            const { endDate: defaultEnd } = defaultTimelineRange(nextStart);
+            setStartDate(nextStart);
+            // Keep a longer end date if the user already extended the range forward.
+            setEndDate((prev) => {
+              if (!prev || prev < nextStart) return defaultEnd;
+              return prev > defaultEnd ? prev : defaultEnd;
+            });
+          }
         }
         setLoading(false);
       })
@@ -1761,7 +1779,7 @@ export default function SchedulePage() {
     setRefreshKey((k) => k + 1);
   };
 
-  // Load simulation state on mount
+  // Load simulation state on mount and seed the timeline range (10-day default from anchor) before the first fetch.
   useEffect(() => {
     if (!session) return;
     fetch("/api/system/simulation", { credentials: "same-origin" })
@@ -1772,8 +1790,19 @@ export default function SchedulePage() {
           setSimDate(body.simulationDate.split("T")[0]);
           setSimDateTime(body.simulationDate);
         }
+        const anchor =
+          body.isSimulationMode && body.simulationDate
+            ? String(body.simulationDate).split("T")[0]
+            : format(new Date(), "yyyy-MM-dd");
+        const range = defaultTimelineRange(anchor);
+        setStartDate(range.startDate);
+        setEndDate(range.endDate);
       })
-      .catch(() => {});
+      .catch(() => {
+        const range = defaultTimelineRange(format(new Date(), "yyyy-MM-dd"));
+        setStartDate(range.startDate);
+        setEndDate(range.endDate);
+      });
   }, [session]);
 
   // Auto-refresh every 60 s while in Real-time mode
