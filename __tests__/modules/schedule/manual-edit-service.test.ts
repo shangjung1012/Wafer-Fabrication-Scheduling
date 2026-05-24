@@ -109,6 +109,7 @@ describe("applyAssignmentMoves", () => {
         order: {
           type: "TYPE_A",
           dueDate: new Date("2026-06-20T00:00:00.000Z"),
+          isFixed: false,
         },
       },
     ]);
@@ -169,6 +170,13 @@ describe("applyAssignmentMoves", () => {
       quantity: 500,
       dueDate: new Date("2026-06-10T00:00:00.000Z"),
       type: "TYPE_A",
+      applicantId: "user-1",
+      name: "Test Order",
+      isFixed: false,
+      isPrioritized: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastModifiedById: null,
     });
 
     vi.mocked(
@@ -222,6 +230,13 @@ describe("applyAssignmentMoves", () => {
       quantity: 500,
       dueDate: new Date("2026-06-10T00:00:00.000Z"),
       type: "TYPE_A",
+      applicantId: "user-1",
+      name: "Test Order",
+      isFixed: false,
+      isPrioritized: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastModifiedById: null,
     });
 
     vi.mocked(
@@ -282,6 +297,7 @@ describe("applyAssignmentMoves", () => {
         order: {
           type: "TYPE_A",
           dueDate: new Date("2026-06-10T00:00:00.000Z"),
+          isFixed: false,
         },
       },
     ]);
@@ -325,6 +341,183 @@ describe("applyAssignmentMoves", () => {
 
     expect(assignmentRepo.updateAssignmentSlot).toHaveBeenCalled();
   });
-});
 
-// The following is necessary because we changed how dependencies are mocked in infra
+  // The following is necessary because we changed how dependencies are mocked in infra
+
+  it("should successfully swap two assignments between factories without capacity errors", async () => {
+    // Both F1 and F2 are at 0 capacity.
+    // We swap A1 (500 qty, F1 -> F2) and A2 (500 qty, F2 -> F1).
+    // This should be valid.
+
+    const moves: AssignmentMove[] = [
+      { assignmentId: "A1", factoryId: "F2", productionDate: "2026-06-01" },
+      { assignmentId: "A2", factoryId: "F1", productionDate: "2026-06-01" },
+    ];
+
+    vi.mocked(assignmentRepo.findAssignmentsByIds).mockResolvedValue([
+      {
+        id: "A1",
+        orderId: "O1",
+        factoryId: "F1",
+        productionDate: new Date("2026-06-01T00:00:00.000Z"),
+        completionDate: new Date("2026-06-04T00:00:00.000Z"),
+        assignedQuantity: 500,
+        status: AssignmentStatus.SCHEDULED,
+        order: {
+          type: "TYPE_A",
+          dueDate: new Date("2026-06-10T00:00:00.000Z"),
+          isFixed: false,
+        },
+      },
+      {
+        id: "A2",
+        orderId: "O2",
+        factoryId: "F2",
+        productionDate: new Date("2026-06-01T00:00:00.000Z"),
+        completionDate: new Date("2026-06-04T00:00:00.000Z"),
+        assignedQuantity: 500,
+        status: AssignmentStatus.SCHEDULED,
+        order: {
+          type: "TYPE_A",
+          dueDate: new Date("2026-06-10T00:00:00.000Z"),
+          isFixed: false,
+        },
+      },
+    ]);
+
+    vi.mocked(
+      autoSchedulerConfigRepo.getOperatingAutoSchedulerConfigs,
+    ).mockResolvedValue([
+      {
+        id: "CONFIG_1",
+        type: "TYPE_A",
+        isOperating: true,
+        frozenDays: 1,
+        productionDays: 3,
+        bufferDays: 2,
+        splittable: false,
+        algorithm: "GREEDY_BEST_FIT",
+        reschedulePolicy: "GAP_FILLING",
+      },
+    ]);
+
+    vi.mocked(factoryRepo.findFactoriesMaxCapacity).mockResolvedValue([
+      { id: "F1", maxCapacity: 1000 },
+      { id: "F2", maxCapacity: 1000 },
+    ]);
+
+    // Both are at 0 current capacity
+    vi.mocked(capacityRepo.findDailyCapacity).mockImplementation(
+      async (db, factoryId, date) => {
+        return {
+          id: `C_${factoryId}`,
+          factoryId,
+          date,
+          maxCapacity: 1000,
+          curCapacity: 0,
+        };
+      },
+    );
+
+    const result = await applyAssignmentMoves(prisma, moves, "user-1");
+    expect(result.applied).toBe(2);
+  });
+
+  it("should block moving an assignment if the order is fixed", async () => {
+    const move: AssignmentMove = {
+      assignmentId: "A_FIXED",
+      factoryId: "F1",
+      productionDate: "2026-06-10",
+    };
+
+    vi.mocked(assignmentRepo.findAssignmentsByIds).mockResolvedValue([
+      {
+        id: "A_FIXED",
+        orderId: "O_FIXED",
+        factoryId: "F1",
+        productionDate: new Date("2026-06-05T00:00:00.000Z"),
+        completionDate: new Date("2026-06-08T00:00:00.000Z"),
+        assignedQuantity: 1000,
+        status: AssignmentStatus.SCHEDULED,
+        order: {
+          type: "TYPE_A",
+          dueDate: new Date("2026-06-20T00:00:00.000Z"),
+          isFixed: true,
+        },
+      },
+    ]);
+
+    vi.mocked(
+      autoSchedulerConfigRepo.getOperatingAutoSchedulerConfigs,
+    ).mockResolvedValue([baseConfig]);
+    vi.mocked(factoryRepo.findFactoriesMaxCapacity).mockResolvedValue([
+      { id: "F1", maxCapacity: 1000 },
+    ]);
+
+    await expect(
+      applyAssignmentMoves(prisma, [move], "user-1"),
+    ).rejects.toThrowError(ManualEditValidationError);
+
+    try {
+      await applyAssignmentMoves(prisma, [move], "user-1");
+    } catch (error: unknown) {
+      expect((error as ManualEditValidationError).violations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            targetId: "A_FIXED",
+            code: "INVALID_STATE",
+            reason: "Cannot move a fixed order",
+          }),
+        ]),
+      );
+    }
+  });
+
+  it("should block scheduling a pending order if it is fixed", async () => {
+    const move: AssignmentMove = {
+      orderId: "O_FIXED",
+      factoryId: "F1",
+      productionDate: "2026-06-10",
+    };
+
+    vi.mocked(orderRepo.findOrderById).mockResolvedValue({
+      id: "O_FIXED",
+      status: OrderStatus.PENDING,
+      quantity: 500,
+      dueDate: new Date("2026-06-20T00:00:00.000Z"),
+      type: "TYPE_A",
+      applicantId: "user-1",
+      name: "Test Order",
+      isFixed: true,
+      isPrioritized: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastModifiedById: null,
+    });
+
+    vi.mocked(
+      autoSchedulerConfigRepo.getOperatingAutoSchedulerConfigs,
+    ).mockResolvedValue([baseConfig]);
+    vi.mocked(factoryRepo.findFactoriesMaxCapacity).mockResolvedValue([
+      { id: "F1", maxCapacity: 1000 },
+    ]);
+
+    await expect(
+      applyAssignmentMoves(prisma, [move], "user-1"),
+    ).rejects.toThrowError(ManualEditValidationError);
+
+    try {
+      await applyAssignmentMoves(prisma, [move], "user-1");
+    } catch (error: unknown) {
+      expect((error as ManualEditValidationError).violations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            targetId: "O_FIXED",
+            code: "INVALID_STATE",
+            reason: "Cannot schedule a fixed order",
+          }),
+        ]),
+      );
+    }
+  });
+});

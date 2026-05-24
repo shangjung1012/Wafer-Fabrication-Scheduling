@@ -95,7 +95,9 @@ export async function applyAssignmentMoves(
     oldCompletionDate?: Date;
   }[] = [];
 
-  // 2. Validate
+  // 2. Pass 1: Accumulate & Validate non-capacity constraints
+  const movesIntoSlot = new Map<string, string[]>();
+
   for (const move of moves) {
     const targetDate = toMidnight(move.productionDate);
     const targetKey = `${move.factoryId}_${move.productionDate}`;
@@ -116,6 +118,14 @@ export async function applyAssignmentMoves(
           targetId: move.assignmentId,
           code: "NOT_FOUND",
           reason: "Assignment not found",
+        });
+        continue;
+      }
+      if (existing.order.isFixed) {
+        violations.push({
+          targetId: move.assignmentId,
+          code: "INVALID_STATE",
+          reason: "Cannot move a fixed order",
         });
         continue;
       }
@@ -150,6 +160,14 @@ export async function applyAssignmentMoves(
         });
         continue;
       }
+      if (order.isFixed) {
+        violations.push({
+          targetId: move.orderId,
+          code: "INVALID_STATE",
+          reason: "Cannot schedule a fixed order",
+        });
+        continue;
+      }
       if (order.status !== OrderStatus.PENDING) {
         violations.push({
           targetId: move.orderId,
@@ -181,31 +199,12 @@ export async function applyAssignmentMoves(
       }
     }
 
-    // Prepare capacity check
     const factory = factoryMap.get(move.factoryId);
     if (!factory) {
       violations.push({
         targetId: move.assignmentId || move.orderId!,
         code: "NOT_FOUND",
         reason: "Target factory not found",
-      });
-      continue;
-    }
-
-    const currentCap = await findDailyCapacity(db, move.factoryId, targetDate);
-    const baseCapacity = currentCap
-      ? currentCap.curCapacity
-      : factory.maxCapacity;
-
-    // Calculate cumulative delta
-    const currentDelta = cumulativeCapacityDelta.get(targetKey) || 0;
-    const netCapacityAfterMove = baseCapacity + currentDelta - qty;
-
-    if (netCapacityAfterMove < 0) {
-      violations.push({
-        targetId: move.assignmentId || move.orderId!,
-        code: "CAPACITY_EXCEEDED",
-        reason: `Insufficient capacity at factory ${move.factoryId} on ${move.productionDate}`,
       });
       continue;
     }
@@ -217,7 +216,12 @@ export async function applyAssignmentMoves(
       cumulativeCapacityDelta.set(oldKey, oldDelta + qty);
     }
 
+    const currentDelta = cumulativeCapacityDelta.get(targetKey) || 0;
     cumulativeCapacityDelta.set(targetKey, currentDelta - qty);
+
+    const movesIn = movesIntoSlot.get(targetKey) || [];
+    movesIn.push(move.assignmentId || move.orderId!);
+    movesIntoSlot.set(targetKey, movesIn);
 
     validActions.push({
       move,
@@ -230,6 +234,37 @@ export async function applyAssignmentMoves(
       oldDate,
       oldCompletionDate,
     });
+  }
+
+  // Pass 2: Assert Net Capacity
+  const targetKeys = Array.from(cumulativeCapacityDelta.keys());
+  for (const key of targetKeys) {
+    const delta = cumulativeCapacityDelta.get(key) || 0;
+    // We only care if the net delta consumes capacity
+    if (delta >= 0) continue;
+
+    const [factoryId, dateStr] = key.split("_");
+    const targetDate = toMidnight(dateStr);
+
+    const currentCap = await findDailyCapacity(db, factoryId, targetDate);
+    const factory = factoryMap.get(factoryId);
+    if (!factory) continue;
+
+    const baseCapacity = currentCap
+      ? currentCap.curCapacity
+      : factory.maxCapacity;
+    const finalCapacity = baseCapacity + delta;
+
+    if (finalCapacity < 0) {
+      const responsibleTargetIds = movesIntoSlot.get(key) || [];
+      for (const targetId of responsibleTargetIds) {
+        violations.push({
+          targetId,
+          code: "CAPACITY_EXCEEDED",
+          reason: `Insufficient capacity at factory ${factoryId} on ${dateStr}`,
+        });
+      }
+    }
   }
 
   if (violations.length > 0) {

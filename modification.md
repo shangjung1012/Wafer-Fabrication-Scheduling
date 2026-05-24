@@ -105,3 +105,18 @@
 - **前端對接建議 (Frontend Integration Guide)**
   - 當使用者在編輯模式下拖拉尚未排程的 `PENDING` 訂單進入甘特圖時，前端應在送出儲存時，呼叫 `PATCH /api/assignments/bulk`，並將該筆異動以 `{ orderId: "...", factoryId: "...", productionDate: "YYYY-MM-DD" }` 的格式加入 `moves` 陣列。
   - 前端應捕捉 `400 Bad Request` 回應，解析 `violations` 陣列，並將 `CAPACITY_EXCEEDED` 或 `DEADLINE_VIOLATION` 的錯誤訊息直接對應用戶介面上導致衝突的訂單卡片，藉此阻擋無效的排程操作。
+
+## 7. Manual Edit 支援鎖定訂單 (isFixed) 阻擋
+
+**問題發生原因：**
+Manual Edit API 在重構時漏了對 `isFixed` 訂單的防護。這導致原本被標記為不可變動 (Immutable) 的訂單，雖然在演算法 (`run/preview`) 中受到保護，卻能被使用者透過手動拖拉的 API 強制移動。
+
+**修改的檔案與原因：**
+
+- **`infra/db/assignment-repository.ts`**
+  - 修改：在 `findAssignmentsByIds` 的關聯查詢中補上 `isFixed: true`，讓服務層能取得訂單的鎖定狀態。
+- **`modules/schedule/manual-edit-service.ts`**
+  - 新增：於手動移動排程 (`move.assignmentId`) 與排入新訂單 (`move.orderId`) 的驗證階段，加入 `isFixed` 檢查。若為 `true`，立即拒絕並拋出 `INVALID_STATE` 違規錯誤。
+- **`__tests__/modules/schedule/manual-edit-service.test.ts`**
+  - 新增：針對「移動已鎖定排程」與「排入已鎖定訂單」的阻擋測試，確保 `isFixed` 規則不被破壞。
+  - 修改：補齊 Mock Order 中缺失的 TypeScript 型別屬性。
