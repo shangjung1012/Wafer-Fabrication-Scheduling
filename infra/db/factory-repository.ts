@@ -35,7 +35,13 @@ export async function findFactoriesWithCapacities(
   type: string,
   currentDate: Date,
 ) {
-  const todayMidnight = new Date(new Date(currentDate).setHours(0, 0, 0, 0));
+  const todayMidnight = new Date(
+    Date.UTC(
+      currentDate.getUTCFullYear(),
+      currentDate.getUTCMonth(),
+      currentDate.getUTCDate(),
+    ),
+  );
   return db.factory.findMany({
     where: {
       productionType: type,

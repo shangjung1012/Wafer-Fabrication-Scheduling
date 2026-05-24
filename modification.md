@@ -54,13 +54,24 @@
 
 ---
 
-## 3. 排程引擎 Bug 修復
+## 4. 自動排程與模擬時間推移功能實作
 
-- **起始日期邊界 (Hard Boundary) 修復**：
-  過去引擎允許將訂單排入 `currentDate`（當日為 `IN_PRODUCTION`，不可排程）。透過在核心模組強制計算並覆寫 `minimumStartDate = currentDate + 1 + frozenDays` 解決。
-- **虛假稀缺 (False Scarcity) Bug 修復**：
-  演算法在處理已排程的固定訂單時，會重複扣除資料庫已扣除的剩餘產能。修改為「僅針對記憶體中新產生的產能物件進行扣減」。
-- **`DailyCapacity` 狀態同步 Bug 修復**：
-  在 `GLOBAL_OPTIMIZE` 模式下，被移出訂單的舊日期產能無法正確更新回資料庫。原因是引擎比對了「已在記憶體中還原」的產能。修正方式為從資料庫拉取未經修改的 `dbCapacities` 陣列傳入引擎，讓引擎進行準確的狀態差異比對 (Diffing)。
-- **API Payload 遺失 Bug 修復**：
-  按下 `RUN` 按鈕時行為始終與 `GAP_FILLING` 相同。原因是前端傳遞的參數格式扁平化，不符合後端 Zod Schema，導致後端自動退回預設值。透過修正前端送出的 JSON 結構解決。
+- **自動排程邏輯重構 (Task 1)**：
+  新增 `modules/schedule/auto-scheduler.ts`，將自動排程的核心邏輯由 `scripts/cron.ts` 中抽出。讓自動排程可以同時被 Cron Job（即時模式）與 API（模擬模式）呼叫。
+
+- **修復 Cron Job 時區與加入模擬模式防護 (Task 2)**：
+  修改 `scripts/cron.ts`，強制使用 `Asia/Taipei`（或環境變數設定的時區）。
+  設定每日午夜執行狀態推進，每兩小時執行一次填補空隙的自動排程。
+  加入防護機制：當系統處於模擬模式 (`isSimulationMode: true`) 時，立即中斷 Cron Job 執行。
+
+- **修正產能查詢的日期地板邏輯 (Task 3)**：
+  修改 `infra/db/factory-repository.ts` 中的 `findFactoriesWithCapacities`。使用嚴格的 `Date.UTC` 將查詢起始時間精確推算至 UTC 午夜 (`T00:00:00.000Z`)。防止因傳入精確時間（包含小時/分鐘）而遺漏當日剩餘的產能資料。
+
+- **模擬模式 API 與時間推進判定 (Task 4)**：
+  修改 `app/api/system/simulation/route.ts` 與新增 `modules/schedule/simulation-service.ts`。當更新模擬時間時，若時間推移跨越了 UTC 午夜（進入新的一天），則觸發狀態推進 (`advanceOrderStatuses`)；若未跨越午夜，則觸發自動排程 (`triggerAutoSchedule`)。
+
+- **前端 "+2h" 模擬控制與時間顯示 (Task 5)**：
+  修改 `app/(dashboard)/visualization/page.tsx`。加入 `simDateTime` 狀態以保存精確到分鐘的模擬時間。新增 "+2h" 按鈕，允許使用者在模擬模式下快進時間，藉此觸發且驗證後端的自動排程邏輯。
+
+- **假計時器測試 (Task 0)**：
+  新增 `__tests__/scripts/cron/time-logic.test.ts`。使用 `vi.setSystemTime` 驗證模擬模式防護。測試跨越午夜與未跨越午夜的情境。驗證產能查詢的地板時間計算正確。確保所有邏輯在 TDD 規範下實作且通過測試。

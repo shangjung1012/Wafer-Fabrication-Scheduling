@@ -1225,6 +1225,7 @@ export default function SchedulePage() {
   // Simulation mode state (from dev)
   const [simMode, setSimMode] = useState(false);
   const [simDate, setSimDate] = useState("");
+  const [simDateTime, setSimDateTime] = useState("");
   const [simLoading, setSimLoading] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -1750,6 +1751,7 @@ export default function SchedulePage() {
         setSimMode(!!body.isSimulationMode);
         if (body.simulationDate) {
           setSimDate(body.simulationDate.split("T")[0]);
+          setSimDateTime(body.simulationDate);
         }
       })
       .catch(() => {});
@@ -1781,8 +1783,10 @@ export default function SchedulePage() {
         setSimMode(!!body.isSimulationMode);
         if (body.simulationDate) {
           setSimDate(body.simulationDate.split("T")[0]);
+          setSimDateTime(body.simulationDate);
         } else {
           setSimDate("");
+          setSimDateTime("");
         }
         setLoading(true);
         setFetchError(null);
@@ -1817,12 +1821,30 @@ export default function SchedulePage() {
   };
 
   const stepSimDate = (days: number) => {
-    const baseStr = simDate || data?.today || format(new Date(), "yyyy-MM-dd");
-    const base = new Date(`${baseStr}T00:00:00.000Z`);
+    const baseStr =
+      simDateTime || data?.today || format(new Date(), "yyyy-MM-dd");
+    const base = new Date(
+      baseStr.includes("T") ? baseStr : `${baseStr}T00:00:00.000Z`,
+    );
     base.setUTCDate(base.getUTCDate() + days);
-    const next = base.toISOString().split("T")[0];
-    setSimDate(next);
-    patchSim({ simulationDate: `${next}T00:00:00.000Z` });
+    base.setUTCHours(0, 0, 0, 0);
+    const nextIso = base.toISOString();
+    setSimDateTime(nextIso);
+    setSimDate(nextIso.split("T")[0]);
+    patchSim({ simulationDate: nextIso });
+  };
+
+  const stepSimHours = (hours: number) => {
+    const baseStr =
+      simDateTime || data?.today || format(new Date(), "yyyy-MM-dd");
+    const base = new Date(
+      baseStr.includes("T") ? baseStr : `${baseStr}T00:00:00.000Z`,
+    );
+    base.setUTCHours(base.getUTCHours() + hours);
+    const nextIso = base.toISOString();
+    setSimDateTime(nextIso);
+    setSimDate(nextIso.split("T")[0]);
+    patchSim({ simulationDate: nextIso });
   };
 
   // Build date columns
@@ -2246,8 +2268,19 @@ export default function SchedulePage() {
             >
               +1d →
             </button>
+            <button
+              type="button"
+              onClick={() => stepSimHours(2)}
+              disabled={simLoading}
+              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium ml-1"
+            >
+              +2h
+            </button>
             <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-              Custom: {simDate || "—"}
+              Custom:{" "}
+              {simDateTime
+                ? simDateTime.substring(0, 16).replace("T", " ")
+                : "—"}
             </span>
           </>
         )}
