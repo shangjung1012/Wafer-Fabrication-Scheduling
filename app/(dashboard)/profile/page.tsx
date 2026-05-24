@@ -129,7 +129,20 @@ function ProfilePageInner() {
       message: EMAIL_ERROR_MESSAGES[emailError] ?? "Email verification failed.",
     };
   });
+  const [emailConfirmToken, setEmailConfirmToken] = useState<string | null>(
+    () => {
+      if (typeof window === "undefined") return null;
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("emailChangeToken");
+      if (!token) return null;
+      const url = new URL(window.location.href);
+      url.searchParams.delete("emailChangeToken");
+      window.history.replaceState({}, "", url.toString());
+      return token;
+    },
+  );
   const [emailLoading, setEmailLoading] = useState(false);
+  const [emailConfirmLoading, setEmailConfirmLoading] = useState(false);
   const [pendingVerification, setPendingVerification] = useState(false);
 
   // On mount: handle ?emailUpdated=true — fetch fresh user data then update localStorage
@@ -193,6 +206,41 @@ function ProfilePageInner() {
     },
     [newEmail, currentPassword],
   );
+
+  const handleConfirmEmailChange = useCallback(async () => {
+    if (!emailConfirmToken) return;
+    setEmailConfirmLoading(true);
+    setEmailStatus(null);
+    try {
+      const res = await apiFetch("/api/users/me/verify-email", {
+        method: "POST",
+        body: JSON.stringify({ token: emailConfirmToken }),
+      });
+      const json = (await res.json()) as { message?: string; code?: string };
+      if (!res.ok) {
+        setEmailStatus({
+          ok: false,
+          message: json.message ?? `Error ${res.status}`,
+        });
+        return;
+      }
+
+      const meRes = await apiFetch("/api/users/me");
+      const me = (await meRes.json()) as { user?: ClientAuthSession["user"] };
+      if (me.user) persistClientAuthSession({ user: me.user });
+
+      setEmailConfirmToken(null);
+      setPendingVerification(false);
+      setEmailStatus({
+        ok: true,
+        message: json.message ?? "Email updated successfully.",
+      });
+    } catch {
+      setEmailStatus({ ok: false, message: "Network error." });
+    } finally {
+      setEmailConfirmLoading(false);
+    }
+  }, [emailConfirmToken]);
 
   const handleLogout = useCallback(async () => {
     await logoutClientAuthSession();
@@ -292,7 +340,56 @@ function ProfilePageInner() {
           Current email: <strong>{user.email}</strong>
         </p>
 
-        {pendingVerification ? (
+        {emailConfirmToken ? (
+          <div
+            style={{
+              fontSize: 13,
+              color: "#0f172a",
+              background: "#f8fafc",
+              padding: "10px 14px",
+              border: "1px solid #cbd5e1",
+              borderRadius: 6,
+            }}
+          >
+            <strong>Confirm email change</strong>
+            <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={handleConfirmEmailChange}
+                disabled={emailConfirmLoading}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: "none",
+                  background: emailConfirmLoading ? "#94a3b8" : "#2563eb",
+                  color: "#fff",
+                  cursor: emailConfirmLoading ? "not-allowed" : "pointer",
+                }}
+              >
+                {emailConfirmLoading ? "Confirming..." : "Confirm"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEmailConfirmToken(null)}
+                disabled={emailConfirmLoading}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  color: "#334155",
+                  cursor: emailConfirmLoading ? "not-allowed" : "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : pendingVerification ? (
           <div
             style={{
               fontSize: 13,

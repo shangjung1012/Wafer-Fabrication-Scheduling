@@ -111,7 +111,7 @@ model EmailChangeToken {
   id        String    @id @default(cuid())
   userId    String
   newEmail  String
-  token     String    @unique @default(cuid())
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())

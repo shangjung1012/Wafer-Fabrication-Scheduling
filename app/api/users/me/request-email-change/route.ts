@@ -9,6 +9,7 @@ import { verifyPassword } from "@/modules/auth/password-service";
 import { renderAndSend } from "@/modules/mail/mail-template";
 import { emailChangeVerifyTemplate } from "@/modules/mail/templates/email-change-verify";
 import { emailChangeNotifyTemplate } from "@/modules/mail/templates/email-change-notify";
+import { createEmailChangeToken } from "@/modules/auth/email-change-service";
 import { prisma } from "@/lib/prisma";
 
 const RequestEmailChangeSchema = z
@@ -17,8 +18,6 @@ const RequestEmailChangeSchema = z
     currentPassword: z.string().min(1, "Current password is required"),
   })
   .strict();
-
-const TOKEN_TTL_MS = 3 * 60 * 1000; // 3 minutes
 
 export async function POST(request: Request) {
   try {
@@ -89,29 +88,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Delete any existing pending token for this user (latest always wins)
-    await prisma.emailChangeToken.deleteMany({
-      where: { userId: ctx.user.id },
-    });
-
-    const token = await prisma.emailChangeToken.create({
-      data: {
-        userId: ctx.user.id,
-        newEmail,
-        expiresAt: new Date(Date.now() + TOKEN_TTL_MS),
-      },
-      select: { token: true },
+    const token = await createEmailChangeToken(prisma, {
+      userId: ctx.user.id,
+      newEmail,
     });
 
     const appUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
-    const verifyUrl = `${appUrl}/api/users/me/verify-email?token=${token.token}`;
+    const verifyUrl = new URL("/api/users/me/verify-email", appUrl);
+    verifyUrl.searchParams.set("token", token.token);
 
     // Send both emails concurrently; don't fail the request if email sending fails
     await Promise.allSettled([
       renderAndSend(emailChangeVerifyTemplate, {
         newEmail,
         username: user.username,
-        verifyUrl,
+        verifyUrl: verifyUrl.toString(),
       }),
       renderAndSend(emailChangeNotifyTemplate, {
         oldEmail: user.email,
