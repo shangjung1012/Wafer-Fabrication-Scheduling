@@ -47,7 +47,8 @@ describe("Time Logic and Cron Jobs", () => {
         id: "global",
         isSimulationMode: true,
         simulationDate: null,
-      } satisfies SystemState);
+        updatedAt: new Date(),
+      } as SystemState);
 
       await runDailyExecutionCron();
       await runAutoSchedulerCron();
@@ -61,7 +62,8 @@ describe("Time Logic and Cron Jobs", () => {
         id: "global",
         isSimulationMode: false,
         simulationDate: null,
-      } satisfies SystemState);
+        updatedAt: new Date(),
+      } as SystemState);
 
       // Set a specific fake time
       const mockNow = new Date("2026-06-03T12:00:00.000Z");
@@ -106,7 +108,7 @@ describe("Time Logic and Cron Jobs", () => {
       const expectedMidnight = new Date("2026-06-03T00:00:00.000Z");
 
       await findFactoriesWithCapacities(
-        prisma as unknown as PrismaClient,
+        prisma as unknown as Parameters<typeof findFactoriesWithCapacities>[0],
         "A",
         currentDate,
       );

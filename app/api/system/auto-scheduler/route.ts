@@ -7,6 +7,14 @@ import {
   CsrfError,
 } from "@/modules/auth/require-auth";
 import {
+  requireRole,
+  ForbiddenError,
+  unauthorizedResponse,
+  csrfResponse,
+  forbiddenResponse,
+  badRequestResponse,
+} from "@/modules/auth/rbac";
+import {
   getAutoSchedulerConfigs,
   updateAutoSchedulerConfig,
 } from "@/infra/db/auto-scheduler-config-repository";
@@ -18,16 +26,13 @@ export async function GET(request: Request) {
     return NextResponse.json(configs);
   } catch (error) {
     if (error instanceof UnauthorizedError) {
-      return NextResponse.json(
-        { code: "UNAUTHORIZED", message: error.message },
-        { status: 401 },
-      );
+      return unauthorizedResponse(error.message);
     }
     if (error instanceof CsrfError) {
-      return NextResponse.json(
-        { code: error.code, message: error.message },
-        { status: error.status },
-      );
+      return csrfResponse(error.message);
+    }
+    if (error instanceof ForbiddenError) {
+      return forbiddenResponse(error);
     }
     return NextResponse.json(
       { code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch configs" },
@@ -52,20 +57,12 @@ const PatchSchema = z.object({
 export async function PATCH(request: Request) {
   try {
     const ctx = await requireAuth(request);
-    if (ctx.user.role !== "SUPERADMIN" && ctx.user.role !== "ADMIN") {
-      return NextResponse.json(
-        { code: "FORBIDDEN", message: "Insufficient permissions" },
-        { status: 403 },
-      );
-    }
+    requireRole(ctx, ["SUPERADMIN", "ADMIN"]);
 
     const body = await request.json().catch(() => ({}));
     const parsed = PatchSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
-        { code: "BAD_REQUEST", message: "Invalid input" },
-        { status: 400 },
-      );
+      return badRequestResponse("Invalid input");
     }
 
     const { type, ...patchData } = parsed.data;
@@ -73,16 +70,13 @@ export async function PATCH(request: Request) {
     return NextResponse.json(config);
   } catch (error) {
     if (error instanceof UnauthorizedError) {
-      return NextResponse.json(
-        { code: "UNAUTHORIZED", message: error.message },
-        { status: 401 },
-      );
+      return unauthorizedResponse(error.message);
     }
     if (error instanceof CsrfError) {
-      return NextResponse.json(
-        { code: error.code, message: error.message },
-        { status: error.status },
-      );
+      return csrfResponse(error.message);
+    }
+    if (error instanceof ForbiddenError) {
+      return forbiddenResponse(error);
     }
     return NextResponse.json(
       { code: "INTERNAL_SERVER_ERROR", message: "Failed to update config" },

@@ -30,3 +30,7 @@ export async function updateAutoSchedulerConfig(
     update: patch,
   });
 }
+
+export async function getOperatingAutoSchedulerConfigs(db: PrismaClient) {
+  return db.autoSchedulerConfig.findMany({ where: { isOperating: true } });
+}

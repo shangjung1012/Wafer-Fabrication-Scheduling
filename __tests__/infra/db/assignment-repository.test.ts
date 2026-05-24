@@ -61,7 +61,7 @@ describe("assignment-repository", () => {
           completionDate: true,
           assignedQuantity: true,
           status: true,
-          order: { select: { type: true } },
+          order: { select: { type: true, dueDate: true, isFixed: true } },
         },
       });
     });

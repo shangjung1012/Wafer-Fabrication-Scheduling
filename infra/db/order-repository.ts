@@ -384,3 +384,28 @@ export async function findCompetingScheduledOrders(
   }
   return Array.from(seen.values());
 }
+
+export async function bulkUpdateOrderModifiedBy(
+  db: PrismaClient,
+  orderIds: string[],
+  lastModifiedById: string,
+): Promise<void> {
+  if (orderIds.length === 0) return;
+  await db.order.updateMany({
+    where: { id: { in: orderIds } },
+    data: { lastModifiedById },
+  });
+}
+
+export async function bulkUpdateOrderStatusAndModifiedBy(
+  db: PrismaClient,
+  orderIds: string[],
+  status: OrderStatus,
+  lastModifiedById: string,
+): Promise<void> {
+  if (orderIds.length === 0) return;
+  await db.order.updateMany({
+    where: { id: { in: orderIds } },
+    data: { status, lastModifiedById },
+  });
+}

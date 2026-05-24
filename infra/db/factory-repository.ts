@@ -99,3 +99,7 @@ export async function findFactoriesForIssueSnapshot(
     },
   });
 }
+
+export async function findFactoriesMaxCapacity(db: PrismaClient) {
+  return db.factory.findMany({ select: { id: true, maxCapacity: true } });
+}

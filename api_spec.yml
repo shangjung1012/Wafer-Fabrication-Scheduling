@@ -458,6 +458,90 @@ paths:
                 code: CONFLICT
                 message: Schedule environment has changed. Please preview again.
 
+  /assignments/bulk:
+    patch:
+      summary: 批次移動排程或排入 PENDING 訂單
+      description: |
+        允許手動調整 SCHEDULED 狀態的排程日期，或將 PENDING 狀態的訂單排入指定日期。
+        後端會嚴格檢核：
+        1. 該日期工廠產能是否足夠 (CAPACITY_EXCEEDED)
+        2. 調整後的日期是否能滿足訂單交期 (DEADLINE_VIOLATION)
+        若有任何違規，將拒絕寫入並回傳 400 Bad Request。
+      tags:
+        - Schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [moves]
+              properties:
+                moves:
+                  type: array
+                  items:
+                    type: object
+                    required: [factoryId, productionDate]
+                    properties:
+                      assignmentId:
+                        type: string
+                        description: 欲移動的現有 Assignment ID (若為 PENDING 訂單排入則不填)
+                      orderId:
+                        type: string
+                        description: 欲排入的 PENDING Order ID (若為移動現有排程則不填)
+                      factoryId:
+                        type: string
+                        description: 目標工廠 ID
+                      productionDate:
+                        type: string
+                        format: date
+                        description: 目標生產日期 (YYYY-MM-DD)
+      responses:
+        "200":
+          description: 排程調整成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applied:
+                    type: integer
+                    description: 成功套用的異動筆數
+        "400":
+          description: 驗證失敗 (產能不足或違反交期)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: VALIDATION_FAILED
+                  message:
+                    type: string
+                    example: Manual edit validation failed
+                  violations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        targetId:
+                          type: string
+                        code:
+                          type: string
+                          enum:
+                            [
+                              CAPACITY_EXCEEDED,
+                              DEADLINE_VIOLATION,
+                              INVALID_STATE,
+                              NOT_FOUND,
+                            ]
+                        reason:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   # ==========================================================
   # Users & Permissions API (FR-06: 管理員進行權限管理)
   # SUPERADMIN only — scoped to own production type (group)
