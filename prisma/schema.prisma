@@ -111,7 +111,7 @@ model EmailChangeToken {
   id        String    @id @default(cuid())
   userId    String
   newEmail  String
-  token     String    @unique @default(cuid())
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
@@ -144,6 +144,7 @@ model RefreshToken {
   id                String    @id @default(cuid())
   tokenHash         String    @unique
   userId            String
+  sessionId         String?
   expiresAt         DateTime
   revokedAt         DateTime?
   createdAt         DateTime  @default(now())
@@ -154,6 +155,7 @@ model RefreshToken {
   replaces        RefreshToken? @relation("RefreshTokenReplacement")
 
   @@index([userId])
+  @@index([sessionId])
   @@map("refresh_token")
 }
 

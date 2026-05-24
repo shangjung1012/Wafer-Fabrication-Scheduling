@@ -65,6 +65,15 @@ function toDateInputValue(value?: string) {
   }
 }
 
+function toDateInputValue(value?: string) {
+  if (!value) return "";
+  try {
+    return format(parseISO(value), "yyyy-MM-dd");
+  } catch {
+    return value.slice(0, 10);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Preview adapter
 // ---------------------------------------------------------------------------

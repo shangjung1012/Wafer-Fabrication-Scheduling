@@ -357,6 +357,23 @@ export async function acceptInvitation(
 
   const passwordHash = await hashPassword(input.password);
   await db.$transaction(async (tx) => {
+    const claimed = await tx.userInvitation.updateMany({
+      where: {
+        id: invitation!.id,
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { acceptedAt: now },
+    });
+    if (claimed.count !== 1) {
+      throw new InvitationError(
+        400,
+        "INVALID_INVITATION",
+        "Invitation is invalid or expired.",
+      );
+    }
+
     await tx.user.update({
       where: { id: invitation!.userId },
       data: {
@@ -366,12 +383,6 @@ export async function acceptInvitation(
         lockedUntil: null,
         lastFailedLoginAt: null,
       },
-      select: { id: true },
-    });
-
-    await tx.userInvitation.update({
-      where: { id: invitation!.id },
-      data: { acceptedAt: now },
       select: { id: true },
     });
   });
