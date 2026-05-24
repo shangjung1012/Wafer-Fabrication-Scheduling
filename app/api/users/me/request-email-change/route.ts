@@ -97,8 +97,9 @@ export async function POST(request: Request) {
     const verifyUrl = new URL("/api/users/me/verify-email", appUrl);
     verifyUrl.searchParams.set("token", token.token);
 
-    // Send both emails concurrently; don't fail the request if email sending fails
-    await Promise.allSettled([
+    // Send both emails concurrently; don't fail or block the request if email
+    // delivery polling is slow after Azure has accepted the send operation.
+    void Promise.allSettled([
       renderAndSend(emailChangeVerifyTemplate, {
         newEmail,
         username: user.username,
@@ -109,7 +110,16 @@ export async function POST(request: Request) {
         newEmail,
         username: user.username,
       }),
-    ]);
+    ]).then((results) => {
+      results.forEach((result) => {
+        if (result.status === "rejected") {
+          console.error(
+            "Error sending email change notification:",
+            result.reason,
+          );
+        }
+      });
+    });
 
     return NextResponse.json({
       message:

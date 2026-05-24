@@ -99,6 +99,32 @@ describe("email change routes", () => {
     );
   });
 
+  it("does not keep the request pending when a non-critical email send does not settle", async () => {
+    renderAndSend
+      .mockResolvedValueOnce(undefined)
+      .mockReturnValueOnce(new Promise(() => undefined));
+
+    const responsePromise = requestEmailChangePost(
+      jsonRequest({
+        newEmail: "new@example.com",
+        currentPassword: "Password123!",
+      }),
+    );
+
+    await expect(
+      Promise.race([
+        responsePromise,
+        new Promise<"pending">((resolve) =>
+          setTimeout(() => resolve("pending"), 0),
+        ),
+      ]),
+    ).resolves.not.toBe("pending");
+
+    const response = await responsePromise;
+    expect(response.status).toBe(200);
+    expect(renderAndSend).toHaveBeenCalledTimes(2);
+  });
+
   it("does not mutate email state on GET verification links", async () => {
     const response = await verifyEmailRoute.GET(
       new Request("http://localhost/api/users/me/verify-email?token=raw-token"),

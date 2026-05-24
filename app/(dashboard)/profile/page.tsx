@@ -116,14 +116,10 @@ function ProfilePageInner() {
     ok: boolean;
     message: string;
   } | null>(() => {
-    // Read ?emailError on first render so no setState-in-effect is needed
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
     const emailError = params.get("emailError");
     if (!emailError) return null;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("emailError");
-    window.history.replaceState({}, "", url.toString());
     return {
       ok: false,
       message: EMAIL_ERROR_MESSAGES[emailError] ?? "Email verification failed.",
@@ -135,15 +131,24 @@ function ProfilePageInner() {
       const params = new URLSearchParams(window.location.search);
       const token = params.get("emailChangeToken");
       if (!token) return null;
-      const url = new URL(window.location.href);
-      url.searchParams.delete("emailChangeToken");
-      window.history.replaceState({}, "", url.toString());
       return token;
     },
   );
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailConfirmLoading, setEmailConfirmLoading] = useState(false);
   const [pendingVerification, setPendingVerification] = useState(false);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    let changed = false;
+    for (const key of ["emailError", "emailChangeToken"]) {
+      if (url.searchParams.has(key)) {
+        url.searchParams.delete(key);
+        changed = true;
+      }
+    }
+    if (changed) window.history.replaceState({}, "", url.toString());
+  }, []);
 
   // On mount: handle ?emailUpdated=true — fetch fresh user data then update localStorage
   useEffect(() => {
