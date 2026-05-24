@@ -9,6 +9,7 @@ import { verifyPassword } from "@/modules/auth/password-service";
 import { renderAndSend } from "@/modules/mail/mail-template";
 import { emailChangeVerifyTemplate } from "@/modules/mail/templates/email-change-verify";
 import { emailChangeNotifyTemplate } from "@/modules/mail/templates/email-change-notify";
+import { createEmailChangeToken } from "@/modules/auth/email-change-service";
 import { prisma } from "@/lib/prisma";
 
 const RequestEmailChangeSchema = z
@@ -17,8 +18,6 @@ const RequestEmailChangeSchema = z
     currentPassword: z.string().min(1, "Current password is required"),
   })
   .strict();
-
-const TOKEN_TTL_MS = 3 * 60 * 1000; // 3 minutes
 
 export async function POST(request: Request) {
   try {
@@ -89,36 +88,38 @@ export async function POST(request: Request) {
       );
     }
 
-    // Delete any existing pending token for this user (latest always wins)
-    await prisma.emailChangeToken.deleteMany({
-      where: { userId: ctx.user.id },
-    });
-
-    const token = await prisma.emailChangeToken.create({
-      data: {
-        userId: ctx.user.id,
-        newEmail,
-        expiresAt: new Date(Date.now() + TOKEN_TTL_MS),
-      },
-      select: { token: true },
+    const token = await createEmailChangeToken(prisma, {
+      userId: ctx.user.id,
+      newEmail,
     });
 
     const appUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
-    const verifyUrl = `${appUrl}/api/users/me/verify-email?token=${token.token}`;
+    const verifyUrl = new URL("/api/users/me/verify-email", appUrl);
+    verifyUrl.searchParams.set("token", token.token);
 
-    // Send both emails concurrently; don't fail the request if email sending fails
-    await Promise.allSettled([
+    // Send both emails concurrently; don't fail or block the request if email
+    // delivery polling is slow after Azure has accepted the send operation.
+    void Promise.allSettled([
       renderAndSend(emailChangeVerifyTemplate, {
         newEmail,
         username: user.username,
-        verifyUrl,
+        verifyUrl: verifyUrl.toString(),
       }),
       renderAndSend(emailChangeNotifyTemplate, {
         oldEmail: user.email,
         newEmail,
         username: user.username,
       }),
-    ]);
+    ]).then((results) => {
+      results.forEach((result) => {
+        if (result.status === "rejected") {
+          console.error(
+            "Error sending email change notification:",
+            result.reason,
+          );
+        }
+      });
+    });
 
     return NextResponse.json({
       message:
