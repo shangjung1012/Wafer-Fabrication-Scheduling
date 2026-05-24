@@ -27,7 +27,7 @@ describe("Schedule Engine - Preview", () => {
       orders: [
         {
           id: "O1",
-          status: "APPROVED",
+          status: "PENDING",
           dueDate: new Date(),
           quantity: 100,
           createdAt: new Date(),
@@ -72,6 +72,7 @@ describe("Schedule Engine - Preview", () => {
       "Type A",
       dummyConfig,
       currentDate,
+      false,
     );
     expect(greedyBestFitStrategy.execute).toHaveBeenCalledWith(
       mockData.orders,
@@ -79,6 +80,7 @@ describe("Schedule Engine - Preview", () => {
       mockData.capacities,
       dummyConfig,
       currentDate,
+      undefined,
     );
     expect(result).toBe(mockStrategyResult);
   });

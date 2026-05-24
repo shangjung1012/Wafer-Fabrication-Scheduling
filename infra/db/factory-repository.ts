@@ -35,7 +35,13 @@ export async function findFactoriesWithCapacities(
   type: string,
   currentDate: Date,
 ) {
-  const todayMidnight = new Date(new Date(currentDate).setHours(0, 0, 0, 0));
+  const todayMidnight = new Date(
+    Date.UTC(
+      currentDate.getUTCFullYear(),
+      currentDate.getUTCMonth(),
+      currentDate.getUTCDate(),
+    ),
+  );
   return db.factory.findMany({
     where: {
       productionType: type,
@@ -51,4 +57,49 @@ export async function findFactoriesWithCapacities(
       },
     },
   });
+}
+
+/**
+ * Load ACTIVE factories for `type`, including:
+ *  - their admin users (id, email, username) for issue-created email recipients
+ *  - daily capacities whose date falls within [windowStart, windowEnd]
+ *
+ * Used by the ConflictIssue auto-creation flow to build the contextSnapshot.
+ */
+export async function findFactoriesForIssueSnapshot(
+  db: PrismaClient,
+  type: string,
+  windowStart: Date,
+  windowEnd: Date,
+) {
+  return db.factory.findMany({
+    where: {
+      productionType: type,
+      status: FactoryStatus.ACTIVE,
+    },
+    select: {
+      id: true,
+      productionType: true,
+      maxCapacity: true,
+      admins: {
+        select: { id: true, email: true, username: true },
+      },
+      dailyCapacities: {
+        where: {
+          date: { gte: windowStart, lte: windowEnd },
+        },
+        select: {
+          id: true,
+          factoryId: true,
+          date: true,
+          maxCapacity: true,
+          curCapacity: true,
+        },
+      },
+    },
+  });
+}
+
+export async function findFactoriesMaxCapacity(db: PrismaClient) {
+  return db.factory.findMany({ select: { id: true, maxCapacity: true } });
 }

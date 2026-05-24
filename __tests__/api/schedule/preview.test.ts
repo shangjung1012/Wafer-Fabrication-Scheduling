@@ -86,7 +86,6 @@ describe("POST /api/schedule/preview", () => {
       ],
       updatedCapacities: [],
       newCapacities: [],
-      conflictOrderIds: [],
     };
 
     vi.mocked(schedulePreview.previewSchedule).mockResolvedValue(
@@ -145,7 +144,6 @@ describe("POST /api/schedule/preview", () => {
       newAssignments: [],
       updatedCapacities: [],
       newCapacities: [],
-      conflictOrderIds: [],
     };
 
     vi.mocked(schedulePreview.previewSchedule).mockResolvedValue(

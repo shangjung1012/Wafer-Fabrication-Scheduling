@@ -11,8 +11,6 @@ import { getScheduleVersion, setPreview } from "@/infra/redis/schedule-store";
 import crypto from "crypto";
 import { OrderStatus } from "@/lib/generated/prisma";
 import { getTime } from "@/lib/get-time";
-import { prisma } from "@/lib/prisma";
-import { fetchConflictOrders } from "@/modules/schedule/conflict";
 
 const SchedulingConfigSchema = z
   .object({
@@ -70,13 +68,6 @@ export async function POST(request: Request) {
     const { type, config } = parsed.data;
 
     const currentDate = await getTime();
-    currentDate.setHours(0, 0, 0, 0);
-
-    if (!config.startDate) {
-      const defaultStartDate = new Date(currentDate);
-      defaultStartDate.setDate(defaultStartDate.getDate() + 1);
-      config.startDate = defaultStartDate;
-    }
 
     const strategyResult = await previewSchedule(
       type,
@@ -105,14 +96,6 @@ export async function POST(request: Request) {
       .filter((o) => o.status === OrderStatus.FAILED)
       .map((o) => o.id);
 
-    // Basic conflict warnings
-    const conflictWarnings: string[] = [];
-    if (failedOrderIds.length > 0) {
-      conflictWarnings.push(
-        `There was not enough capacity to schedule ${failedOrderIds.length} orders.`,
-      );
-    }
-
     const payload = {
       type,
       config,
@@ -122,21 +105,12 @@ export async function POST(request: Request) {
 
     await setPreview(previewId, payload, 1800);
 
-    const conflictOrderIds = strategyResult.conflictOrderIds;
-    const conflictOrders =
-      conflictOrderIds.length > 0
-        ? await fetchConflictOrders(prisma, conflictOrderIds)
-        : [];
-
     return NextResponse.json({
       previewId,
       data: {
         newSchedule,
         affectedOrders,
         failedOrderIds,
-        conflictWarnings,
-        conflictOrderIds,
-        conflictOrders,
       },
     });
   } catch (error) {

@@ -1,5 +1,6 @@
 import { OrderStatus, AssignmentStatus } from "@/lib/generated/prisma/client";
 import { type SchedulingConfig } from "./config";
+import { calculateOrderDeadline } from "./validation-utils";
 
 export type { SchedulingConfig };
 
@@ -7,6 +8,7 @@ export interface OrderAssignmentDraft {
   orderId: string;
   factoryId: string;
   productionDate: Date;
+  completionDate: Date;
   assignedQuantity: number;
   status: typeof AssignmentStatus.SCHEDULED;
 }
@@ -57,7 +59,6 @@ export interface StrategyResult {
   newAssignments: OrderAssignmentDraft[];
   updatedCapacities: ExistingCapacityDraft[];
   newCapacities: CapacityDraft[];
-  conflictOrderIds: string[];
 }
 
 export interface IScheduleStrategy {
@@ -68,26 +69,16 @@ export interface IScheduleStrategy {
     capacities: SchedulingCapacityInput[],
     config: SchedulingConfig,
     currentDate?: Date,
-  ): StrategyResult;
-}
-
-export interface IScheduleStrategy {
-  name: string;
-  execute(
-    orders: SchedulingOrderInput[],
-    factories: SchedulingFactoryInput[],
-    capacities: SchedulingCapacityInput[],
-    config: SchedulingConfig,
-    currentDate?: Date,
+    dbCapacities?: SchedulingCapacityInput[],
   ): StrategyResult;
 }
 
 // Helper to get YYYY-MM-DD string robustly
 function toDateString(d: Date | string): string {
   const date = new Date(d);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -98,15 +89,20 @@ function toDateString(d: Date | string): string {
 // Used to detect "hard conflicts" — orders whose remaining quantity exceeds
 // the total schedulable capacity within their due-date window, meaning no
 // future rerun can resolve them.
-function computeTotalAvailableCapacity(
+export function computeTotalAvailableCapacity(
   windowStart: Date,
   windowEnd: Date,
   factories: SchedulingFactoryInput[],
   capacityMap: Map<string, CapacityDraft>,
 ): number {
   let total = 0;
-  const iterDate = new Date(windowStart);
-  iterDate.setHours(0, 0, 0, 0);
+  const iterDate = new Date(
+    Date.UTC(
+      windowStart.getUTCFullYear(),
+      windowStart.getUTCMonth(),
+      windowStart.getUTCDate(),
+    ),
+  );
   const endTime = windowEnd.getTime();
 
   while (iterDate.getTime() <= endTime) {
@@ -120,7 +116,7 @@ function computeTotalAvailableCapacity(
         total += factory.maxCapacity;
       }
     }
-    iterDate.setDate(iterDate.getDate() + 1);
+    iterDate.setUTCDate(iterDate.getUTCDate() + 1);
   }
 
   return total;
@@ -135,13 +131,13 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
     config: SchedulingConfig,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _currentDate: Date = new Date(),
+    dbCapacities?: SchedulingCapacityInput[],
   ): StrategyResult => {
     const result: StrategyResult = {
       processedOrders: [],
       newAssignments: [],
       updatedCapacities: [],
       newCapacities: [],
-      conflictOrderIds: [],
     };
 
     // 1. Separate immutable and mutable orders
@@ -187,7 +183,13 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
           };
           capacityMap.set(mapKey, cap);
         }
-        cap.curCapacity -= assignment.assignedQuantity;
+
+        // Only deduct if this capacity draft was dynamically created in this run
+        // (i.e., it doesn't have an ID from the database).
+        // If it has an ID, the database already reflects this assignment's deduction.
+        if (!cap.id) {
+          cap.curCapacity -= assignment.assignedQuantity;
+        }
       }
       result.processedOrders.push({ ...order, status: order.status });
     }
@@ -226,18 +228,28 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
 
     // 5. Process each mutable order
     for (const order of sortedOrders) {
-      const windowStart = new Date(config.startDate);
-      windowStart.setDate(windowStart.getDate() + config.frozenDays);
-      windowStart.setHours(0, 0, 0, 0);
-
-      const windowEnd = new Date(order.dueDate);
-      windowEnd.setDate(
-        windowEnd.getDate() - config.bufferDays - (config.productionDays - 1),
+      const windowStart = new Date(
+        Date.UTC(
+          new Date(config.startDate).getUTCFullYear(),
+          new Date(config.startDate).getUTCMonth(),
+          new Date(config.startDate).getUTCDate(),
+        ),
       );
-      if (config.endDate && windowEnd > config.endDate) {
-        windowEnd.setTime(config.endDate.getTime());
+
+      const windowEnd = calculateOrderDeadline(new Date(order.dueDate), config);
+
+      if (config.endDate) {
+        const configEnd = new Date(
+          Date.UTC(
+            new Date(config.endDate).getUTCFullYear(),
+            new Date(config.endDate).getUTCMonth(),
+            new Date(config.endDate).getUTCDate(),
+          ),
+        );
+        if (windowEnd.getTime() > configEnd.getTime()) {
+          windowEnd.setTime(configEnd.getTime());
+        }
       }
-      windowEnd.setHours(23, 59, 59, 999);
 
       // Calculate remaining quantity excluding all current assignments
       // Engine leaves frozen or GAP_FILLING assignments in order.assignments
@@ -317,10 +329,16 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
                 wasCreated: false,
               });
 
+              const completionDate = new Date(currentIterDate);
+              completionDate.setDate(
+                completionDate.getDate() + config.productionDays,
+              );
+
               virtualAssignments.push({
                 orderId: order.id,
                 factoryId: cap.factoryId,
                 productionDate: new Date(currentIterDate),
+                completionDate: completionDate,
                 assignedQuantity: allocated,
                 status: AssignmentStatus.SCHEDULED,
               });
@@ -328,7 +346,7 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
               remainingQty -= allocated;
             }
 
-            currentIterDate.setDate(currentIterDate.getDate() + 1);
+            currentIterDate.setUTCDate(currentIterDate.getUTCDate() + 1);
           }
         } else {
           // Non-splittable logic: Find a single block that fits the entire remainingQty
@@ -375,10 +393,16 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
                   wasCreated: false,
                 });
 
+                const completionDate = new Date(currentIterDate);
+                completionDate.setDate(
+                  completionDate.getDate() + config.productionDays,
+                );
+
                 virtualAssignments.push({
                   orderId: order.id,
                   factoryId: cap.factoryId,
                   productionDate: new Date(currentIterDate),
+                  completionDate: completionDate,
                   assignedQuantity: remainingQty,
                   status: AssignmentStatus.SCHEDULED,
                 });
@@ -387,7 +411,7 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
                 break; // Break inner factory loop
               }
             }
-            currentIterDate.setDate(currentIterDate.getDate() + 1);
+            currentIterDate.setUTCDate(currentIterDate.getUTCDate() + 1);
           }
         }
       }
@@ -421,29 +445,15 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
 
         // Mutable order that failed becomes FAILED
         result.processedOrders.push({ ...order, status: OrderStatus.FAILED });
-
-        // Detect "hard conflict": even with all factories' total available
-        // capacity in the entire [windowStart, windowEnd] window, the order's
-        // remaining quantity still cannot be covered. Such orders cannot be
-        // resolved by any future rerun and are reported separately from FAILED.
-        if (startingRemainingQty > 0) {
-          const totalAvailable = computeTotalAvailableCapacity(
-            windowStart,
-            windowEnd,
-            factories,
-            capacityMap,
-          );
-          if (totalAvailable < startingRemainingQty) {
-            result.conflictOrderIds.push(order.id);
-          }
-        }
       }
     }
 
     // 5. Finalize output arrays from the final state of capacityMap
     for (const cap of Array.from(capacityMap.values())) {
       if (cap.id) {
-        const originalCap = capacities.find((c) => c.id === cap.id);
+        // Compare against the true DB original state if provided, otherwise fallback to the capacities param
+        const diffSource = dbCapacities ?? capacities;
+        const originalCap = diffSource.find((c) => c.id === cap.id);
         if (originalCap && originalCap.curCapacity !== cap.curCapacity) {
           result.updatedCapacities.push({ ...cap, id: cap.id });
         }

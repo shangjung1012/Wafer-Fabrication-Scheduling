@@ -105,5 +105,9 @@ export async function resolveActorScope(
       }
       return { role: "SUPERADMIN", userId: ctx.user.id, group: user.group };
     }
+
+    case "SYSTEM": {
+      throw new ForbiddenError("SYSTEM role cannot be used as an actor scope.");
+    }
   }
 }

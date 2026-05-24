@@ -56,7 +56,7 @@ export type OrderRisk = "ON_TRACK" | "AT_RISK" | "OVERDUE";
 export type PendingOrderInfo = {
   id: string;
   name: string;
-  status: "PENDING" | "APPROVED";
+  status: "PENDING";
   quantity: number;
   dueDate: string; // YYYY-MM-DD
   createdAt: string; // YYYY-MM-DD
@@ -68,6 +68,10 @@ export type SalesContext = {
   pendingOrders: PendingOrderInfo[];
 };
 
+export type AdminContext = {
+  pendingOrders: PendingOrderInfo[];
+};
+
 export type TimelineResponse = {
   factories: FactoryInfo[];
   timeline: TimelineItem[];
@@ -75,6 +79,7 @@ export type TimelineResponse = {
   dailyCapacities: DailyCapacityInfo[];
   diffs: DiffEntry[];
   salesContext?: SalesContext;
+  adminContext?: AdminContext;
   today: string; // YYYY-MM-DD, reflects simulation date if active
 };
 

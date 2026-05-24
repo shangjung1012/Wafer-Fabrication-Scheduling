@@ -1,63 +1,104 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import {
+  CsrfError,
+  requireAuth,
+  UnauthorizedError,
+} from "@/modules/auth/require-auth";
+import {
+  confirmEmailChangeToken,
+  EmailChangeError,
+} from "@/modules/auth/email-change-service";
 import { prisma } from "@/lib/prisma";
+
+const VerifyEmailBodySchema = z
+  .object({
+    token: z.string().min(1, "token is required"),
+  })
+  .strict();
+
+function profileRedirect(params: Record<string, string>): NextResponse {
+  const appUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
+  const url = new URL("/profile", appUrl);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  return NextResponse.redirect(url);
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get("token");
-  const appUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
 
   if (!token) {
-    return NextResponse.redirect(`${appUrl}/profile?emailError=missing_token`);
+    return profileRedirect({ emailError: "missing_token" });
   }
 
-  const record = await prisma.emailChangeToken.findUnique({
-    where: { token },
-    select: {
-      id: true,
-      userId: true,
-      newEmail: true,
-      expiresAt: true,
-      usedAt: true,
-    },
-  });
+  return profileRedirect({ emailChangeToken: token });
+}
 
-  if (!record) {
-    return NextResponse.redirect(`${appUrl}/profile?emailError=invalid_token`);
-  }
+export async function POST(request: Request) {
+  try {
+    const ctx = await requireAuth(request);
 
-  if (record.usedAt) {
-    return NextResponse.redirect(`${appUrl}/profile?emailError=already_used`);
-  }
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { code: "BAD_REQUEST", message: "Request body must be valid JSON." },
+        { status: 400 },
+      );
+    }
 
-  if (record.expiresAt < new Date()) {
-    return NextResponse.redirect(`${appUrl}/profile?emailError=expired`);
-  }
+    const parsed = VerifyEmailBodySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          code: "BAD_REQUEST",
+          message: "Invalid input.",
+          details: parsed.error.flatten().fieldErrors,
+        },
+        { status: 400 },
+      );
+    }
 
-  // Check new email is still available (someone else might have taken it in the meantime)
-  const conflict = await prisma.user.findUnique({
-    where: { email: record.newEmail },
-    select: { id: true },
-  });
-  if (conflict && conflict.id !== record.userId) {
-    await prisma.emailChangeToken.update({
-      where: { id: record.id },
-      data: { usedAt: new Date() },
+    const result = await confirmEmailChangeToken(prisma, {
+      userId: ctx.user.id,
+      token: parsed.data.token,
     });
-    return NextResponse.redirect(`${appUrl}/profile?emailError=email_taken`);
+
+    return NextResponse.json({
+      message: "Email updated successfully.",
+      email: result.email,
+    });
+  } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json(
+        { code: "UNAUTHORIZED", message: error.message },
+        { status: 401 },
+      );
+    }
+    if (error instanceof CsrfError) {
+      return NextResponse.json(
+        { code: error.code, message: error.message },
+        { status: error.status },
+      );
+    }
+    if (error instanceof EmailChangeError) {
+      return NextResponse.json(
+        { code: error.code, message: error.message },
+        { status: error.status },
+      );
+    }
+
+    console.error("Error verifying email change:", error);
+    return NextResponse.json(
+      {
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to verify email change.",
+      },
+      { status: 500 },
+    );
   }
-
-  // Update email and mark token used atomically
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: record.userId },
-      data: { email: record.newEmail },
-    }),
-    prisma.emailChangeToken.update({
-      where: { id: record.id },
-      data: { usedAt: new Date() },
-    }),
-  ]);
-
-  // Redirect to profile — the page will fetch fresh user data and update the session
-  return NextResponse.redirect(`${appUrl}/profile?emailUpdated=true`);
 }

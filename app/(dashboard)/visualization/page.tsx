@@ -8,6 +8,7 @@ import {
   eachDayOfInterval,
   parseISO,
   differenceInDays,
+  addDays,
 } from "date-fns";
 import {
   DndContext,
@@ -44,8 +45,24 @@ function toDateStr(d: Date) {
   return format(d, "yyyy-MM-dd");
 }
 
+/** Default window: 10 calendar days starting at anchor (anchor + 9 inclusive). */
+function defaultTimelineRange(anchorDayYmd: string) {
+  const startDate = anchorDayYmd.slice(0, 10);
+  const endDate = toDateStr(addDays(parseISO(startDate), 9));
+  return { startDate, endDate };
+}
+
 function dateInputToIso(value: string) {
-  return new Date(`${value}T00:00:00`).toISOString();
+  return `${value}T00:00:00.000Z`;
+}
+
+function toDateInputValue(value?: string) {
+  if (!value) return "";
+  try {
+    return format(parseISO(value), "yyyy-MM-dd");
+  } catch {
+    return value.slice(0, 10);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -94,19 +111,21 @@ function convertNewScheduleToPreview(args: {
 
   const toIsoDate = (d: string | Date | undefined): string => {
     if (!d) return "";
-    if (d instanceof Date) return format(d, "yyyy-MM-dd");
-    // Accept both ISO and already-yyyy-MM-dd strings.
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-    try {
-      return format(parseISO(d), "yyyy-MM-dd");
-    } catch {
-      return String(d).slice(0, 10);
+    if (typeof d === "string") {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      if (d.includes("T")) return d.split("T")[0];
+      return d.slice(0, 10);
     }
+    if (d instanceof Date) {
+      return format(d, "yyyy-MM-dd");
+    }
+    return String(d).slice(0, 10);
   };
 
   // Build TimelineItem[] from every assignment on every order in newSchedule.
   const timeline: TimelineItem[] = [];
   let synthAssignmentSeq = 0;
+  const previewedOrderIds = new Set(newSchedule.map((o) => o.id));
   for (const order of newSchedule) {
     for (const a of order.assignments ?? []) {
       if (!a.factoryId || !a.productionDate) continue;
@@ -122,6 +141,15 @@ function convertNewScheduleToPreview(args: {
         applicantId: order.applicantId ?? "",
         lastModifiedById: order.lastModifiedById ?? null,
       });
+    }
+  }
+
+  // When previewing a subset (targetOrderIds), the API only returns those orders.
+  // Carry over the baseline timeline items for everything else so existing
+  // scheduled orders stay visible on the preview.
+  for (const t of baseTimeline?.timeline ?? []) {
+    if (!previewedOrderIds.has(t.orderId)) {
+      timeline.push(t);
     }
   }
 
@@ -611,14 +639,56 @@ function PendingSidebar({
   today,
   onEditOrder,
   onCreate,
+  selectedOrderIds,
+  setSelectedOrderIds,
+  onPreviewSelected,
+  previewLoading = false,
 }: {
   orders: PendingOrderInfo[];
   today: string;
   onEditOrder: (order: OrderEditorValues) => void;
   onCreate?: () => void;
+  selectedOrderIds?: Set<string>;
+  setSelectedOrderIds?: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onPreviewSelected?: (targetOrderIds: string[]) => void;
+  previewLoading?: boolean;
 }) {
+  const multiSelectEnabled = Boolean(setSelectedOrderIds && onPreviewSelected);
+  const selected = selectedOrderIds ?? new Set<string>();
   const pending = orders.filter((o) => o.status === "PENDING");
-  const approved = orders.filter((o) => o.status === "APPROVED");
+  const pendingIds = pending.map((o) => o.id);
+  const allSelected =
+    pendingIds.length > 0 && pendingIds.every((id) => selected.has(id));
+  const someSelected =
+    !allSelected && pendingIds.some((id) => selected.has(id));
+  const selectedCount = selected.size;
+
+  const toggleOne = (id: string) => {
+    if (!setSelectedOrderIds) return;
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (!setSelectedOrderIds) return;
+    setSelectedOrderIds((prev) => {
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const id of pendingIds) next.delete(id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const id of pendingIds) next.add(id);
+      return next;
+    });
+  };
 
   const riskDot = (risk: OrderRisk) => {
     if (risk === "OVERDUE")
@@ -648,9 +718,24 @@ function PendingSidebar({
         className={`bg-white rounded-lg p-3 text-xs space-y-1 shadow-sm ${borderColor(o.risk)}`}
       >
         <div className="flex items-start justify-between gap-1">
-          <span className="font-medium text-gray-900 leading-tight">
-            {o.name}
-          </span>
+          {multiSelectEnabled ? (
+            <label className="flex items-start gap-1.5 cursor-pointer flex-1 min-w-0">
+              <input
+                type="checkbox"
+                checked={selected.has(o.id)}
+                onChange={() => toggleOne(o.id)}
+                className="mt-0.5 h-3 w-3 shrink-0 cursor-pointer accent-indigo-600"
+                aria-label={`Select order ${o.name}`}
+              />
+              <span className="font-medium text-gray-900 leading-tight">
+                {o.name}
+              </span>
+            </label>
+          ) : (
+            <span className="font-medium text-gray-900 leading-tight flex-1 min-w-0">
+              {o.name}
+            </span>
+          )}
           {riskDot(o.risk)}
         </div>
         <div className="flex justify-between text-gray-500">
@@ -716,6 +801,39 @@ function PendingSidebar({
           )}
         </div>
       </div>
+      {multiSelectEnabled && pending.length > 0 && (
+        <div className="px-3 py-2 border-b border-gray-200 bg-white space-y-2">
+          <button
+            type="button"
+            onClick={() => onPreviewSelected?.(Array.from(selected))}
+            disabled={selectedCount === 0 || previewLoading}
+            className={`w-full text-xs font-semibold px-2 py-1.5 rounded border transition-colors ${
+              selectedCount === 0 || previewLoading
+                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
+            }`}
+          >
+            {previewLoading
+              ? "Previewing…"
+              : selectedCount === 0
+                ? "Preview Selected"
+                : `🔍 Preview Selected (${selectedCount})`}
+          </button>
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someSelected;
+              }}
+              onChange={toggleAll}
+              className="h-3 w-3 cursor-pointer accent-indigo-600"
+              aria-label="Select all pending orders"
+            />
+            <span className="font-medium">Select all ({pending.length})</span>
+          </label>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {orders.length === 0 && (
           <p className="text-xs text-gray-400 text-center pt-4">
@@ -725,17 +843,9 @@ function PendingSidebar({
         {pending.length > 0 && (
           <div className="space-y-2">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Awaiting Approval
+              My Pending Orders
             </p>
             {renderOrders(pending)}
-          </div>
-        )}
-        {approved.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Awaiting Schedule
-            </p>
-            {renderOrders(approved)}
           </div>
         )}
       </div>
@@ -772,7 +882,9 @@ function OrderFormModal({
   const [name, setName] = useState(initialValues.name);
   const [quantity, setQuantity] = useState(initialValues.quantity);
   const [type, setType] = useState(initialValues.type ?? "A");
-  const [dueDate, setDueDate] = useState(initialValues.dueDate ?? "2026-12-31");
+  const [dueDate, setDueDate] = useState(
+    toDateInputValue(initialValues.dueDate) || "2026-12-31",
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -787,7 +899,7 @@ function OrderFormModal({
         name: name.trim(),
         quantity: quantity.trim(),
         type: isCreate ? type.trim() : undefined,
-        dueDate: isCreate ? dueDate : undefined,
+        dueDate,
         orderId: initialValues.orderId,
         status: initialValues.status,
       });
@@ -808,7 +920,7 @@ function OrderFormModal({
             <p className="mt-1 text-xs text-gray-500">
               {isCreate
                 ? "Create a new sales order using the current production style."
-                : "Update the order name or quantity and save the change."}
+                : "Update the order name, quantity, or due date and save the change."}
             </p>
           </div>
           <button
@@ -875,17 +987,15 @@ function OrderFormModal({
             </label>
           )}
 
-          {isCreate && (
-            <label className="block text-sm font-medium text-gray-700">
-              Due Date
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-              />
-            </label>
-          )}
+          <label className="block text-sm font-medium text-gray-700">
+            Due Date
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />
+          </label>
 
           <label className="block text-sm font-medium text-gray-700">
             Quantity
@@ -928,18 +1038,24 @@ function OrderFormModal({
 function GanttCell({
   cell,
   hasRescheduled,
+  hasNewlyPlaced,
   isMyOrder,
   isSales,
   editMode,
   movedAssignmentIds,
+  dropDisabled = false,
+  dropDisabledReason,
   onClick,
 }: {
   cell: CellData;
   hasRescheduled: boolean;
+  hasNewlyPlaced: boolean;
   isMyOrder: boolean;
   isSales: boolean;
   editMode: boolean;
   movedAssignmentIds: Set<string>;
+  dropDisabled?: boolean;
+  dropDisabledReason?: string;
   onClick: () => void;
 }) {
   const { bg, barColor, fillRatio } = getCellStyle(cell);
@@ -954,6 +1070,8 @@ function GanttCell({
         <DroppableCell
           cellId={cellId}
           className={`w-full min-h-14 relative ${bg}`}
+          disabled={dropDisabled}
+          invalidReason={dropDisabledReason}
         >
           {hasConflict && (
             <span className="absolute top-0.5 right-0.5 text-[9px] leading-none z-10">
@@ -1001,7 +1119,7 @@ function GanttCell({
     <td className="border border-gray-100 w-[72px] min-w-[72px] h-14 p-0">
       <button
         onClick={onClick}
-        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""}`}
+        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""} ${hasNewlyPlaced && !isMyOrder ? "ring-2 ring-inset ring-emerald-500" : ""}`}
       >
         {/* Conflict marker */}
         {hasConflict && (
@@ -1019,6 +1137,15 @@ function GanttCell({
         {hasRescheduled && hasConflict && (
           <span className="absolute top-1 right-4 text-[9px] leading-none text-purple-500 font-bold">
             ↕
+          </span>
+        )}
+
+        {/* Newly placed (preview) marker */}
+        {hasNewlyPlaced && (
+          <span
+            className={`absolute ${hasRescheduled || hasConflict ? "top-1 right-7" : "top-1 right-1"} text-[10px] leading-none text-emerald-600 font-bold`}
+          >
+            +
           </span>
         )}
 
@@ -1059,23 +1186,8 @@ function GanttCell({
 // Main page
 // ---------------------------------------------------------------------------
 
-const DEFAULT_START = "2026-05-10";
-const DEFAULT_END = "2026-05-23";
-
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
-type NotifyStatus = "idle" | "sending" | "sent" | "error";
-
-type ConflictOrderInfo = {
-  id: string;
-  name: string;
-  quantity: number;
-  dueDate: string;
-  applicantEmail: string | null;
-  applicantUsername: string | null;
-  adminEmail: string | null;
-  adminUsername: string | null;
-};
 
 type AssignmentMove = {
   factoryId: string;
@@ -1089,8 +1201,8 @@ export default function SchedulePage() {
   const session = useClientAuthSession();
   const isSales = session?.user.role === "SALES";
   const productionType = session?.user.group ?? "";
-  const [startDate, setStartDate] = useState(DEFAULT_START);
-  const [endDate, setEndDate] = useState(DEFAULT_END);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [data, setData] = useState<TimelineResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<FetchError | null>(null);
@@ -1100,12 +1212,6 @@ export default function SchedulePage() {
   } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>("idle");
-  const [scheduleConflicts, setScheduleConflicts] = useState<
-    ConflictOrderInfo[]
-  >([]);
-  const [emailsAutoSent, setEmailsAutoSent] = useState(false);
-  const [notifyStatus, setNotifyStatus] = useState<NotifyStatus>("idle");
-  const [notifiedCount, setNotifiedCount] = useState<number>(0);
 
   // Reschedule policy selector + preview state
   const [reschedulePolicy, setReschedulePolicy] = useState<
@@ -1117,6 +1223,11 @@ export default function SchedulePage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  // After a successful apply, if the preview contained FAILED orders, surface
+  // a persistent banner so the user knows ConflictIssues were auto-created.
+  const [applyConflictNotice, setApplyConflictNotice] = useState<{
+    failedCount: number;
+  } | null>(null);
 
   // Edit-mode state
   const [editMode, setEditMode] = useState(false);
@@ -1134,10 +1245,16 @@ export default function SchedulePage() {
   // Simulation mode state (from dev)
   const [simMode, setSimMode] = useState(false);
   const [simDate, setSimDate] = useState("");
+  const [simDateTime, setSimDateTime] = useState("");
   const [simLoading, setSimLoading] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorState | null>(null);
+
+  // T4A: multi-select pending orders for targeted preview.
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   // Fetch timeline data
   useEffect(() => {
@@ -1146,6 +1263,7 @@ export default function SchedulePage() {
       return;
     }
     if (session === undefined) return;
+    if (!startDate || !endDate) return;
 
     const params = new URLSearchParams({ startDate, endDate });
     fetch(`/api/visualization/timeline?${params}`, {
@@ -1160,7 +1278,19 @@ export default function SchedulePage() {
           });
           setData(null);
         } else {
-          setData(await r.json());
+          const payload = (await r.json()) as TimelineResponse;
+          setData(payload);
+          // Keep the Gantt aligned to system time (real-time or simulation) from the server.
+          if (payload.today) {
+            const nextStart = payload.today.slice(0, 10);
+            const { endDate: defaultEnd } = defaultTimelineRange(nextStart);
+            setStartDate(nextStart);
+            // Keep a longer end date if the user already extended the range forward.
+            setEndDate((prev) => {
+              if (!prev || prev < nextStart) return defaultEnd;
+              return prev > defaultEnd ? prev : defaultEnd;
+            });
+          }
         }
         setLoading(false);
       })
@@ -1173,19 +1303,25 @@ export default function SchedulePage() {
   // Run schedule handler (applies the selected algorithm directly)
   const handleRunSchedule = async (algorithmOverride?: string) => {
     if (!productionType) return;
-    const algorithm = algorithmOverride ?? reschedulePolicy;
+    const policy = algorithmOverride ?? reschedulePolicy;
     setScheduleStatus("running");
-    setScheduleConflicts([]);
-    setEmailsAutoSent(false);
-    setNotifyStatus("idle");
     try {
+      const baseConfig: Record<string, unknown> = {
+        reschedulePolicy: policy,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+
       const res = await fetch("/api/schedule/run", {
         method: "POST",
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ type: productionType, algorithm }),
+        body: JSON.stringify({ type: productionType, config: baseConfig }),
       });
       if (res.status === 409) {
         setScheduleStatus("conflict");
@@ -1210,25 +1346,29 @@ export default function SchedulePage() {
     }
   };
 
-  const handlePreviewSchedule = async () => {
+  const handlePreviewSchedule = async (targetOrderIds?: string[]) => {
     if (!productionType) return;
     setPreviewLoading(true);
     setPreviewError(null);
     try {
+      const baseConfig: Record<string, unknown> = {
+        reschedulePolicy,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+      if (targetOrderIds && targetOrderIds.length > 0) {
+        baseConfig.targetOrderIds = targetOrderIds;
+      }
       const res = await fetch("/api/schedule/preview", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: productionType,
-          config: {
-            reschedulePolicy,
-            frozenDays: 0,
-            productionDays: 1,
-            bufferDays: 0,
-            algorithm: "GREEDY_BEST_FIT",
-            splittable: true,
-          },
+          config: baseConfig,
         }),
       });
       if (!res.ok) {
@@ -1242,9 +1382,6 @@ export default function SchedulePage() {
         newSchedule = [],
         affectedOrders = [],
         failedOrderIds = [],
-        conflictOrderIds = [],
-        conflictOrders = [],
-        conflictWarnings = [],
       } = previewBody ?? {};
 
       // Adapter: convert hydrated newSchedule -> SchedulePreviewResponse view model.
@@ -1258,21 +1395,6 @@ export default function SchedulePage() {
 
       setPreviewId(nextPreviewId ?? null);
       setPreviewData(preview);
-      // T4D: conflict banner is driven by preview. Hydrated conflictOrders
-      // (with applicant + admin email) feed scheduleConflicts; Notify button
-      // POSTs them to /api/schedule/notify. Reset notify state so the amber
-      // (action-required) banner shows on each fresh preview.
-      if (Array.isArray(conflictOrders) && conflictOrders.length > 0) {
-        setScheduleConflicts(conflictOrders as ConflictOrderInfo[]);
-        setNotifyStatus("idle");
-        setEmailsAutoSent(false);
-      } else {
-        setScheduleConflicts([]);
-      }
-      // conflictOrderIds / conflictWarnings are intentionally unused here:
-      // the hydrated conflictOrders payload already covers the banner.
-      void conflictOrderIds;
-      void conflictWarnings;
     } catch {
       setPreviewError("Network error");
     } finally {
@@ -1320,11 +1442,17 @@ export default function SchedulePage() {
         return;
       }
 
-      // Success — clear preview state and refetch timeline.
+      // Success — capture FAILED count from the preview before clearing it,
+      // so we can surface a persistent notice pointing the user to issues.
+      const failedCount = previewData?.unscheduledOrders.length ?? 0;
       setPreviewData(null);
       setPreviewId(null);
+      setSelectedOrderIds(new Set());
       setScheduleStatus("success");
       setTimeout(() => setScheduleStatus("idle"), 4000);
+      if (failedCount > 0) {
+        setApplyConflictNotice({ failedCount });
+      }
       setLoading(true);
       setFetchError(null);
       setRefreshKey((k) => k + 1);
@@ -1461,45 +1589,6 @@ export default function SchedulePage() {
     });
   };
 
-  // Manual notify handler — POSTs scheduleConflicts to /api/schedule/notify.
-  // Banner is preview-driven (T4D); run no longer emits conflicts.
-  const handleSendNotifications = async () => {
-    if (scheduleConflicts.length === 0) return;
-    setNotifyStatus("sending");
-    // Notify schema requires applicantEmail to be a string|null but at least
-    // one of applicant/admin email needs to exist for a real send. Drop
-    // entries with neither so we never POST orders the server would silently
-    // skip (and so a 100%-skip set doesn't read as "sent").
-    const payloadOrders = scheduleConflicts.filter(
-      (o) => o.applicantEmail || o.adminEmail,
-    );
-    if (payloadOrders.length === 0) {
-      setNotifyStatus("error");
-      return;
-    }
-    try {
-      const res = await fetch("/api/schedule/notify", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orders: payloadOrders }),
-      });
-      if (res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const failedCount = Array.isArray(body.failed) ? body.failed.length : 0;
-        const sentCount = Array.isArray(body.sent)
-          ? body.sent.length
-          : payloadOrders.length;
-        setNotifiedCount(sentCount);
-        setNotifyStatus(failedCount === 0 && sentCount > 0 ? "sent" : "error");
-      } else {
-        setNotifyStatus("error");
-      }
-    } catch {
-      setNotifyStatus("error");
-    }
-  };
-
   const handleLogout = async () => {
     await logoutClientAuthSession();
     router.replace("/login");
@@ -1633,7 +1722,7 @@ export default function SchedulePage() {
       body: JSON.stringify({
         name: values.name,
         type: values.type,
-        dueDate: new Date(values.dueDate).toISOString(),
+        dueDate: `${values.dueDate}T00:00:00.000Z`,
         quantity,
       }),
     });
@@ -1663,8 +1752,12 @@ export default function SchedulePage() {
       body.quantity = quantity;
     }
 
+    if (values.dueDate) {
+      body.dueDate = new Date(values.dueDate).toISOString();
+    }
+
     if (Object.keys(body).length === 0) {
-      throw new Error("Name or quantity is required.");
+      throw new Error("Name, quantity, or due date is required.");
     }
 
     const res = await fetch(`/api/orders/${editOrder.orderId}`, {
@@ -1686,7 +1779,7 @@ export default function SchedulePage() {
     setRefreshKey((k) => k + 1);
   };
 
-  // Load simulation state on mount
+  // Load simulation state on mount and seed the timeline range (10-day default from anchor) before the first fetch.
   useEffect(() => {
     if (!session) return;
     fetch("/api/system/simulation", { credentials: "same-origin" })
@@ -1694,10 +1787,22 @@ export default function SchedulePage() {
       .then((body) => {
         setSimMode(!!body.isSimulationMode);
         if (body.simulationDate) {
-          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+          setSimDate(body.simulationDate.split("T")[0]);
+          setSimDateTime(body.simulationDate);
         }
+        const anchor =
+          body.isSimulationMode && body.simulationDate
+            ? String(body.simulationDate).split("T")[0]
+            : format(new Date(), "yyyy-MM-dd");
+        const range = defaultTimelineRange(anchor);
+        setStartDate(range.startDate);
+        setEndDate(range.endDate);
       })
-      .catch(() => {});
+      .catch(() => {
+        const range = defaultTimelineRange(format(new Date(), "yyyy-MM-dd"));
+        setStartDate(range.startDate);
+        setEndDate(range.endDate);
+      });
   }, [session]);
 
   // Auto-refresh every 60 s while in Real-time mode
@@ -1725,9 +1830,11 @@ export default function SchedulePage() {
         const body = await res.json();
         setSimMode(!!body.isSimulationMode);
         if (body.simulationDate) {
-          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+          setSimDate(body.simulationDate.split("T")[0]);
+          setSimDateTime(body.simulationDate);
         } else {
           setSimDate("");
+          setSimDateTime("");
         }
         setLoading(true);
         setFetchError(null);
@@ -1762,13 +1869,30 @@ export default function SchedulePage() {
   };
 
   const stepSimDate = (days: number) => {
-    const base = simDate
-      ? new Date(simDate)
-      : parseISO(data?.today ?? format(new Date(), "yyyy-MM-dd"));
-    base.setDate(base.getDate() + days);
-    const next = format(base, "yyyy-MM-dd");
-    setSimDate(next);
-    patchSim({ simulationDate: dateInputToIso(next) });
+    const baseStr =
+      simDateTime || data?.today || format(new Date(), "yyyy-MM-dd");
+    const base = new Date(
+      baseStr.includes("T") ? baseStr : `${baseStr}T00:00:00.000Z`,
+    );
+    base.setUTCDate(base.getUTCDate() + days);
+    base.setUTCHours(0, 0, 0, 0);
+    const nextIso = base.toISOString();
+    setSimDateTime(nextIso);
+    setSimDate(nextIso.split("T")[0]);
+    patchSim({ simulationDate: nextIso });
+  };
+
+  const stepSimHours = (hours: number) => {
+    const baseStr =
+      simDateTime || data?.today || format(new Date(), "yyyy-MM-dd");
+    const base = new Date(
+      baseStr.includes("T") ? baseStr : `${baseStr}T00:00:00.000Z`,
+    );
+    base.setUTCHours(base.getUTCHours() + hours);
+    const nextIso = base.toISOString();
+    setSimDateTime(nextIso);
+    setSimDate(nextIso.split("T")[0]);
+    patchSim({ simulationDate: nextIso });
   };
 
   // Build date columns
@@ -1839,11 +1963,26 @@ export default function SchedulePage() {
     return map;
   }, [effective, myOrderIdSet]);
 
-  // Per-cell: does it contain any rescheduled order?
+  // Per-cell: does it contain any rescheduled order (was already scheduled,
+  // moved to a different date)?
   const rescheduledCells = useMemo(() => {
     const set = new Set<string>();
     for (const item of effective?.timeline ?? []) {
-      if (diffByOrderId.has(item.orderId)) {
+      const d = diffByOrderId.get(item.orderId);
+      if (d && d.before !== "") {
+        set.add(`${item.factoryId}__${item.productionDate}`);
+      }
+    }
+    return set;
+  }, [effective, diffByOrderId]);
+
+  // Per-cell: does it contain any newly placed order (had no previous schedule,
+  // first placed by this preview)? Used for the preview "newly added" highlight.
+  const newlyPlacedCells = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of effective?.timeline ?? []) {
+      const d = diffByOrderId.get(item.orderId);
+      if (d && d.before === "") {
         set.add(`${item.factoryId}__${item.productionDate}`);
       }
     }
@@ -2007,7 +2146,7 @@ export default function SchedulePage() {
             </label>
 
             <button
-              onClick={handlePreviewSchedule}
+              onClick={() => handlePreviewSchedule()}
               disabled={
                 previewLoading || editMode || scheduleStatus === "running"
               }
@@ -2177,8 +2316,19 @@ export default function SchedulePage() {
             >
               +1d →
             </button>
+            <button
+              type="button"
+              onClick={() => stepSimHours(2)}
+              disabled={simLoading}
+              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium ml-1"
+            >
+              +2h
+            </button>
             <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-              Custom: {simDate || "—"}
+              Custom:{" "}
+              {simDateTime
+                ? simDateTime.substring(0, 16).replace("T", " ")
+                : "—"}
             </span>
           </>
         )}
@@ -2199,17 +2349,13 @@ export default function SchedulePage() {
             {previewData.diffs.length} order(s) would be rescheduled
             {previewData.unscheduledOrders.length > 0 &&
               `, ${previewData.unscheduledOrders.length} cannot fit`}
-            . Capacity conflicts:{" "}
-            {
-              previewData.conflicts.filter((c) => c.conflictType === "CAPACITY")
-                .length
-            }
-            , due-date conflicts:{" "}
-            {
-              previewData.conflicts.filter((c) => c.conflictType === "DUE_DATE")
-                .length
-            }
             .
+            {selectedOrderIds.size > 0 && (
+              <span className="ml-2 font-medium">
+                Targeted {selectedOrderIds.size} order
+                {selectedOrderIds.size === 1 ? "" : "s"}.
+              </span>
+            )}
           </span>
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -2275,95 +2421,36 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* Scheduling conflict notification panel */}
-      {scheduleConflicts.length > 0 && (
-        <div
-          className={`flex-none px-6 py-3 border-b text-xs ${
-            emailsAutoSent || notifyStatus === "sent"
-              ? "bg-green-50 border-green-200"
-              : "bg-amber-50 border-amber-200"
-          }`}
-        >
-          {emailsAutoSent || notifyStatus === "sent" ? (
-            <div className="flex items-center justify-between">
-              <span className="text-green-700 font-medium">
-                {`已寄出 ${
-                  notifyStatus === "sent"
-                    ? notifiedCount || scheduleConflicts.length
-                    : scheduleConflicts.length
-                } 封通知 (Notification emails sent for ${
-                  notifyStatus === "sent"
-                    ? notifiedCount || scheduleConflicts.length
-                    : scheduleConflicts.length
-                } order(s) that could not be scheduled.)`}
-              </span>
-              <button
-                type="button"
-                onClick={() => setScheduleConflicts([])}
-                className="text-green-400 hover:text-green-600 shrink-0"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-amber-800 font-semibold">
-                    {scheduleConflicts.length} order(s) could not be scheduled:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleSendNotifications}
-                    disabled={
-                      notifyStatus === "sending" ||
-                      scheduleConflicts.length === 0
-                    }
-                    className={`px-2.5 py-1 rounded border font-medium transition-colors ${
-                      notifyStatus === "sending" ||
-                      scheduleConflicts.length === 0
-                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                        : "bg-amber-700 text-white border-amber-700 hover:bg-amber-800"
-                    }`}
-                  >
-                    {notifyStatus === "sending" ? "Sending…" : "Notify"}
-                  </button>
-                  {notifyStatus === "error" && (
-                    <span className="text-red-600 font-medium">
-                      Some emails failed — check server logs.
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setScheduleConflicts([])}
-                  className="text-amber-400 hover:text-amber-600 shrink-0"
-                >
-                  ✕
-                </button>
-              </div>
-              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-amber-700">
-                {scheduleConflicts.map((o) => (
-                  <li key={o.id}>
-                    <span className="font-medium">{o.name}</span>
-                    {" — qty "}
-                    <span>{o.quantity}</span>
-                    {", due "}
-                    <span>{o.dueDate}</span>
-                    {o.applicantEmail && (
-                      <>
-                        {" ("}
-                        <span className="text-amber-600">
-                          {o.applicantEmail}
-                        </span>
-                        {")"}
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+      {/* Preview-driven FAILED hint — auto-issue + email fires on apply */}
+      {previewData && previewData.unscheduledOrders.length > 0 && (
+        <div className="flex-none px-6 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
+          {previewData.unscheduledOrders.length} order(s) cannot be scheduled —
+          applying will automatically open conflict issues.
+        </div>
+      )}
+
+      {/* Post-apply conflict notice — persistent until dismissed */}
+      {applyConflictNotice && (
+        <div className="flex-none px-6 py-2 bg-amber-100 border-b border-amber-300 flex items-center justify-between gap-3 text-xs text-amber-900">
+          <span>
+            ⚠️ 排程已套用,但 {applyConflictNotice.failedCount} 筆訂單無法排入,
+            已自動建立 ConflictIssue。請至{" "}
+            <Link
+              href="/conflict-issues"
+              className="font-semibold underline hover:text-amber-700"
+            >
+              issue 介面
+            </Link>{" "}
+            查看並協商解決方案。
+          </span>
+          <button
+            type="button"
+            onClick={() => setApplyConflictNotice(null)}
+            className="font-semibold px-2 py-0.5 rounded border border-amber-300 bg-white hover:bg-amber-50"
+            aria-label="Dismiss"
+          >
+            知道了
+          </button>
         </div>
       )}
 
@@ -2394,6 +2481,10 @@ export default function SchedulePage() {
           Rescheduled
         </span>
         <span className="flex items-center gap-1.5">
+          <span className="text-[10px] font-bold text-emerald-600">+</span>{" "}
+          Newly placed
+        </span>
+        <span className="flex items-center gap-1.5">
           <span className="text-[10px] font-bold text-gray-500">×N</span> Order
           count
         </span>
@@ -2401,13 +2492,27 @@ export default function SchedulePage() {
 
       {/* Gantt body */}
       <div className="flex-1 overflow-hidden flex">
-        {/* Pending sidebar (SALES only) */}
+        {/* Pending sidebar — SALES: read-only listing of their own orders */}
         {isSales && data?.salesContext && !loading && !fetchError && (
           <PendingSidebar
             orders={data.salesContext.pendingOrders}
             today={data.today}
             onEditOrder={(order) => setEditOrder(order)}
             onCreate={() => setCreateOpen(true)}
+          />
+        )}
+        {/* Pending sidebar — ADMIN/SUPERADMIN: multi-select for targeted preview (T4A-C / T8) */}
+        {!isSales && data?.adminContext && !loading && !fetchError && (
+          <PendingSidebar
+            orders={data.adminContext.pendingOrders}
+            today={data.today}
+            onEditOrder={(order) => setEditOrder(order)}
+            selectedOrderIds={selectedOrderIds}
+            setSelectedOrderIds={setSelectedOrderIds}
+            onPreviewSelected={(targetOrderIds) =>
+              handlePreviewSchedule(targetOrderIds)
+            }
+            previewLoading={previewLoading}
           />
         )}
 
@@ -2505,15 +2610,58 @@ export default function SchedulePage() {
                                   myOrderIdSet.has(i.orderId),
                                 )
                               : false;
+
+                            // Edit-mode drop validation: block drops that would
+                            // overflow the cell's maxCapacity or push the
+                            // assignment past its dueDate. Dropping back to the
+                            // dragging chip's current cell is always allowed
+                            // (it's a no-op).
+                            let dropDisabled = false;
+                            let dropDisabledReason: string | undefined;
+                            if (editMode && draggingAssignment) {
+                              const pending = pendingMoves.get(
+                                draggingAssignment.assignmentId,
+                              );
+                              const currFactoryId =
+                                pending?.factoryId ??
+                                draggingAssignment.factoryId;
+                              const currDate =
+                                pending?.productionDate ??
+                                draggingAssignment.productionDate;
+                              const isCurrentCell =
+                                factory.id === currFactoryId &&
+                                date === currDate;
+                              if (!isCurrentCell) {
+                                if (date > draggingAssignment.dueDate) {
+                                  dropDisabled = true;
+                                  dropDisabledReason = `超過交期 ${draggingAssignment.dueDate}`;
+                                } else if (
+                                  cell.usedCapacity +
+                                    draggingAssignment.assignedQuantity >
+                                  cell.maxCapacity
+                                ) {
+                                  const remaining = Math.max(
+                                    0,
+                                    cell.maxCapacity - cell.usedCapacity,
+                                  );
+                                  dropDisabled = true;
+                                  dropDisabledReason = `容量不足 (剩餘 ${remaining.toLocaleString()} / 需要 ${draggingAssignment.assignedQuantity.toLocaleString()})`;
+                                }
+                              }
+                            }
+
                             return (
                               <GanttCell
                                 key={key}
                                 cell={cell}
                                 hasRescheduled={rescheduledCells.has(key)}
+                                hasNewlyPlaced={newlyPlacedCells.has(key)}
                                 isMyOrder={isMyOrder}
                                 isSales={isSales}
                                 editMode={editMode}
                                 movedAssignmentIds={movedAssignmentIds}
+                                dropDisabled={dropDisabled}
+                                dropDisabledReason={dropDisabledReason}
                                 onClick={() =>
                                   setSelectedCell({
                                     factoryId: factory.id,

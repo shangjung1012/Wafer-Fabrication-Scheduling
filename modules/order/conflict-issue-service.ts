@@ -14,12 +14,14 @@ import {
   findConflictIssueByNumber,
   findConflictIssueById,
   findCommentById,
+  createConflictIssue,
   createConflictIssueComment,
   updateConflictIssueComment,
   updateCommentProposalStatus,
   staleOtherProposals,
   createConflictIssueEvent,
   updateConflictIssue,
+  findOpenIssueByOrderId,
   ConflictIssueStatus,
   ConflictResolution,
   ConflictIssueEventType,
@@ -27,7 +29,20 @@ import {
   type ConflictIssueDetail,
   type IssueFilters,
 } from "@/infra/db/conflict-issue-repository";
-import { updateOrder, OrderStatus } from "@/infra/db/order-repository";
+import {
+  updateOrder,
+  OrderStatus,
+  findOrderForIssueCreation,
+  findCompetingScheduledOrders,
+} from "@/infra/db/order-repository";
+import { findFactoriesForIssueSnapshot } from "@/infra/db/factory-repository";
+import {
+  computeTotalAvailableCapacity,
+  type CapacityDraft,
+  type SchedulingConfig,
+} from "@/modules/schedule/strategy";
+import { renderAndSend } from "@/modules/mail/mail-template";
+import { issueCreatedTemplate } from "@/modules/mail/templates/issue-created";
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -676,4 +691,298 @@ export async function getSuggestions(
     },
     caveat: "估算基於目前產能；新訂單進來可能改變結果。Accept 時會再次驗證。",
   };
+}
+
+// ---------------------------------------------------------------------------
+// Service: auto-create issues for newly-FAILED orders
+// ---------------------------------------------------------------------------
+
+/**
+ * Format a Date as YYYY-MM-DD using UTC slicing on the ISO string.
+ * Matches the convention used by the strategy engine's date keys.
+ */
+function toIsoDateOnly(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+export type CreateIssuesForFailedOrdersResult = {
+  created: number;
+  skippedAsDuplicate: number;
+  failed: number;
+};
+
+/**
+ * Called fire-and-forget after a schedule transaction commits.
+ *
+ * For each id in `failedOrderIds`:
+ *  - Skip if the order is no longer FAILED (race-safety).
+ *  - If an OPEN / IN_DISCUSSION ConflictIssue already exists for the order:
+ *    append a system event (capacity changed) and do NOT email or create a new
+ *    issue.
+ *  - Otherwise: compute a contextSnapshot, insert a ConflictIssue, and email
+ *    the applicant + the order's factory admins.
+ *
+ * Never throws. All per-order failures are caught and logged; returns the
+ * aggregate counts so the caller can include them in structured logs.
+ */
+export async function createIssuesForFailedOrders(input: {
+  failedOrderIds: string[];
+  actorId: string;
+  runConfig: SchedulingConfig;
+  runAt: Date;
+  prisma: PrismaClient;
+}): Promise<CreateIssuesForFailedOrdersResult> {
+  const { failedOrderIds, actorId, runConfig, runAt, prisma: db } = input;
+
+  const result: CreateIssuesForFailedOrdersResult = {
+    created: 0,
+    skippedAsDuplicate: 0,
+    failed: 0,
+  };
+
+  for (const orderId of failedOrderIds) {
+    try {
+      const order = await findOrderForIssueCreation(db, orderId);
+      if (!order) {
+        console.warn(
+          `[createIssuesForFailedOrders] Order ${orderId} not found; skipping.`,
+        );
+        continue;
+      }
+
+      // Defensive: only act on orders that are still FAILED.
+      if (order.status !== OrderStatus.FAILED) {
+        continue;
+      }
+
+      // -------------------------------------------------------------------
+      // Snapshot — window, factories, capacity, competing orders
+      // -------------------------------------------------------------------
+      const windowStart = new Date(runConfig.startDate);
+      windowStart.setHours(0, 0, 0, 0);
+      const windowEnd = new Date(order.dueDate);
+      windowEnd.setHours(23, 59, 59, 999);
+
+      const factories = await findFactoriesForIssueSnapshot(
+        db,
+        order.type,
+        windowStart,
+        windowEnd,
+      );
+
+      // Build a CapacityDraft map keyed by `${factoryId}_${YYYY-MM-DD}`.
+      const capacityMap = new Map<string, CapacityDraft>();
+      for (const f of factories) {
+        for (const cap of f.dailyCapacities) {
+          const dateKey = toIsoDateOnly(cap.date);
+          capacityMap.set(`${f.id}_${dateKey}`, {
+            id: cap.id,
+            factoryId: cap.factoryId,
+            date: cap.date,
+            maxCapacity: cap.maxCapacity,
+            curCapacity: cap.curCapacity,
+          });
+        }
+      }
+
+      const factoryInputs = factories.map((f) => ({
+        id: f.id,
+        maxCapacity: f.maxCapacity,
+      }));
+
+      const totalAvailableInWindow = computeTotalAvailableCapacity(
+        windowStart,
+        windowEnd,
+        factoryInputs,
+        capacityMap,
+      );
+
+      const requiredQuantity = order.quantity;
+      const deficit = Math.max(0, requiredQuantity - totalAvailableInWindow);
+
+      const competingOrders = await findCompetingScheduledOrders(db, {
+        factoryIds: factories.map((f) => f.id),
+        windowStart,
+        windowEnd,
+        excludeOrderId: order.id,
+      });
+
+      const contextSnapshot = {
+        previewRunAt: runAt.toISOString(),
+        reschedulePolicy: runConfig.reschedulePolicy,
+        config: {
+          frozenDays: runConfig.frozenDays,
+          productionDays: runConfig.productionDays,
+          bufferDays: runConfig.bufferDays,
+          splittable: runConfig.splittable,
+        },
+        windowStart: toIsoDateOnly(windowStart),
+        windowEnd: toIsoDateOnly(windowEnd),
+        requiredQuantity,
+        totalAvailableInWindow,
+        deficit,
+        factoriesConsidered: factories.map((f) => ({
+          id: f.id,
+          productionType: f.productionType,
+          maxCapacity: f.maxCapacity,
+        })),
+        orderSnapshot: {
+          quantity: order.quantity,
+          dueDate: order.dueDate.toISOString(),
+          status: order.status,
+          updatedAt: order.updatedAt.toISOString(),
+        },
+        competingOrders,
+      };
+
+      // -------------------------------------------------------------------
+      // Duplicate detection: existing OPEN / IN_DISCUSSION issue
+      // -------------------------------------------------------------------
+      const existing = await findOpenIssueByOrderId(db, order.id);
+      if (existing) {
+        // No CAPACITY_CHANGED enum value exists in ConflictIssueEventType
+        // (schema unchanged in P1; see proposal §2.4 / §3.3). REPREVIEW_RAN
+        // is the closest existing event — re-use it with the snapshot as
+        // payload so the timeline still records the recurrence.
+        try {
+          await createConflictIssueEvent(db, {
+            issueId: existing.id,
+            actorId,
+            type: ConflictIssueEventType.REPREVIEW_RAN,
+            payload: { reason: "CAPACITY_CHANGED", snapshot: contextSnapshot },
+          });
+        } catch (err) {
+          console.error(
+            `[createIssuesForFailedOrders] Failed to append event to issue ${existing.id} for order ${order.id}:`,
+            err,
+          );
+        }
+        result.skippedAsDuplicate += 1;
+        continue;
+      }
+
+      // -------------------------------------------------------------------
+      // Assignee resolution: applicant first, otherwise a factory admin
+      // -------------------------------------------------------------------
+      let assigneeId: string | null = order.applicantId ?? null;
+      if (!assigneeId) {
+        const firstAdmin = factories
+          .flatMap((f) => f.admins)
+          .find((a) => !!a?.id);
+        if (firstAdmin?.id) {
+          assigneeId = firstAdmin.id;
+        }
+      }
+
+      if (!assigneeId) {
+        console.error(
+          `[createIssuesForFailedOrders] No assignee available for order ${order.id} — neither applicant nor any factory admin. Skipping.`,
+        );
+        result.failed += 1;
+        continue;
+      }
+
+      // -------------------------------------------------------------------
+      // Create the issue
+      // -------------------------------------------------------------------
+      let issueId: string;
+      let issueNumber: number;
+      try {
+        const created = await createConflictIssue(db, {
+          orderId: order.id,
+          title: `Cannot schedule "${order.name}" — short by ${deficit} units`,
+          status: ConflictIssueStatus.OPEN,
+          resolution: null,
+          createdById: actorId,
+          assigneeId,
+          contextSnapshot,
+        });
+        issueId = created.id;
+        issueNumber = created.number;
+      } catch (err) {
+        console.error(
+          `[createIssuesForFailedOrders] Failed to create ConflictIssue for order ${order.id}:`,
+          err,
+        );
+        result.failed += 1;
+        continue;
+      }
+
+      // Record OPENED event (parallels manual creation flow).
+      try {
+        await createConflictIssueEvent(db, {
+          issueId,
+          actorId,
+          type: ConflictIssueEventType.OPENED,
+          payload: { snapshot: contextSnapshot },
+        });
+      } catch (err) {
+        // Non-fatal — issue row exists, timeline event is best-effort.
+        console.error(
+          `[createIssuesForFailedOrders] Failed to write OPENED event for order ${order.id}:`,
+          err,
+        );
+      }
+
+      result.created += 1;
+
+      // -------------------------------------------------------------------
+      // Send notification emails (applicant + factory admins). Failures here
+      // are logged but never bubble up — the issue itself was created.
+      // -------------------------------------------------------------------
+      const recipients: Array<{ email: string; username: string | null }> = [];
+      if (order.applicant?.email) {
+        recipients.push({
+          email: order.applicant.email,
+          username: order.applicant.username,
+        });
+      }
+      for (const f of factories) {
+        for (const admin of f.admins) {
+          if (admin?.email) {
+            recipients.push({ email: admin.email, username: admin.username });
+          }
+        }
+      }
+
+      // Deduplicate by email
+      const seenEmails = new Set<string>();
+      const uniqueRecipients = recipients.filter((r) => {
+        if (seenEmails.has(r.email)) return false;
+        seenEmails.add(r.email);
+        return true;
+      });
+
+      const dueDateString = toIsoDateOnly(order.dueDate);
+      const sendResults = await Promise.allSettled(
+        uniqueRecipients.map((r) =>
+          renderAndSend(issueCreatedTemplate, {
+            orderName: order.name,
+            orderQuantity: order.quantity,
+            dueDate: dueDateString,
+            deficit,
+            issueNumber,
+            recipientEmail: r.email,
+            recipientUsername: r.username,
+          }),
+        ),
+      );
+      sendResults.forEach((res, i) => {
+        if (res.status === "rejected") {
+          console.error(
+            `[createIssuesForFailedOrders] Email failed for order ${order.id} → ${uniqueRecipients[i].email}:`,
+            res.reason,
+          );
+        }
+      });
+    } catch (err) {
+      console.error(
+        `[createIssuesForFailedOrders] Unexpected error processing order ${orderId}:`,
+        err,
+      );
+      result.failed += 1;
+    }
+  }
+
+  return result;
 }

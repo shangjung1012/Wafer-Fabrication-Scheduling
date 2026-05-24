@@ -105,6 +105,7 @@ type IssueDetail = {
   orderDueDate: string;
   orderQuantity: number;
   orderStatus: string;
+  orderUpdatedAt: string;
   timeline: TimelineItem[];
 };
 
@@ -1478,7 +1479,7 @@ export default function ConflictIssueDetailPage({
                 <ReplyBox
                   issueNumber={issue.number}
                   issueId={issue.id}
-                  orderUpdatedAt={issue.updatedAt}
+                  orderUpdatedAt={issue.orderUpdatedAt}
                   issueStatus={issue.status}
                   onSubmit={() => void fetchIssue()}
                 />

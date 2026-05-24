@@ -1,7 +1,18 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { issueAccessToken } from "@/modules/auth/token-service";
 import { ForbiddenError, NotFoundError } from "@/modules/auth/rbac";
 import { withAuth } from "@/modules/auth/with-auth";
+
+vi.mock("@/modules/auth/session-store", () => ({
+  getAuthSession: vi.fn(async (sessionId) => ({
+    sessionId,
+    userId: "user-1",
+    username: "admin-A1",
+    role: "ADMIN",
+    createdAt: "2026-05-24T00:00:00.000Z",
+    expiresAt: "2026-05-31T00:00:00.000Z",
+  })),
+}));
 
 describe("withAuth", () => {
   beforeEach(() => {
@@ -14,6 +25,7 @@ describe("withAuth", () => {
       id: "user-1",
       role: "ADMIN",
       username: "admin-A1",
+      sessionId: "session-1",
     });
     const handler = withAuth(async (_req, ctx) => {
       return Response.json({ requestId: ctx.requestId, user: ctx.user });
@@ -55,6 +67,7 @@ describe("withAuth", () => {
       id: "user-1",
       role: "SALES",
       username: "sales-A",
+      sessionId: "session-1",
     });
     const handler = withAuth(async () => {
       throw new ForbiddenError("Nope.");
@@ -78,6 +91,7 @@ describe("withAuth", () => {
       id: "user-1",
       role: "ADMIN",
       username: "admin-A1",
+      sessionId: "session-1",
     });
     const handler = withAuth(async () => Response.json({ ok: true }));
 
@@ -103,6 +117,7 @@ describe("withAuth", () => {
       id: "user-1",
       role: "ADMIN",
       username: "admin-A1",
+      sessionId: "session-1",
     });
     const handler = withAuth(async () => {
       throw new NotFoundError("Missing.");

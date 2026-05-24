@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { RequestContext } from "@/modules/auth/request-context";
 import { verifyAccessToken } from "@/modules/auth/token-service";
+import { getAuthSession } from "@/modules/auth/session-store";
 import { ACCESS_TOKEN_COOKIE, getCookieValue } from "@/app/api/auth/_cookies";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -119,6 +120,11 @@ export async function requireAuth(request: Request): Promise<RequestContext> {
 
   try {
     const payload = await verifyAccessToken(parsedToken.token);
+    const session = await getAuthSession(payload.sid);
+    if (!session || session.userId !== payload.sub) {
+      throw new Error("Invalid auth session.");
+    }
+
     return {
       requestId,
       user: {

@@ -6,13 +6,21 @@ import {
   requireAuth,
   UnauthorizedError,
 } from "@/modules/auth/require-auth";
-import { applyAssignmentMoves } from "@/modules/schedule/manual-edit-service";
+import {
+  applyAssignmentMoves,
+  ManualEditValidationError,
+} from "@/modules/schedule/manual-edit-service";
 
-const MoveSchema = z.object({
-  assignmentId: z.string().min(1),
-  factoryId: z.string().min(1),
-  productionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
-});
+const MoveSchema = z
+  .object({
+    assignmentId: z.string().optional(),
+    orderId: z.string().optional(),
+    factoryId: z.string().min(1),
+    productionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+  })
+  .refine((data) => data.assignmentId || data.orderId, {
+    message: "Must provide either assignmentId or orderId",
+  });
 
 const BulkMoveSchema = z.object({
   moves: z.array(MoveSchema).min(1),
@@ -49,6 +57,16 @@ export async function PATCH(request: Request) {
     );
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof ManualEditValidationError) {
+      return NextResponse.json(
+        {
+          code: "VALIDATION_FAILED",
+          message: error.message,
+          violations: error.violations,
+        },
+        { status: 400 },
+      );
+    }
     if (error instanceof UnauthorizedError) {
       return NextResponse.json(
         { code: "UNAUTHORIZED", message: error.message },

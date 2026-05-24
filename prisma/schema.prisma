@@ -18,6 +18,7 @@ enum UserRole {
   SUPERADMIN
   ADMIN
   SALES
+  SYSTEM
 }
 
 enum FactoryStatus {
@@ -33,7 +34,6 @@ enum OrderStatus {
   COMPLETED      // 所有子訂單變成 COMPLETED，母訂單變成 COMPLETED
   CANCELLED
   FAILED         // 排程失敗
-  CONFLICT       // 被排程踢出，需要衝突解決
 }
 
 // 子訂單 (派工單)
@@ -93,7 +93,6 @@ model User {
   orders             Order[]            @relation("OrderApplicant")
   modifiedOrders     Order[]            @relation("OrderModifier")
   managedFactories   Factory[]          @relation("FactoryAdmins")
-  requests           OrderRequest[]     @relation("RequestApplicant")
   refreshTokens      RefreshToken[]
   invitations        UserInvitation[]   @relation("InvitationUser")
   createdInvitations UserInvitation[]   @relation("InvitationCreator")
@@ -112,7 +111,7 @@ model EmailChangeToken {
   id        String    @id @default(cuid())
   userId    String
   newEmail  String
-  token     String    @unique @default(cuid())
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
@@ -145,6 +144,7 @@ model RefreshToken {
   id                String    @id @default(cuid())
   tokenHash         String    @unique
   userId            String
+  sessionId         String?
   expiresAt         DateTime
   revokedAt         DateTime?
   createdAt         DateTime  @default(now())
@@ -155,6 +155,7 @@ model RefreshToken {
   replaces        RefreshToken? @relation("RefreshTokenReplacement")
 
   @@index([userId])
+  @@index([sessionId])
   @@map("refresh_token")
 }
 
@@ -206,7 +207,6 @@ model Order {
 
   // Relations
   assignments    OrderAssignment[] // 記錄這筆訂單被拆分成哪些派工單
-  requests       OrderRequest[]
   conflictIssues ConflictIssue[]
 
   @@map("order")
@@ -216,28 +216,16 @@ model Order {
 model OrderAssignment {
   id               String           @id @default(cuid())
   orderId          String
-  status           AssignmentStatus @default(SCHEDULED) // 子訂單有自己的status，不會綁死整單操作
+  status           AssignmentStatus @default(SCHEDULED)
   factoryId        String
-  productionDate   DateTime // 具體被排在哪一天生產
-  assignedQuantity Int // 分配到這間工廠這天的數量
+  productionDate   DateTime
+  completionDate   DateTime
+  assignedQuantity Int
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   factory Factory @relation(fields: [factoryId], references: [id], onDelete: Restrict)
 
   @@map("order_assignment")
-}
-
-model OrderRequest {
-  id          String @id @default(cuid())
-  applicantId String
-  orderId     String
-  message     String
-  payload     Json?
-
-  applicant User  @relation("RequestApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
-  order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@map("order_request")
 }
 
 // =========================
@@ -308,4 +296,18 @@ model SystemState {
   simulationDate   DateTime?
 
   @@map("system_state")
+}
+
+model AutoSchedulerConfig {
+  id               String  @id @default(cuid())
+  type             String  @unique
+  isOperating      Boolean @default(true)
+  frozenDays       Int     @default(0)
+  productionDays   Int     @default(1)
+  bufferDays       Int     @default(0)
+  reschedulePolicy String  @default("GAP_FILLING")
+  algorithm        String  @default("GREEDY_BEST_FIT")
+  splittable       Boolean @default(true)
+
+  @@map("auto_scheduler_config")
 }

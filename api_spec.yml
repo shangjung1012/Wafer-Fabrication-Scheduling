@@ -322,98 +322,6 @@ paths:
                 $ref: "#/components/schemas/Order"
 
   # ==========================================================
-  # Order Requests API (FR-02: 業務提出插單/改單申請)
-  # ==========================================================
-  /requests:
-    get:
-      summary: 取得訂單申請清單
-      description: 業務可檢視自己提出的申請，管理員可檢視負責工廠內的申請。
-      tags:
-        - Requests
-      responses:
-        "200":
-          description: 申請清單
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/OrderRequest"
-    post:
-      summary: 提出插單或改單申請
-      tags:
-        - Requests
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [orderId, message]
-              properties:
-                orderId:
-                  type: string
-                  description: 關聯的訂單 ID
-                message:
-                  type: string
-                  description: 申請理由或說明
-                payload:
-                  type: object
-                  description: 變更內容 (JSON)
-      responses:
-        "201":
-          description: 申請建立成功
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrderRequest"
-
-  /requests/{id}:
-    put:
-      summary: 修改尚未核准的申請
-      tags:
-        - Requests
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-                payload:
-                  type: object
-      responses:
-        "200":
-          description: 申請更新成功
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrderRequest"
-
-  /requests/{id}/approve:
-    post:
-      summary: 核准申請 (僅管理員可用)
-      tags:
-        - Requests
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: 已核准並套用變更
-
-  # ==========================================================
   # Schedule API (FR-05: 管理員修改排程)
   # ==========================================================
   /schedule/run:
@@ -550,12 +458,15 @@ paths:
                 code: CONFLICT
                 message: Schedule environment has changed. Please preview again.
 
-  /schedule/notify:
-    post:
-      summary: 寄送衝突訂單通知信
+  /assignments/bulk:
+    patch:
+      summary: 批次移動排程或排入 PENDING 訂單
       description: |
-        針對 preview 階段被 kick out（排程衝突）的訂單，寄送通知信給訂單申請人 (applicant) 及所屬工廠管理員 (admin)。
-        每個訂單可能產生 1~2 封信（applicant 與 admin 各一）。
+        允許手動調整 SCHEDULED 狀態的排程日期，或將 PENDING 狀態的訂單排入指定日期。
+        後端會嚴格檢核：
+        1. 該日期工廠產能是否足夠 (CAPACITY_EXCEEDED)
+        2. 調整後的日期是否能滿足訂單交期 (DEADLINE_VIOLATION)
+        若有任何違規，將拒絕寫入並回傳 400 Bad Request。
       tags:
         - Schedule
       requestBody:
@@ -564,38 +475,73 @@ paths:
           application/json:
             schema:
               type: object
-              required: [orders]
+              required: [moves]
               properties:
-                orders:
+                moves:
                   type: array
-                  minItems: 1
                   items:
-                    $ref: "#/components/schemas/ConflictOrder"
+                    type: object
+                    required: [factoryId, productionDate]
+                    properties:
+                      assignmentId:
+                        type: string
+                        description: 欲移動的現有 Assignment ID (若為 PENDING 訂單排入則不填)
+                      orderId:
+                        type: string
+                        description: 欲排入的 PENDING Order ID (若為移動現有排程則不填)
+                      factoryId:
+                        type: string
+                        description: 目標工廠 ID
+                      productionDate:
+                        type: string
+                        format: date
+                        description: 目標生產日期 (YYYY-MM-DD)
       responses:
         "200":
-          description: 通知寄送結果（部分成功亦回 200，以 sent/failed 分流）
+          description: 排程調整成功
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  sent:
-                    type: array
-                    description: 成功通知（至少寄出一封）的訂單 ID
-                    items:
-                      type: string
-                  failed:
-                    type: array
-                    description: 所有相關信件皆失敗的訂單 ID
-                    items:
-                      type: string
+                  applied:
+                    type: integer
+                    description: 成功套用的異動筆數
         "400":
-          $ref: "#/components/responses/BadRequest"
+          description: 驗證失敗 (產能不足或違反交期)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: VALIDATION_FAILED
+                  message:
+                    type: string
+                    example: Manual edit validation failed
+                  violations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        targetId:
+                          type: string
+                        code:
+                          type: string
+                          enum:
+                            [
+                              CAPACITY_EXCEEDED,
+                              DEADLINE_VIOLATION,
+                              INVALID_STATE,
+                              NOT_FOUND,
+                            ]
+                        reason:
+                          type: string
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-
   # ==========================================================
   # Users & Permissions API (FR-06: 管理員進行權限管理)
   # SUPERADMIN only — scoped to own production type (group)
@@ -771,6 +717,67 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   # ==========================================================
+  # System API (AutoScheduler & Simulation)
+  # ==========================================================
+  /system/auto-scheduler:
+    get:
+      summary: 取得自動排程設定
+      description: 取得各產品類型的自動排程設定
+      tags:
+        - System
+      responses:
+        "200":
+          description: 設定清單
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AutoSchedulerConfig"
+    patch:
+      summary: 更新自動排程設定
+      description: 更新特定產品類型的自動排程設定 (僅 SUPERADMIN/ADMIN 可用)
+      tags:
+        - System
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                isOperating:
+                  type: boolean
+                frozenDays:
+                  type: integer
+                productionDays:
+                  type: integer
+                bufferDays:
+                  type: integer
+                reschedulePolicy:
+                  type: string
+                  enum: [GLOBAL_OPTIMIZE, PRIORITY_RETAIN, GAP_FILLING]
+                algorithm:
+                  type: string
+                  enum: [GREEDY_BEST_FIT]
+                splittable:
+                  type: boolean
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoSchedulerConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ==========================================================
   # Visualization API (FR-07: 衝突或訂單變更視覺化)
   # ==========================================================
   /visualization/timeline:
@@ -806,10 +813,6 @@ paths:
                     type: array
                     items:
                       type: object
-                  conflicts:
-                    type: array
-                    items:
-                      type: object
                   diffs:
                     type: array
                     items:
@@ -826,6 +829,36 @@ components:
       bearerFormat: JWT
 
   schemas:
+    AutoSchedulerConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        isOperating:
+          type: boolean
+        frozenDays:
+          type: integer
+        productionDays:
+          type: integer
+        bufferDays:
+          type: integer
+        reschedulePolicy:
+          type: string
+          enum: [GLOBAL_OPTIMIZE, PRIORITY_RETAIN, GAP_FILLING]
+        algorithm:
+          type: string
+          enum: [GREEDY_BEST_FIT]
+        splittable:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
     SchedulingConfig:
       type: object
       description: 排程引擎的設定參數
@@ -968,20 +1001,6 @@ components:
         assignedQuantity:
           type: integer
 
-    OrderRequest:
-      type: object
-      properties:
-        id:
-          type: string
-        applicantId:
-          type: string
-        orderId:
-          type: string
-        message:
-          type: string
-        payload:
-          type: object
-
     OrderCreateInput:
       type: object
       required: [dueDate, quantity, name]
@@ -1034,7 +1053,7 @@ components:
     SchedulePreviewResult:
       type: object
       description: |
-        排程預覽結果。`conflictOrderIds` 與 `conflictOrders` 用於前端顯示衝突訂單與寄送 kick-out 通知信。
+        排程預覽結果。
       properties:
         newSchedule:
           type: array
@@ -1051,60 +1070,6 @@ components:
           items:
             type: string
             description: 未能排入排程的訂單 ID
-        conflictWarnings:
-          type: array
-          items:
-            type: string
-            description: 衝突警告訊息
-        conflictOrderIds:
-          type: array
-          nullable: true
-          description: |
-            排程衝突（kick out）的訂單 ID 清單。目前 preview route 主要回傳 `failedOrderIds`；
-            `conflictOrderIds` 為將與前端 `/schedule/notify` 流程對齊的欄位（可能與 `failedOrderIds` 重疊或相同）。
-          items:
-            type: string
-        conflictOrders:
-          type: array
-          nullable: true
-          description: |
-            衝突訂單的 hydrated 物件清單（含 applicant/admin email），可直接餵給 `/schedule/notify`。
-            注意：目前 preview route 尚未實作 applicant + admin email hydration，將於後續任務補上；
-            spec 先預留欄位以便前後端對齊。
-          items:
-            $ref: "#/components/schemas/ConflictOrder"
-
-    ConflictOrder:
-      type: object
-      description: |
-        排程衝突訂單的 hydrated 物件，供 `/schedule/notify` 寄送 kick-out 通知信使用。
-      required: [id, name, applicantEmail, applicantUsername]
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        quantity:
-          type: integer
-        dueDate:
-          type: string
-          description: 訂單交期（ISO 8601 字串，與 notify route zod schema 對齊）
-        applicantEmail:
-          type: string
-          format: email
-          nullable: true
-          description: 申請業務的 email；為 null 時不會寄信給 applicant
-        applicantUsername:
-          type: string
-          nullable: true
-        adminEmail:
-          type: string
-          format: email
-          nullable: true
-          description: 該訂單所屬工廠管理員的 email；為 null 時不會寄信給 admin
-        adminUsername:
-          type: string
-          nullable: true
 
     CreateUserInput:
       type: object
