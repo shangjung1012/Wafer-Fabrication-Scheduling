@@ -62,16 +62,27 @@ export function DroppableCell({
   cellId,
   children,
   className,
+  disabled = false,
+  invalidReason,
 }: {
   cellId: string;
   children: React.ReactNode;
   className?: string;
+  disabled?: boolean;
+  invalidReason?: string;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: cellId });
+  const { setNodeRef, isOver } = useDroppable({ id: cellId, disabled });
   return (
     <div
       ref={setNodeRef}
-      className={`${className ?? ""} ${isOver ? "ring-2 ring-blue-500 ring-inset bg-blue-100/40" : ""}`}
+      title={disabled ? invalidReason : undefined}
+      className={`${className ?? ""} ${
+        disabled
+          ? "opacity-40 cursor-not-allowed ring-2 ring-inset ring-red-200"
+          : isOver
+            ? "ring-2 ring-blue-500 ring-inset bg-blue-100/40"
+            : ""
+      }`}
     >
       {children}
     </div>

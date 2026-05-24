@@ -1034,6 +1034,8 @@ function GanttCell({
   isSales,
   editMode,
   movedAssignmentIds,
+  dropDisabled = false,
+  dropDisabledReason,
   onClick,
 }: {
   cell: CellData;
@@ -1043,6 +1045,8 @@ function GanttCell({
   isSales: boolean;
   editMode: boolean;
   movedAssignmentIds: Set<string>;
+  dropDisabled?: boolean;
+  dropDisabledReason?: string;
   onClick: () => void;
 }) {
   const { bg, barColor, fillRatio } = getCellStyle(cell);
@@ -1057,6 +1061,8 @@ function GanttCell({
         <DroppableCell
           cellId={cellId}
           className={`w-full min-h-14 relative ${bg}`}
+          disabled={dropDisabled}
+          invalidReason={dropDisabledReason}
         >
           {hasConflict && (
             <span className="absolute top-0.5 right-0.5 text-[9px] leading-none z-10">
@@ -2543,6 +2549,46 @@ export default function SchedulePage() {
                                   myOrderIdSet.has(i.orderId),
                                 )
                               : false;
+
+                            // Edit-mode drop validation: block drops that would
+                            // overflow the cell's maxCapacity or push the
+                            // assignment past its dueDate. Dropping back to the
+                            // dragging chip's current cell is always allowed
+                            // (it's a no-op).
+                            let dropDisabled = false;
+                            let dropDisabledReason: string | undefined;
+                            if (editMode && draggingAssignment) {
+                              const pending = pendingMoves.get(
+                                draggingAssignment.assignmentId,
+                              );
+                              const currFactoryId =
+                                pending?.factoryId ??
+                                draggingAssignment.factoryId;
+                              const currDate =
+                                pending?.productionDate ??
+                                draggingAssignment.productionDate;
+                              const isCurrentCell =
+                                factory.id === currFactoryId &&
+                                date === currDate;
+                              if (!isCurrentCell) {
+                                if (date > draggingAssignment.dueDate) {
+                                  dropDisabled = true;
+                                  dropDisabledReason = `超過交期 ${draggingAssignment.dueDate}`;
+                                } else if (
+                                  cell.usedCapacity +
+                                    draggingAssignment.assignedQuantity >
+                                  cell.maxCapacity
+                                ) {
+                                  const remaining = Math.max(
+                                    0,
+                                    cell.maxCapacity - cell.usedCapacity,
+                                  );
+                                  dropDisabled = true;
+                                  dropDisabledReason = `容量不足 (剩餘 ${remaining.toLocaleString()} / 需要 ${draggingAssignment.assignedQuantity.toLocaleString()})`;
+                                }
+                              }
+                            }
+
                             return (
                               <GanttCell
                                 key={key}
@@ -2553,6 +2599,8 @@ export default function SchedulePage() {
                                 isSales={isSales}
                                 editMode={editMode}
                                 movedAssignmentIds={movedAssignmentIds}
+                                dropDisabled={dropDisabled}
+                                dropDisabledReason={dropDisabledReason}
                                 onClick={() =>
                                   setSelectedCell({
                                     factoryId: factory.id,
