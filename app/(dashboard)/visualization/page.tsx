@@ -1281,9 +1281,8 @@ export default function SchedulePage() {
   }, [router, session, startDate, endDate, refreshKey]);
 
   // Run schedule handler (applies the selected algorithm directly)
-  const handleRunSchedule = async (algorithmOverride?: string) => {
+  const handleRunSchedule = async () => {
     if (!productionType) return;
-    const algorithm = algorithmOverride ?? reschedulePolicy;
     setScheduleStatus("running");
     try {
       const res = await fetch("/api/schedule/run", {
@@ -1292,7 +1291,17 @@ export default function SchedulePage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ type: productionType, algorithm }),
+        body: JSON.stringify({
+          type: productionType,
+          config: {
+            reschedulePolicy,
+            frozenDays: 0,
+            productionDays: 1,
+            bufferDays: 0,
+            algorithm: "GREEDY_BEST_FIT",
+            splittable: true,
+          },
+        }),
       });
       if (res.status === 409) {
         setScheduleStatus("conflict");
@@ -2278,16 +2287,6 @@ export default function SchedulePage() {
             {previewData.diffs.length} order(s) would be rescheduled
             {previewData.unscheduledOrders.length > 0 &&
               `, ${previewData.unscheduledOrders.length} cannot fit`}
-            . Capacity conflicts:{" "}
-            {
-              previewData.conflicts.filter((c) => c.conflictType === "CAPACITY")
-                .length
-            }
-            , due-date conflicts:{" "}
-            {
-              previewData.conflicts.filter((c) => c.conflictType === "DUE_DATE")
-                .length
-            }
             .
             {selectedOrderIds.size > 0 && (
               <span className="ml-2 font-medium">

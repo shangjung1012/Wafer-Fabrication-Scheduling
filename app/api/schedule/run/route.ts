@@ -32,10 +32,12 @@ const SchedulingConfigSchema = z
     splittable: true,
   });
 
-const RunScheduleSchema = z.object({
-  type: z.string().min(1, "Type is required"),
-  config: SchedulingConfigSchema,
-});
+const RunScheduleSchema = z
+  .object({
+    type: z.string().min(1, "Type is required"),
+    config: SchedulingConfigSchema,
+  })
+  .strict();
 
 export async function POST(request: Request) {
   try {

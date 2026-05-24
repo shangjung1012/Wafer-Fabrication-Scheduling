@@ -258,8 +258,21 @@ export async function findPendingOrdersForAdmin(
 
 function buildDateWhere(startDate?: string, endDate?: string) {
   if (!startDate && !endDate) return null;
+  // productionDate / DailyCapacity.date are written at local-midnight (see
+  // modules/schedule/strategy.ts), so the filter must use local-day bounds
+  // too — otherwise on UTC+N servers the first day of the range loses its
+  // freshly-scheduled rows (local-midnight serialises to the previous UTC day).
+  const parseLocalDay = (s: string) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  };
+  const endOfLocalDay = (s: string) => {
+    const d = parseLocalDay(s);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  };
   return {
-    ...(startDate ? { gte: new Date(`${startDate}T00:00:00.000Z`) } : {}),
-    ...(endDate ? { lte: new Date(`${endDate}T23:59:59.999Z`) } : {}),
+    ...(startDate ? { gte: parseLocalDay(startDate) } : {}),
+    ...(endDate ? { lte: endOfLocalDay(endDate) } : {}),
   };
 }
