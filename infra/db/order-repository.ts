@@ -276,20 +276,22 @@ export async function findOrdersForScheduling(
   db: PrismaClient,
   type: string,
   targetOrderIds?: string[],
+  fetchAllPending: boolean = false,
 ) {
   return db.order.findMany({
     where: {
       type,
-      status: {
-        in: [
-          OrderStatus.PENDING,
-          OrderStatus.SCHEDULED,
-          OrderStatus.IN_PRODUCTION,
-        ],
-      },
-      ...(targetOrderIds && targetOrderIds.length > 0
-        ? { id: { in: targetOrderIds } }
-        : {}),
+      OR: [
+        {
+          status: {
+            in: [OrderStatus.SCHEDULED, OrderStatus.IN_PRODUCTION],
+          },
+        },
+        {
+          status: OrderStatus.PENDING,
+          ...(fetchAllPending ? {} : { id: { in: targetOrderIds || [] } }),
+        },
+      ],
     },
     include: {
       assignments: true,

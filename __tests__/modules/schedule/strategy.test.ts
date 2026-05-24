@@ -407,7 +407,7 @@ describe("Greedy Best-Fit Strategy", () => {
         id: "C1",
         factoryId: "F1",
         date: addDays(TODAY, 1),
-        curCapacity: 100,
+        curCapacity: 0, // Should be 0 since DB reflects the remaining capacity
         maxCapacity: 100,
       },
     ];
@@ -596,9 +596,9 @@ describe("Greedy Best-Fit Strategy", () => {
     const assignedDate = result.newAssignments[0].productionDate;
 
     function toLocalString(d: Date) {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(d.getUTCDate()).padStart(2, "0");
       return `${year}-${month}-${day}`;
     }
 

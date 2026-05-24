@@ -55,7 +55,10 @@ describe("Schedule Engine - Core", () => {
   describe("prepareSchedulingData", () => {
     it("should fetch orders and factories, and restore capacity based on policy", async () => {
       const fixedDate = new Date();
-      fixedDate.setHours(0, 0, 0, 0);
+      fixedDate.setUTCHours(0, 0, 0, 0);
+
+      const prodDate = new Date(fixedDate);
+      prodDate.setUTCDate(prodDate.getUTCDate() + 2);
 
       const mockOrders = [
         {
@@ -65,7 +68,7 @@ describe("Schedule Engine - Core", () => {
             {
               factoryId: "F1",
               status: AssignmentStatus.SCHEDULED,
-              productionDate: new Date(fixedDate),
+              productionDate: new Date(prodDate),
               assignedQuantity: 50,
             },
           ],
@@ -78,7 +81,7 @@ describe("Schedule Engine - Core", () => {
           dailyCapacities: [
             {
               factoryId: "F1",
-              date: new Date(fixedDate),
+              date: new Date(prodDate),
               curCapacity: 50,
             },
           ],
@@ -97,8 +100,8 @@ describe("Schedule Engine - Core", () => {
       );
 
       const dummyConfig: SchedulingConfig = {
-        startDate: new Date(fixedDate.getTime() - 86400000), // yesterday
-        endDate: new Date(fixedDate.getTime() + 86400000), // tomorrow
+        startDate: new Date(fixedDate.getTime()),
+        endDate: new Date(fixedDate.getTime() + 86400000 * 5),
         frozenDays: 0,
         productionDays: 1,
         bufferDays: 0,
@@ -111,12 +114,14 @@ describe("Schedule Engine - Core", () => {
         "Type A",
         dummyConfig,
         fixedDate,
+        true,
       );
 
       expect(orderRepo.findOrdersForScheduling).toHaveBeenCalledWith(
         prisma,
         "Type A",
         undefined,
+        true,
       );
       expect(factoryRepo.findFactoriesWithCapacities).toHaveBeenCalledWith(
         prisma,

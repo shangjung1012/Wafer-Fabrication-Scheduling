@@ -10,7 +10,7 @@ import {
   getSystemState,
   upsertSystemState,
 } from "@/infra/db/system-state-repository";
-import { advanceOrderStatuses } from "@/modules/schedule/daily-execution";
+import { handleSimulationTimeAdvance } from "@/modules/schedule/simulation-service";
 import { getTime } from "@/lib/get-time";
 
 export async function GET(request: Request) {
@@ -82,14 +82,21 @@ export async function PATCH(request: Request) {
         ? patch.simulationDate
         : currentState.simulationDate;
     if (nextIsSimulationMode && nextSimulationDate == null) {
-      patch.simulationDate = new Date();
+      const now = new Date();
+      patch.simulationDate = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+      );
     }
 
     const state = await upsertSystemState(prisma, patch);
 
     if (patch.simulationDate) {
-      const newTime = await getTime();
-      await advanceOrderStatuses(newTime);
+      const newTime = new Date(await getTime());
+      const oldTime = currentState.simulationDate
+        ? new Date(currentState.simulationDate)
+        : null;
+
+      await handleSimulationTimeAdvance(oldTime, newTime);
     }
 
     return NextResponse.json(state);

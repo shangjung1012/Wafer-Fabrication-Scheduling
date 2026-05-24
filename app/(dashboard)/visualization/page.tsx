@@ -45,7 +45,7 @@ function toDateStr(d: Date) {
 }
 
 function dateInputToIso(value: string) {
-  return new Date(`${value}T00:00:00`).toISOString();
+  return `${value}T00:00:00.000Z`;
 }
 
 function toDateInputValue(value?: string) {
@@ -103,14 +103,15 @@ function convertNewScheduleToPreview(args: {
 
   const toIsoDate = (d: string | Date | undefined): string => {
     if (!d) return "";
-    if (d instanceof Date) return format(d, "yyyy-MM-dd");
-    // Accept both ISO and already-yyyy-MM-dd strings.
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-    try {
-      return format(parseISO(d), "yyyy-MM-dd");
-    } catch {
-      return String(d).slice(0, 10);
+    if (typeof d === "string") {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      if (d.includes("T")) return d.split("T")[0];
+      return d.slice(0, 10);
     }
+    if (d instanceof Date) {
+      return format(d, "yyyy-MM-dd");
+    }
+    return String(d).slice(0, 10);
   };
 
   // Build TimelineItem[] from every assignment on every order in newSchedule.
@@ -1239,6 +1240,7 @@ export default function SchedulePage() {
   // Simulation mode state (from dev)
   const [simMode, setSimMode] = useState(false);
   const [simDate, setSimDate] = useState("");
+  const [simDateTime, setSimDateTime] = useState("");
   const [simLoading, setSimLoading] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -1281,27 +1283,27 @@ export default function SchedulePage() {
   }, [router, session, startDate, endDate, refreshKey]);
 
   // Run schedule handler (applies the selected algorithm directly)
-  const handleRunSchedule = async () => {
+  const handleRunSchedule = async (algorithmOverride?: string) => {
     if (!productionType) return;
+    const policy = algorithmOverride ?? reschedulePolicy;
     setScheduleStatus("running");
     try {
+      const baseConfig: Record<string, unknown> = {
+        reschedulePolicy: policy,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+
       const res = await fetch("/api/schedule/run", {
         method: "POST",
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          type: productionType,
-          config: {
-            reschedulePolicy,
-            frozenDays: 0,
-            productionDays: 1,
-            bufferDays: 0,
-            algorithm: "GREEDY_BEST_FIT",
-            splittable: true,
-          },
-        }),
+        body: JSON.stringify({ type: productionType, config: baseConfig }),
       });
       if (res.status === 409) {
         setScheduleStatus("conflict");
@@ -1702,7 +1704,7 @@ export default function SchedulePage() {
       body: JSON.stringify({
         name: values.name,
         type: values.type,
-        dueDate: new Date(values.dueDate).toISOString(),
+        dueDate: `${values.dueDate}T00:00:00.000Z`,
         quantity,
       }),
     });
@@ -1767,7 +1769,8 @@ export default function SchedulePage() {
       .then((body) => {
         setSimMode(!!body.isSimulationMode);
         if (body.simulationDate) {
-          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+          setSimDate(body.simulationDate.split("T")[0]);
+          setSimDateTime(body.simulationDate);
         }
       })
       .catch(() => {});
@@ -1798,9 +1801,11 @@ export default function SchedulePage() {
         const body = await res.json();
         setSimMode(!!body.isSimulationMode);
         if (body.simulationDate) {
-          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+          setSimDate(body.simulationDate.split("T")[0]);
+          setSimDateTime(body.simulationDate);
         } else {
           setSimDate("");
+          setSimDateTime("");
         }
         setLoading(true);
         setFetchError(null);
@@ -1835,13 +1840,30 @@ export default function SchedulePage() {
   };
 
   const stepSimDate = (days: number) => {
-    const base = simDate
-      ? new Date(simDate)
-      : parseISO(data?.today ?? format(new Date(), "yyyy-MM-dd"));
-    base.setDate(base.getDate() + days);
-    const next = format(base, "yyyy-MM-dd");
-    setSimDate(next);
-    patchSim({ simulationDate: dateInputToIso(next) });
+    const baseStr =
+      simDateTime || data?.today || format(new Date(), "yyyy-MM-dd");
+    const base = new Date(
+      baseStr.includes("T") ? baseStr : `${baseStr}T00:00:00.000Z`,
+    );
+    base.setUTCDate(base.getUTCDate() + days);
+    base.setUTCHours(0, 0, 0, 0);
+    const nextIso = base.toISOString();
+    setSimDateTime(nextIso);
+    setSimDate(nextIso.split("T")[0]);
+    patchSim({ simulationDate: nextIso });
+  };
+
+  const stepSimHours = (hours: number) => {
+    const baseStr =
+      simDateTime || data?.today || format(new Date(), "yyyy-MM-dd");
+    const base = new Date(
+      baseStr.includes("T") ? baseStr : `${baseStr}T00:00:00.000Z`,
+    );
+    base.setUTCHours(base.getUTCHours() + hours);
+    const nextIso = base.toISOString();
+    setSimDateTime(nextIso);
+    setSimDate(nextIso.split("T")[0]);
+    patchSim({ simulationDate: nextIso });
   };
 
   // Build date columns
@@ -2265,8 +2287,19 @@ export default function SchedulePage() {
             >
               +1d →
             </button>
+            <button
+              type="button"
+              onClick={() => stepSimHours(2)}
+              disabled={simLoading}
+              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium ml-1"
+            >
+              +2h
+            </button>
             <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-              Custom: {simDate || "—"}
+              Custom:{" "}
+              {simDateTime
+                ? simDateTime.substring(0, 16).replace("T", " ")
+                : "—"}
             </span>
           </>
         )}

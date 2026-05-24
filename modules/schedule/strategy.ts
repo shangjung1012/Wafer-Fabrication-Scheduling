@@ -68,26 +68,16 @@ export interface IScheduleStrategy {
     capacities: SchedulingCapacityInput[],
     config: SchedulingConfig,
     currentDate?: Date,
-  ): StrategyResult;
-}
-
-export interface IScheduleStrategy {
-  name: string;
-  execute(
-    orders: SchedulingOrderInput[],
-    factories: SchedulingFactoryInput[],
-    capacities: SchedulingCapacityInput[],
-    config: SchedulingConfig,
-    currentDate?: Date,
+    dbCapacities?: SchedulingCapacityInput[],
   ): StrategyResult;
 }
 
 // Helper to get YYYY-MM-DD string robustly
 function toDateString(d: Date | string): string {
   const date = new Date(d);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -105,8 +95,13 @@ export function computeTotalAvailableCapacity(
   capacityMap: Map<string, CapacityDraft>,
 ): number {
   let total = 0;
-  const iterDate = new Date(windowStart);
-  iterDate.setHours(0, 0, 0, 0);
+  const iterDate = new Date(
+    Date.UTC(
+      windowStart.getUTCFullYear(),
+      windowStart.getUTCMonth(),
+      windowStart.getUTCDate(),
+    ),
+  );
   const endTime = windowEnd.getTime();
 
   while (iterDate.getTime() <= endTime) {
@@ -120,7 +115,7 @@ export function computeTotalAvailableCapacity(
         total += factory.maxCapacity;
       }
     }
-    iterDate.setDate(iterDate.getDate() + 1);
+    iterDate.setUTCDate(iterDate.getUTCDate() + 1);
   }
 
   return total;
@@ -135,6 +130,7 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
     config: SchedulingConfig,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _currentDate: Date = new Date(),
+    dbCapacities?: SchedulingCapacityInput[],
   ): StrategyResult => {
     const result: StrategyResult = {
       processedOrders: [],
@@ -186,7 +182,13 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
           };
           capacityMap.set(mapKey, cap);
         }
-        cap.curCapacity -= assignment.assignedQuantity;
+
+        // Only deduct if this capacity draft was dynamically created in this run
+        // (i.e., it doesn't have an ID from the database).
+        // If it has an ID, the database already reflects this assignment's deduction.
+        if (!cap.id) {
+          cap.curCapacity -= assignment.assignedQuantity;
+        }
       }
       result.processedOrders.push({ ...order, status: order.status });
     }
@@ -225,18 +227,38 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
 
     // 5. Process each mutable order
     for (const order of sortedOrders) {
-      const windowStart = new Date(config.startDate);
-      windowStart.setDate(windowStart.getDate() + config.frozenDays);
-      windowStart.setHours(0, 0, 0, 0);
-
-      const windowEnd = new Date(order.dueDate);
-      windowEnd.setDate(
-        windowEnd.getDate() - config.bufferDays - (config.productionDays - 1),
+      const windowStart = new Date(
+        Date.UTC(
+          new Date(config.startDate).getUTCFullYear(),
+          new Date(config.startDate).getUTCMonth(),
+          new Date(config.startDate).getUTCDate(),
+        ),
       );
-      if (config.endDate && windowEnd > config.endDate) {
-        windowEnd.setTime(config.endDate.getTime());
+
+      const windowEnd = new Date(
+        Date.UTC(
+          new Date(order.dueDate).getUTCFullYear(),
+          new Date(order.dueDate).getUTCMonth(),
+          new Date(order.dueDate).getUTCDate(),
+        ),
+      );
+      windowEnd.setUTCDate(
+        windowEnd.getUTCDate() -
+          config.bufferDays -
+          (config.productionDays - 1),
+      );
+      if (config.endDate) {
+        const configEnd = new Date(
+          Date.UTC(
+            new Date(config.endDate).getUTCFullYear(),
+            new Date(config.endDate).getUTCMonth(),
+            new Date(config.endDate).getUTCDate(),
+          ),
+        );
+        if (windowEnd.getTime() > configEnd.getTime()) {
+          windowEnd.setTime(configEnd.getTime());
+        }
       }
-      windowEnd.setHours(23, 59, 59, 999);
 
       // Calculate remaining quantity excluding all current assignments
       // Engine leaves frozen or GAP_FILLING assignments in order.assignments
@@ -333,7 +355,7 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
               remainingQty -= allocated;
             }
 
-            currentIterDate.setDate(currentIterDate.getDate() + 1);
+            currentIterDate.setUTCDate(currentIterDate.getUTCDate() + 1);
           }
         } else {
           // Non-splittable logic: Find a single block that fits the entire remainingQty
@@ -398,7 +420,7 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
                 break; // Break inner factory loop
               }
             }
-            currentIterDate.setDate(currentIterDate.getDate() + 1);
+            currentIterDate.setUTCDate(currentIterDate.getUTCDate() + 1);
           }
         }
       }
@@ -438,7 +460,9 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
     // 5. Finalize output arrays from the final state of capacityMap
     for (const cap of Array.from(capacityMap.values())) {
       if (cap.id) {
-        const originalCap = capacities.find((c) => c.id === cap.id);
+        // Compare against the true DB original state if provided, otherwise fallback to the capacities param
+        const diffSource = dbCapacities ?? capacities;
+        const originalCap = diffSource.find((c) => c.id === cap.id);
         if (originalCap && originalCap.curCapacity !== cap.curCapacity) {
           result.updatedCapacities.push({ ...cap, id: cap.id });
         }

@@ -1,81 +1,34 @@
 import cron from "node-cron";
 import { prisma } from "@/lib/prisma";
-import { runScheduleWithIssues } from "@/modules/order/schedule-orchestrator";
 import { advanceOrderStatuses } from "@/modules/schedule/daily-execution";
-import { findPendingOrderTypes } from "@/infra/db/order-repository";
-import { findUserByUsername } from "@/infra/db/user-repository";
-import { getAutoSchedulerConfigByType } from "@/infra/db/auto-scheduler-config-repository";
+import { triggerAutoSchedule } from "@/modules/schedule/auto-scheduler";
 import { getTime } from "@/lib/get-time";
 
-import { type SchedulingConfig } from "@/modules/schedule/strategy";
+const tz = process.env.CRON_TIMEZONE || "Asia/Taipei";
 
-async function runAutoScheduler() {
+export async function runAutoSchedulerCron() {
   try {
-    console.log("[Cron] Running AutoScheduler...");
-
-    const pendingTypes = await findPendingOrderTypes(prisma);
-    if (pendingTypes.length === 0) return;
-
-    const systemUser = await findUserByUsername(prisma, "AutoScheduler");
-    if (!systemUser) return;
+    const state = await prisma.systemState.findUnique({
+      where: { id: "global" },
+    });
+    if (state?.isSimulationMode) return;
 
     const currentDate = await getTime();
-
-    for (const type of pendingTypes) {
-      try {
-        const config = await getAutoSchedulerConfigByType(prisma, type);
-        if (!config || !config.isOperating) {
-          console.log(
-            `[Cron] AutoScheduler is disabled for type ${type}. Skipping.`,
-          );
-          continue;
-        }
-
-        const defaultStartDate = new Date(currentDate);
-        defaultStartDate.setHours(0, 0, 0, 0);
-        defaultStartDate.setDate(defaultStartDate.getDate() + 1);
-
-        const scheduleConfig: SchedulingConfig = {
-          startDate: defaultStartDate,
-          frozenDays: config.frozenDays,
-          productionDays: config.productionDays,
-          bufferDays: config.bufferDays,
-          reschedulePolicy:
-            config.reschedulePolicy as SchedulingConfig["reschedulePolicy"],
-          algorithm: config.algorithm as SchedulingConfig["algorithm"],
-          splittable: config.splittable,
-        };
-
-        // runScheduleWithIssues delegates locking to runSchedule and fires
-        // ConflictIssue creation for any FAILED orders fire-and-forget.
-        await runScheduleWithIssues({
-          type,
-          config: scheduleConfig,
-          currentDate,
-          operatorId: systemUser.id,
-        });
-        console.log(`[Cron] Successfully ran schedule for type ${type}`);
-      } catch (error) {
-        const err = error as Error;
-        if (err.message?.includes("already running")) {
-          console.log(
-            `[Cron] Schedule already running for type ${type}. Skipping.`,
-          );
-        } else {
-          console.error(`[Cron] Failed for type ${type}:`, err);
-        }
-      }
-    }
+    await triggerAutoSchedule(currentDate);
   } catch (error) {
     console.error("[Cron] Top-level failure in AutoScheduler:", error);
   }
 }
 
-async function runDailyExecution() {
+export async function runDailyExecutionCron() {
   try {
+    const state = await prisma.systemState.findUnique({
+      where: { id: "global" },
+    });
+    if (state?.isSimulationMode) return;
+
     console.log("[Cron] Running Daily Execution Engine...");
     const currentDate = await getTime();
-    // advanceOrderStatuses natively handles its own locks securely
     await advanceOrderStatuses(currentDate);
     console.log("[Cron] Daily Execution Engine completed.");
   } catch (error) {
@@ -83,6 +36,6 @@ async function runDailyExecution() {
   }
 }
 
-cron.schedule("0 */2 * * *", runAutoScheduler);
-cron.schedule("0 0 * * *", runDailyExecution);
-console.log("[Cron] Worker started.");
+cron.schedule("0 */2 * * *", runAutoSchedulerCron, { timezone: tz });
+cron.schedule("0 0 * * *", runDailyExecutionCron, { timezone: tz });
+console.log(`[Cron] Worker started with timezone ${tz}.`);
