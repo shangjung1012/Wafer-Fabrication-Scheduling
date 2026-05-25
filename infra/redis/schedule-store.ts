@@ -70,7 +70,7 @@ export async function withScheduleLock<T>(
       );
       if (!lockAcquired) {
         throw new Error(
-          `A scheduling process is already running for type: ${type}`,
+          `A scheduling process is already running for type: ${type}, refresh the page and try again`,
         );
       }
       acquiredLocks.push({ lockKey, ownerToken });

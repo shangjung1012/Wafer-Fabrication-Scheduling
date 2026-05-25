@@ -20,6 +20,7 @@ import {
 } from "@/infra/db/capacity-repository";
 import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
 import { withScheduleLock } from "@/infra/redis/schedule-store";
+import { calculateMinimumStartDate } from "@/modules/schedule/validation-utils";
 
 export async function prepareSchedulingData(
   type: string,
@@ -40,12 +41,9 @@ export async function prepareSchedulingData(
   );
 
   // Calculate minimumStartDate = currentDate + 1 day + config.frozenDays (normalized to UTC midnight)
-  const minimumStartDate = new Date(
-    Date.UTC(
-      currentDate.getUTCFullYear(),
-      currentDate.getUTCMonth(),
-      currentDate.getUTCDate() + 1 + config.frozenDays,
-    ),
+  const minimumStartDate = calculateMinimumStartDate(
+    currentDate,
+    config.frozenDays,
   );
 
   // Auto-correct config.startDate if it's earlier than minimumStartDate

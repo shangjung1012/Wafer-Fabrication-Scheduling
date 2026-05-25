@@ -40,7 +40,7 @@
 訂單視窗計算（在 `strategy.ts`）：
 
 - `windowStart = config.startDate + frozenDays`
-- `windowEnd   = order.dueDate − bufferDays − (productionDays − 1)`（若超過 `config.endDate` 則 clamp）
+- `windowEnd   = order.dueDate − bufferDays − productionDays`（若超過 `config.endDate` 則 clamp）
 
 ---
 

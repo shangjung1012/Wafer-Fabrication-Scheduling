@@ -171,6 +171,7 @@ function mapTimeline(
     assignmentId: a.id,
     orderId: a.orderId,
     orderName: a.orderName,
+    isFixed: a.orderIsFixed,
     factoryId: a.factoryId,
     productionDate: a.productionDate,
     assignedQuantity: a.assignedQuantity,

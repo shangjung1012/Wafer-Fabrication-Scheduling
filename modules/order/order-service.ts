@@ -103,6 +103,8 @@ export type UpdateOrderServiceInput = {
   dueDate?: Date;
   quantity?: number;
   name?: string;
+  isFixed?: boolean;
+  isPrioritized?: boolean;
 };
 
 export async function updateOrderService(
@@ -111,13 +113,18 @@ export async function updateOrderService(
   id: string,
   input: UpdateOrderServiceInput,
 ): Promise<OrderRow> {
-  requireRole(ctx, ["SALES", "ADMIN"]);
+  requireRole(ctx, ["SALES", "ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
 
   const order = await findOrderById(db, id);
   if (!order) orderNotFound();
 
   if (scope.role === "SALES") {
+    if (input.isFixed !== undefined || input.isPrioritized !== undefined) {
+      throw new ForbiddenError(
+        "You cannot change order scheduling lock or priority flags.",
+      );
+    }
     if (input.status !== undefined) {
       throw new ForbiddenError("You cannot change order status directly.");
     }
@@ -140,7 +147,7 @@ export async function updateOrderService(
     return result;
   }
 
-  // ADMIN: must be same production group
+  // ADMIN / SUPERADMIN: must be same production group
   if (order.type !== getScopeGroup(scope)) {
     throw new ForbiddenError("This order is not in your production group.");
   }
