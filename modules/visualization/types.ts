@@ -17,6 +17,8 @@ export type TimelineItem = {
   assignmentId: string;
   orderId: string;
   orderName: string;
+  /** Order-level flag; duplicated on each assignment row for convenience. */
+  isFixed: boolean;
   factoryId: string;
   productionDate: string; // YYYY-MM-DD
   assignedQuantity: number;

@@ -20,6 +20,7 @@ export type AssignmentWithOrderRow = {
   status: string;
   orderName: string;
   orderDueDate: string; // YYYY-MM-DD
+  orderIsFixed: boolean;
   applicantId: string;
   lastModifiedById: string | null;
 };
@@ -107,6 +108,7 @@ export async function findAssignmentsForVisualization(
         select: {
           name: true,
           dueDate: true,
+          isFixed: true,
           applicantId: true,
           lastModifiedById: true,
         },
@@ -124,6 +126,7 @@ export async function findAssignmentsForVisualization(
     status: r.status,
     orderName: r.order.name,
     orderDueDate: format(r.order.dueDate, "yyyy-MM-dd"),
+    orderIsFixed: r.order.isFixed,
     applicantId: r.order.applicantId,
     lastModifiedById: r.order.lastModifiedById,
   }));
