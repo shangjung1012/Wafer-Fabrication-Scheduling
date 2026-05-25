@@ -12,7 +12,20 @@ export function calculateOrderDeadline(
     ),
   );
   windowEnd.setUTCDate(
-    windowEnd.getUTCDate() - config.bufferDays - (config.productionDays - 1),
+    windowEnd.getUTCDate() - config.bufferDays - config.productionDays,
   );
   return windowEnd;
+}
+
+export function calculateMinimumStartDate(
+  currentDate: Date,
+  frozenDays: number,
+): Date {
+  return new Date(
+    Date.UTC(
+      currentDate.getUTCFullYear(),
+      currentDate.getUTCMonth(),
+      currentDate.getUTCDate() + 1 + frozenDays,
+    ),
+  );
 }
