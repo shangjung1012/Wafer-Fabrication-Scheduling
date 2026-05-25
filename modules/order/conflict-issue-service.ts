@@ -36,6 +36,7 @@ import {
   findCompetingScheduledOrders,
 } from "@/infra/db/order-repository";
 import { findFactoriesForIssueSnapshot } from "@/infra/db/factory-repository";
+import { calculateOrderDeadline } from "@/modules/schedule/validation-utils";
 import {
   computeTotalAvailableCapacity,
   type CapacityDraft,
@@ -588,25 +589,82 @@ export async function getSuggestions(
     windowEnd: string;
     factoriesConsidered: Array<{ id: string; maxCapacity: number }>;
     orderSnapshot: { dueDate: string };
+    config: { splittable: boolean; bufferDays: number; productionDays: number };
   };
 
   const originalDueDate = snapshot.orderSnapshot.dueDate;
   const requiredQty = snapshot.requiredQuantity;
-  const totalAvailableInWindow = snapshot.totalAvailableInWindow;
+  let totalAvailableInWindow = snapshot.totalAvailableInWindow;
 
-  // Scenario 1: maxFit is already in the snapshot — no DB query needed
+  const isSplittable = snapshot.config?.splittable ?? true;
+  const bufferDays = snapshot.config?.bufferDays ?? 0;
+  const productionDays = snapshot.config?.productionDays ?? 0;
+
+  const factories = snapshot.factoriesConsidered;
+  const factoryIds = factories.map((f) => f.id);
+  const factoryDefaults = new Map<string, number>(
+    factories.map((f) => [f.id, f.maxCapacity]),
+  );
+
+  const trueWindowStart = new Date(snapshot.windowStart);
+  const trueWindowEnd = new Date(snapshot.windowEnd);
+
+  // If not splittable, totalAvailableInWindow must be the largest single block inside the original window,
+  // not the aggregated sum.
+  if (!isSplittable) {
+    const origCapacityRecords = await db.dailyCapacity.findMany({
+      where: {
+        factoryId: { in: factoryIds },
+        date: { gte: trueWindowStart, lte: trueWindowEnd },
+      },
+      select: {
+        factoryId: true,
+        date: true,
+        curCapacity: true,
+        maxCapacity: true,
+      },
+    });
+
+    const origCapacityMap = new Map<string, number>();
+    for (const rec of origCapacityRecords) {
+      const dateKey = rec.date.toISOString().slice(0, 10);
+      origCapacityMap.set(
+        `${rec.factoryId}_${dateKey}`,
+        Math.max(0, rec.curCapacity),
+      );
+    }
+
+    let maxSingleBlock = 0;
+    const iterDate = new Date(trueWindowStart);
+    while (iterDate.getTime() <= trueWindowEnd.getTime()) {
+      const dateKey = iterDate.toISOString().slice(0, 10);
+      for (const fid of factoryIds) {
+        const mapKey = `${fid}_${dateKey}`;
+        const cap = origCapacityMap.has(mapKey)
+          ? origCapacityMap.get(mapKey)!
+          : (factoryDefaults.get(fid) ?? 0);
+        if (cap > maxSingleBlock) {
+          maxSingleBlock = cap;
+        }
+      }
+      iterDate.setDate(iterDate.getDate() + 1);
+    }
+
+    // Non-splittable max fit is bounded by the requiredQty so we don't suggest
+    // a larger max fit than what's requested
+    totalAvailableInWindow = Math.min(maxSingleBlock, requiredQty);
+  }
+
+  // Scenario 1: maxFit
   const maxFitInOriginalWindow = {
     quantity: totalAvailableInWindow,
     originalDueDate,
   };
 
   // Scenario 2: earliest date for original quantity
-  // Scan day-by-day from dueDate+1 until cumulative available >= requiredQty
-  const factories = snapshot.factoriesConsidered;
-  const factoryIds = factories.map((f) => f.id);
+  // Scan day-by-day from windowEnd+1 until capacity >= requiredQty
 
-  // Fetch all DailyCapacity records for the scan window
-  const scanStart = new Date(originalDueDate);
+  const scanStart = new Date(trueWindowEnd);
   scanStart.setDate(scanStart.getDate() + 1);
   scanStart.setHours(0, 0, 0, 0);
 
@@ -636,39 +694,75 @@ export async function getSuggestions(
     );
   }
 
-  // Factory default capacities
-  const factoryDefaults = new Map<string, number>(
-    factories.map((f) => [f.id, f.maxCapacity]),
-  );
-
   // Day-by-day scan
-  let cumulativeCapacity = 0;
+  // If splittable, we retain what we already found in the original window.
+  // If not splittable, we need the full required quantity in a single block.
+  let cumulativeCapacity = isSplittable ? totalAvailableInWindow : 0;
   let earliestFitForOriginalQty: EarliestFitResult = null;
   const iterDate = new Date(scanStart);
 
   for (let day = 0; day < SEARCH_HORIZON_DAYS; day++) {
     const dateKey = iterDate.toISOString().slice(0, 10);
 
+    let maxBlockForDay = 0;
+
     // Sum capacity across all relevant factories for this day
     let dayCapacity = 0;
     for (const fid of factoryIds) {
       const mapKey = `${fid}_${dateKey}`;
-      if (capacityMap.has(mapKey)) {
-        dayCapacity += capacityMap.get(mapKey)!;
-      } else {
-        dayCapacity += factoryDefaults.get(fid) ?? 0;
-      }
+      const cap = capacityMap.has(mapKey)
+        ? capacityMap.get(mapKey)!
+        : (factoryDefaults.get(fid) ?? 0);
+
+      dayCapacity += cap;
+      if (cap > maxBlockForDay) maxBlockForDay = cap;
     }
 
-    cumulativeCapacity += dayCapacity;
+    if (isSplittable) {
+      cumulativeCapacity += dayCapacity;
+      if (cumulativeCapacity >= requiredQty) {
+        const foundProdDate = new Date(iterDate);
 
-    if (cumulativeCapacity >= requiredQty) {
-      earliestFitForOriginalQty = {
-        dueDate: dateKey,
-        daysDelayed: day + 1,
-        searchHorizonDays: SEARCH_HORIZON_DAYS,
-      };
-      break;
+        // Convert found production date back to due date format by adding delays
+        const newDueDate = new Date(foundProdDate);
+        newDueDate.setDate(newDueDate.getDate() + productionDays + bufferDays);
+
+        // calculate actual days delayed from the original due date
+        const origDueDateObj = new Date(originalDueDate);
+        const daysDelayed = Math.round(
+          (newDueDate.getTime() - origDueDateObj.getTime()) /
+            (1000 * 60 * 60 * 24),
+        );
+
+        earliestFitForOriginalQty = {
+          dueDate: newDueDate.toISOString().slice(0, 10),
+          daysDelayed,
+          searchHorizonDays: SEARCH_HORIZON_DAYS,
+        };
+        break;
+      }
+    } else {
+      if (maxBlockForDay >= requiredQty) {
+        const foundProdDate = new Date(iterDate);
+
+        // Convert found production date back to due date format by adding delays
+        const newDueDate = new Date(foundProdDate);
+        newDueDate.setDate(newDueDate.getDate() + productionDays + bufferDays);
+
+        // calculate actual days delayed from the original due date
+        const origDueDateObj = new Date(originalDueDate);
+        const daysDelayed = Math.round(
+          (newDueDate.getTime() - origDueDateObj.getTime()) /
+            (1000 * 60 * 60 * 24),
+        );
+
+        earliestFitForOriginalQty = {
+          dueDate: newDueDate.toISOString().slice(0, 10),
+          daysDelayed,
+          searchHorizonDays: SEARCH_HORIZON_DAYS,
+        };
+        break;
+      }
     }
 
     iterDate.setDate(iterDate.getDate() + 1);
@@ -760,7 +854,7 @@ export async function createIssuesForFailedOrders(input: {
       // -------------------------------------------------------------------
       const windowStart = new Date(runConfig.startDate);
       windowStart.setHours(0, 0, 0, 0);
-      const windowEnd = new Date(order.dueDate);
+      const windowEnd = calculateOrderDeadline(order.dueDate, runConfig);
       windowEnd.setHours(23, 59, 59, 999);
 
       const factories = await findFactoriesForIssueSnapshot(
