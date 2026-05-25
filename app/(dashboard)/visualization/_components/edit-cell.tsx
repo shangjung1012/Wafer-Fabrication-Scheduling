@@ -5,6 +5,25 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { TimelineItem } from "@/modules/visualization/types";
 
+/** Visual tone for assignment chips on the Gantt (edit mode). */
+function assignmentChipToneClasses(
+  status: TimelineItem["status"],
+  isMoved: boolean,
+): string {
+  if (status === "SCHEDULED") {
+    return isMoved
+      ? "bg-purple-100 border-purple-300 text-purple-800"
+      : "bg-white/90 border-gray-300 text-gray-700 hover:border-blue-400 hover:bg-blue-50";
+  }
+  if (status === "IN_PRODUCTION") {
+    return "bg-emerald-100 border-emerald-500 text-emerald-950";
+  }
+  if (status === "COMPLETED") {
+    return "grayscale bg-neutral-100 border-neutral-300 text-neutral-600";
+  }
+  return "bg-rose-50 border-rose-200 text-rose-800";
+}
+
 export function DraggableAssignmentChip({
   item,
   isMoved,
@@ -24,7 +43,7 @@ export function DraggableAssignmentChip({
   if (isLocked) {
     return (
       <div
-        className="text-[9px] leading-tight rounded px-1 py-0.5 select-none border bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+        className={`text-[9px] leading-tight rounded px-1 py-0.5 select-none border cursor-not-allowed ${assignmentChipToneClasses(item.status, false)}`}
         title={`${item.orderName} · qty ${item.assignedQuantity} · ${item.status} (locked)`}
       >
         <span className="font-semibold truncate block max-w-[64px]">
@@ -43,11 +62,7 @@ export function DraggableAssignmentChip({
       style={style}
       {...listeners}
       {...attributes}
-      className={`text-[9px] leading-tight rounded px-1 py-0.5 cursor-grab active:cursor-grabbing select-none border ${
-        isMoved
-          ? "bg-purple-100 border-purple-300 text-purple-800"
-          : "bg-white/90 border-gray-300 text-gray-700"
-      } hover:border-blue-400 hover:bg-blue-50`}
+      className={`text-[9px] leading-tight rounded px-1 py-0.5 cursor-grab active:cursor-grabbing select-none border ${assignmentChipToneClasses(item.status, isMoved)}`}
       title={`${item.orderName} · qty ${item.assignedQuantity}`}
     >
       <span className="font-semibold truncate block max-w-[64px]">

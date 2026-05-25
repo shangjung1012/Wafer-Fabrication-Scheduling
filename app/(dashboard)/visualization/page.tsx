@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -363,6 +363,27 @@ function getCellStyle(cell: CellData): {
       fillRatio: Math.min(ratio, 1),
     };
   }
+
+  // Whole-cell tone from assignment statuses (no conflict on this cell).
+  const statuses = cell.items.map((i) => i.status);
+  const anyInProduction = statuses.some((s) => s === "IN_PRODUCTION");
+  const allCompleted =
+    statuses.length > 0 && statuses.every((s) => s === "COMPLETED");
+  if (anyInProduction) {
+    return {
+      bg: "bg-emerald-50",
+      barColor: "bg-emerald-500",
+      fillRatio: Math.min(ratio, 1),
+    };
+  }
+  if (allCompleted) {
+    return {
+      bg: "grayscale bg-neutral-100",
+      barColor: "bg-neutral-500",
+      fillRatio: Math.min(ratio, 1),
+    };
+  }
+
   if (ratio > 0.8) {
     return { bg: "bg-yellow-50", barColor: "bg-yellow-400", fillRatio: ratio };
   }
@@ -375,8 +396,8 @@ function getCellStyle(cell: CellData): {
 
 const STATUS_STYLE: Record<string, string> = {
   SCHEDULED: "bg-blue-100 text-blue-700",
-  IN_PRODUCTION: "bg-green-100 text-green-700",
-  COMPLETED: "bg-gray-100 text-gray-600",
+  IN_PRODUCTION: "bg-emerald-100 text-emerald-900",
+  COMPLETED: "bg-neutral-200 text-neutral-600 grayscale",
   CANCELLED: "bg-red-100 text-red-600",
 };
 
@@ -388,6 +409,26 @@ function StatusBadge({ status }: { status: string }) {
       {status}
     </span>
   );
+}
+
+/** Full-card surface for an assignment row in the detail panel. */
+function detailOrderCardClass(
+  item: TimelineItem,
+  hasPreviewDiff: boolean,
+): string {
+  if (hasPreviewDiff) {
+    return "border-purple-300 bg-purple-50/70 hover:border-purple-400";
+  }
+  if (item.status === "IN_PRODUCTION") {
+    return "border-emerald-300 bg-emerald-50/95 hover:border-emerald-500";
+  }
+  if (item.status === "COMPLETED") {
+    return "grayscale border-neutral-300 bg-neutral-100/95 hover:border-neutral-400";
+  }
+  if (item.status === "CANCELLED") {
+    return "border-rose-200 bg-rose-50/95 hover:border-rose-300";
+  }
+  return "border-slate-200 bg-slate-50/80 hover:border-slate-300";
 }
 
 // ---------------------------------------------------------------------------
@@ -498,10 +539,12 @@ function DetailPanel({
           return (
             <div
               key={item.orderId}
-              className={`border rounded-lg p-3 transition-colors ${diff ? "border-purple-200 bg-purple-50/40 hover:border-purple-300" : "border-gray-100 hover:border-gray-200"}`}
+              className={`border rounded-lg p-3 transition-colors ${detailOrderCardClass(item, Boolean(diff))}`}
             >
               <div className="flex items-start justify-between gap-2 mb-1.5">
-                <span className="text-sm font-medium text-gray-900">
+                <span
+                  className={`text-sm font-medium ${item.status === "COMPLETED" ? "text-neutral-800" : "text-gray-900"}`}
+                >
                   {item.orderName}
                 </span>
                 <div className="flex items-center gap-2">
@@ -1045,6 +1088,7 @@ function GanttCell({
   movedAssignmentIds,
   dropDisabled = false,
   dropDisabledReason,
+  columnHasInProduction = false,
   onClick,
 }: {
   cell: CellData;
@@ -1056,17 +1100,22 @@ function GanttCell({
   movedAssignmentIds: Set<string>;
   dropDisabled?: boolean;
   dropDisabledReason?: string;
+  /** True when any assignment on this calendar day is IN_PRODUCTION (column accent). */
+  columnHasInProduction?: boolean;
   onClick: () => void;
 }) {
   const { bg, barColor, fillRatio } = getCellStyle(cell);
   const hasConflict = cell.conflicts.length > 0;
   const pct = Math.round(fillRatio * 100);
   const cellId = `${cell.factoryId}|${cell.date}`;
+  const tdBorderClass = columnHasInProduction
+    ? "border-2 border-emerald-500"
+    : "border border-gray-100";
 
   // Edit-mode cell: shows draggable chips + drop target, no click handler.
   if (editMode) {
     return (
-      <td className="border border-gray-100 w-[72px] min-w-[72px] p-0 align-top">
+      <td className={`w-[72px] min-w-[72px] p-0 align-top ${tdBorderClass}`}>
         <DroppableCell
           cellId={cellId}
           className={`w-full min-h-14 relative ${bg}`}
@@ -1109,14 +1158,14 @@ function GanttCell({
 
   if (cell.items.length === 0) {
     return (
-      <td className="border border-gray-100 w-[72px] min-w-[72px] h-14 p-0">
+      <td className={`w-[72px] min-w-[72px] h-14 p-0 ${tdBorderClass}`}>
         <div className="w-full h-full bg-gray-50" />
       </td>
     );
   }
 
   return (
-    <td className="border border-gray-100 w-[72px] min-w-[72px] h-14 p-0">
+    <td className={`w-[72px] min-w-[72px] h-14 p-0 ${tdBorderClass}`}>
       <button
         onClick={onClick}
         className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""} ${hasNewlyPlaced && !isMyOrder ? "ring-2 ring-inset ring-emerald-500" : ""}`}
@@ -1189,11 +1238,20 @@ function GanttCell({
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
 
-type AssignmentMove = {
-  factoryId: string;
-  productionDate: string;
-  original: { factoryId: string; productionDate: string };
-};
+/** dnd-kit droppable id — must not contain `|` (grid cells use `factoryId|date`). */
+const EDIT_STAGING_DROP_ID = "__VIS_EDIT_STAGING__";
+
+type AssignmentMove =
+  | {
+      kind: "cell";
+      factoryId: string;
+      productionDate: string;
+      original: { factoryId: string; productionDate: string };
+    }
+  | {
+      kind: "staging";
+      original: { factoryId: string; productionDate: string };
+    };
 type OrderEditorState = OrderEditorValues & { orderId?: string };
 
 export default function SchedulePage() {
@@ -1247,6 +1305,8 @@ export default function SchedulePage() {
   const [simDate, setSimDate] = useState("");
   const [simDateTime, setSimDateTime] = useState("");
   const [simLoading, setSimLoading] = useState(false);
+  /** Last simulation calendar day from server; used to realign range only when it changes. */
+  const serverSimCalendarDayRef = useRef<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorState | null>(null);
@@ -1280,17 +1340,6 @@ export default function SchedulePage() {
         } else {
           const payload = (await r.json()) as TimelineResponse;
           setData(payload);
-          // Keep the Gantt aligned to system time (real-time or simulation) from the server.
-          if (payload.today) {
-            const nextStart = payload.today.slice(0, 10);
-            const { endDate: defaultEnd } = defaultTimelineRange(nextStart);
-            setStartDate(nextStart);
-            // Keep a longer end date if the user already extended the range forward.
-            setEndDate((prev) => {
-              if (!prev || prev < nextStart) return defaultEnd;
-              return prev > defaultEnd ? prev : defaultEnd;
-            });
-          }
         }
         setLoading(false);
       })
@@ -1493,14 +1542,30 @@ export default function SchedulePage() {
       setEditMode(false);
       return;
     }
+    const hasStaging = Array.from(pendingMoves.values()).some(
+      (m) => m.kind === "staging",
+    );
+    if (hasStaging) {
+      setSaveStatus("error");
+      setSaveErrorMsg(
+        "暫存區內仍有派工單，請先拖回甘特圖上的廠房／日期格再儲存，或按 Discard 放棄變更。",
+      );
+      setTimeout(() => setSaveStatus("idle"), 6000);
+      return;
+    }
     setSaveStatus("saving");
     setSaveErrorMsg(null);
     try {
-      const moves = Array.from(pendingMoves.entries()).map(([id, m]) => ({
-        assignmentId: id,
-        factoryId: m.factoryId,
-        productionDate: m.productionDate,
-      }));
+      const moves = Array.from(pendingMoves.entries())
+        .filter(
+          (e): e is [string, Extract<AssignmentMove, { kind: "cell" }>] =>
+            e[1].kind === "cell",
+        )
+        .map(([id, m]) => ({
+          assignmentId: id,
+          factoryId: m.factoryId,
+          productionDate: m.productionDate,
+        }));
       const res = await fetch("/api/assignments/bulk", {
         method: "PATCH",
         credentials: "same-origin",
@@ -1560,15 +1625,51 @@ export default function SchedulePage() {
     setDraggingAssignment(null);
     if (!event.over) return;
     const assignmentId = String(event.active.id);
-    const [factoryId, date] = String(event.over.id).split("|");
-    if (!factoryId || !date) return;
+    const overId = String(event.over.id);
     const item = data?.timeline.find((t) => t.assignmentId === assignmentId);
     if (!item) return;
-    // No-op if dropping onto current slot, account for pending move
+
+    if (overId === EDIT_STAGING_DROP_ID) {
+      if (item.status !== "SCHEDULED") return;
+      setPendingMoves((prev) => {
+        if (prev.get(assignmentId)?.kind === "staging") return prev;
+        const next = new Map(prev);
+        next.set(assignmentId, {
+          kind: "staging",
+          original: {
+            factoryId: item.factoryId,
+            productionDate: item.productionDate,
+          },
+        });
+        return next;
+      });
+      return;
+    }
+
+    const [factoryId, date] = overId.split("|");
+    if (!factoryId || !date) return;
+
     const current = pendingMoves.get(assignmentId);
-    const currFactory = current?.factoryId ?? item.factoryId;
-    const currDate = current?.productionDate ?? item.productionDate;
-    if (currFactory === factoryId && currDate === date) return;
+    const currFactory =
+      current?.kind === "cell"
+        ? current.factoryId
+        : current?.kind === "staging"
+          ? null
+          : item.factoryId;
+    const currDate =
+      current?.kind === "cell"
+        ? current.productionDate
+        : current?.kind === "staging"
+          ? null
+          : item.productionDate;
+    if (
+      currFactory !== null &&
+      currDate !== null &&
+      currFactory === factoryId &&
+      currDate === date
+    ) {
+      return;
+    }
 
     setPendingMoves((prev) => {
       const next = new Map(prev);
@@ -1577,6 +1678,7 @@ export default function SchedulePage() {
         next.delete(assignmentId);
       } else {
         next.set(assignmentId, {
+          kind: "cell",
           factoryId,
           productionDate: date,
           original: {
@@ -1610,15 +1712,20 @@ export default function SchedulePage() {
     }
     if (!data) return null;
     if (editMode && pendingMoves.size > 0) {
-      const movedTimeline: TimelineItem[] = data.timeline.map((t) => {
+      const movedTimeline: TimelineItem[] = [];
+      for (const t of data.timeline) {
         const move = pendingMoves.get(t.assignmentId);
-        if (!move) return t;
-        return {
+        if (move?.kind === "staging") continue;
+        if (!move) {
+          movedTimeline.push(t);
+          continue;
+        }
+        movedTimeline.push({
           ...t,
           factoryId: move.factoryId,
           productionDate: move.productionDate,
-        };
-      });
+        });
+      }
       // Recompute daily capacities from moved timeline
       const usedByCell = new Map<string, number>();
       for (const t of movedTimeline) {
@@ -1797,11 +1904,16 @@ export default function SchedulePage() {
         const range = defaultTimelineRange(anchor);
         setStartDate(range.startDate);
         setEndDate(range.endDate);
+        serverSimCalendarDayRef.current =
+          body.isSimulationMode && body.simulationDate
+            ? String(body.simulationDate).split("T")[0]
+            : null;
       })
       .catch(() => {
         const range = defaultTimelineRange(format(new Date(), "yyyy-MM-dd"));
         setStartDate(range.startDate);
         setEndDate(range.endDate);
+        serverSimCalendarDayRef.current = null;
       });
   }, [session]);
 
@@ -1836,6 +1948,18 @@ export default function SchedulePage() {
           setSimDate("");
           setSimDateTime("");
         }
+        const nextSimDay =
+          body.isSimulationMode && body.simulationDate
+            ? String(body.simulationDate).split("T")[0]
+            : null;
+        const prevSimDay = serverSimCalendarDayRef.current;
+        if (nextSimDay && nextSimDay !== prevSimDay) {
+          const range = defaultTimelineRange(nextSimDay);
+          setStartDate(range.startDate);
+          setEndDate(range.endDate);
+        }
+        serverSimCalendarDayRef.current = nextSimDay;
+
         setLoading(true);
         setFetchError(null);
         setRefreshKey((k) => k + 1);
@@ -1924,6 +2048,15 @@ export default function SchedulePage() {
     [effective, dates, data?.salesContext, data?.today],
   );
 
+  /** Calendar days where the effective timeline has any IN_PRODUCTION assignment. */
+  const datesWithInProduction = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of effective?.timeline ?? []) {
+      if (t.status === "IN_PRODUCTION") set.add(t.productionDate);
+    }
+    return set;
+  }, [effective?.timeline]);
+
   // Group factories by productionType
   const groups = useMemo(() => {
     if (!effective) return [];
@@ -1994,6 +2127,23 @@ export default function SchedulePage() {
     () => new Set(pendingMoves.keys()),
     [pendingMoves],
   );
+
+  const hasPendingStaging = useMemo(
+    () => Array.from(pendingMoves.values()).some((m) => m.kind === "staging"),
+    [pendingMoves],
+  );
+
+  /** Timeline rows held in the edit-mode staging strip (off the Gantt grid). */
+  const stagedAssignmentItems = useMemo(() => {
+    if (!data) return [] as TimelineItem[];
+    const items: TimelineItem[] = [];
+    for (const [id, m] of pendingMoves) {
+      if (m.kind !== "staging") continue;
+      const t = data.timeline.find((x) => x.assignmentId === id);
+      if (t) items.push(t);
+    }
+    return items;
+  }, [data, pendingMoves]);
 
   // Selected cell detail
   const selectedCellData = useMemo(() => {
@@ -2399,14 +2549,25 @@ export default function SchedulePage() {
             ✏️ Edit mode
           </span>
           <span className="text-xs text-purple-700">
-            Drag assignment chips between cells.{" "}
+            Drag chips between cells, or into the staging area below to pull an
+            assignment off the grid.{" "}
             <span className="font-semibold">{pendingMoves.size}</span> pending
-            move(s).
+            change(s).
+            {hasPendingStaging && (
+              <span className="ml-1 font-semibold text-amber-800">
+                (staging: cannot save until moved back)
+              </span>
+            )}
           </span>
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={handleSaveEdits}
-              disabled={saveStatus === "saving"}
+              disabled={saveStatus === "saving" || hasPendingStaging}
+              title={
+                hasPendingStaging
+                  ? "Clear the staging area by dragging assignments back onto the grid before saving."
+                  : undefined
+              }
               className="text-xs font-medium px-3 py-1.5 rounded border bg-purple-600 text-white border-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:border-gray-300"
             >
               {saveStatus === "saving" ? "Saving…" : "💾 Save Changes"}
@@ -2551,6 +2712,35 @@ export default function SchedulePage() {
                 editMode ? handleDragEnd : () => setDraggingAssignment(null)
               }
             >
+              {editMode && (
+                <div className="px-4 py-2 border-b border-amber-200 bg-amber-50/90">
+                  <div className="text-[11px] font-semibold text-amber-950">
+                    暫存區
+                  </div>
+                  <p className="text-[10px] text-amber-900/85 mt-0.5 mb-2 leading-snug">
+                    將可調整的派工單拖入此處可暫時移出甘特圖（釋放原格產能），再拖回目標廠房／日期。暫存區有項目時無法儲存，須先排回表格或按
+                    Discard。
+                  </p>
+                  <DroppableCell
+                    cellId={EDIT_STAGING_DROP_ID}
+                    className="min-h-[52px] rounded-lg border-2 border-dashed border-amber-400 bg-white p-2 flex flex-wrap gap-1 items-start content-start"
+                  >
+                    {stagedAssignmentItems.length === 0 ? (
+                      <span className="text-[10px] text-amber-700/80 italic py-1">
+                        拖放派工單至此…
+                      </span>
+                    ) : (
+                      stagedAssignmentItems.map((st) => (
+                        <DraggableAssignmentChip
+                          key={st.assignmentId}
+                          item={st}
+                          isMoved={movedAssignmentIds.has(st.assignmentId)}
+                        />
+                      ))
+                    )}
+                  </DroppableCell>
+                </div>
+              )}
               <table
                 className="border-collapse text-xs"
                 style={{ tableLayout: "fixed" }}
@@ -2566,10 +2756,19 @@ export default function SchedulePage() {
                       const day = parseISO(d);
                       const isWeekend =
                         day.getDay() === 0 || day.getDay() === 6;
+                      const inProdDay = datesWithInProduction.has(d);
                       return (
                         <th
                           key={d}
-                          className={`sticky top-0 z-20 border border-gray-200 w-[72px] min-w-[72px] px-1 py-2 text-center font-medium ${isWeekend ? "bg-gray-50 text-gray-400" : "bg-white text-gray-600"}`}
+                          className={`sticky top-0 z-20 w-[72px] min-w-[72px] px-1 py-2 text-center font-medium ${
+                            inProdDay
+                              ? "border-2 border-emerald-500 bg-emerald-50/95 text-emerald-950"
+                              : `border border-gray-200 ${
+                                  isWeekend
+                                    ? "bg-gray-50 text-gray-400"
+                                    : "bg-white text-gray-600"
+                                }`
+                          }`}
                         >
                           <div>{format(day, "d")}</div>
                           <div className="text-[9px] font-normal opacity-70">
@@ -2623,12 +2822,20 @@ export default function SchedulePage() {
                                 draggingAssignment.assignmentId,
                               );
                               const currFactoryId =
-                                pending?.factoryId ??
-                                draggingAssignment.factoryId;
+                                pending?.kind === "cell"
+                                  ? pending.factoryId
+                                  : pending?.kind === "staging"
+                                    ? null
+                                    : draggingAssignment.factoryId;
                               const currDate =
-                                pending?.productionDate ??
-                                draggingAssignment.productionDate;
+                                pending?.kind === "cell"
+                                  ? pending.productionDate
+                                  : pending?.kind === "staging"
+                                    ? null
+                                    : draggingAssignment.productionDate;
                               const isCurrentCell =
+                                currFactoryId !== null &&
+                                currDate !== null &&
                                 factory.id === currFactoryId &&
                                 date === currDate;
                               if (!isCurrentCell) {
@@ -2662,6 +2869,9 @@ export default function SchedulePage() {
                                 movedAssignmentIds={movedAssignmentIds}
                                 dropDisabled={dropDisabled}
                                 dropDisabledReason={dropDisabledReason}
+                                columnHasInProduction={datesWithInProduction.has(
+                                  date,
+                                )}
                                 onClick={() =>
                                   setSelectedCell({
                                     factoryId: factory.id,
