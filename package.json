@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"next dev\" \"pnpm run cron\"",
+    "dev": "next dev",
+    "dev:cron": "pnpm run cron",
     "dev:next": "next dev",
     "dev-start": "prisma migrate dev && prisma generate && prisma db seed",
     "build": "next build",
