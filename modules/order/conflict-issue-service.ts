@@ -594,7 +594,6 @@ export async function getSuggestions(
 
   const originalDueDate = snapshot.orderSnapshot.dueDate;
   const requiredQty = snapshot.requiredQuantity;
-  let totalAvailableInWindow = snapshot.totalAvailableInWindow;
 
   const isSplittable = snapshot.config?.splittable ?? true;
   const bufferDays = snapshot.config?.bufferDays ?? 0;
@@ -609,67 +608,12 @@ export async function getSuggestions(
   const trueWindowStart = new Date(snapshot.windowStart);
   const trueWindowEnd = new Date(snapshot.windowEnd);
 
-  // If not splittable, totalAvailableInWindow must be the largest single block inside the original window,
-  // not the aggregated sum.
-  if (!isSplittable) {
-    const origCapacityRecords = await db.dailyCapacity.findMany({
-      where: {
-        factoryId: { in: factoryIds },
-        date: { gte: trueWindowStart, lte: trueWindowEnd },
-      },
-      select: {
-        factoryId: true,
-        date: true,
-        curCapacity: true,
-        maxCapacity: true,
-      },
-    });
-
-    const origCapacityMap = new Map<string, number>();
-    for (const rec of origCapacityRecords) {
-      const dateKey = rec.date.toISOString().slice(0, 10);
-      origCapacityMap.set(
-        `${rec.factoryId}_${dateKey}`,
-        Math.max(0, rec.curCapacity),
-      );
-    }
-
-    let maxSingleBlock = 0;
-    const iterDate = new Date(trueWindowStart);
-    while (iterDate.getTime() <= trueWindowEnd.getTime()) {
-      const dateKey = iterDate.toISOString().slice(0, 10);
-      for (const fid of factoryIds) {
-        const mapKey = `${fid}_${dateKey}`;
-        const cap = origCapacityMap.has(mapKey)
-          ? origCapacityMap.get(mapKey)!
-          : (factoryDefaults.get(fid) ?? 0);
-        if (cap > maxSingleBlock) {
-          maxSingleBlock = cap;
-        }
-      }
-      iterDate.setDate(iterDate.getDate() + 1);
-    }
-
-    // Non-splittable max fit is bounded by the requiredQty so we don't suggest
-    // a larger max fit than what's requested
-    totalAvailableInWindow = Math.min(maxSingleBlock, requiredQty);
-  }
-
-  // Scenario 1: maxFit
-  const maxFitInOriginalWindow = {
-    quantity: totalAvailableInWindow,
-    originalDueDate,
-  };
-
-  // Scenario 2: earliest date for original quantity
-  // Scan day-by-day from windowEnd+1 until capacity >= requiredQty
-
-  const scanStart = new Date(trueWindowEnd);
-  scanStart.setDate(scanStart.getDate() + 1);
-  scanStart.setHours(0, 0, 0, 0);
-
-  const scanEnd = new Date(scanStart);
-  scanEnd.setDate(scanEnd.getDate() + SEARCH_HORIZON_DAYS);
+  // ---------------------------------------------------------------------------
+  // Dynamically compute capacity from trueWindowStart to scanEnd
+  // ---------------------------------------------------------------------------
+  const scanStart = new Date(trueWindowStart);
+  const scanEnd = new Date(trueWindowEnd);
+  scanEnd.setDate(scanEnd.getDate() + SEARCH_HORIZON_DAYS + 1); // +1 because original window is included
 
   const capacityRecords = await db.dailyCapacity.findMany({
     where: {
@@ -684,7 +628,6 @@ export async function getSuggestions(
     },
   });
 
-  // Build a lookup map: `${factoryId}_${YYYY-MM-DD}` → curCapacity
   const capacityMap = new Map<string, number>();
   for (const rec of capacityRecords) {
     const dateKey = rec.date.toISOString().slice(0, 10);
@@ -694,12 +637,59 @@ export async function getSuggestions(
     );
   }
 
-  // Day-by-day scan
-  // If splittable, we retain what we already found in the original window.
-  // If not splittable, we need the full required quantity in a single block.
-  let cumulativeCapacity = isSplittable ? totalAvailableInWindow : 0;
+  // 1. Calculate live capacity in original window
+  let liveTotalAvailableInWindow = 0;
+
+  if (!isSplittable) {
+    let maxSingleBlock = 0;
+    const iterDate = new Date(trueWindowStart);
+    while (iterDate.getTime() <= trueWindowEnd.getTime()) {
+      const dateKey = iterDate.toISOString().slice(0, 10);
+      for (const fid of factoryIds) {
+        const mapKey = `${fid}_${dateKey}`;
+        const cap = capacityMap.has(mapKey)
+          ? capacityMap.get(mapKey)!
+          : (factoryDefaults.get(fid) ?? 0);
+        if (cap > maxSingleBlock) {
+          maxSingleBlock = cap;
+        }
+      }
+      iterDate.setDate(iterDate.getDate() + 1);
+    }
+    // Non-splittable max fit is bounded by the requiredQty
+    liveTotalAvailableInWindow = Math.min(maxSingleBlock, requiredQty);
+  } else {
+    const iterDate = new Date(trueWindowStart);
+    while (iterDate.getTime() <= trueWindowEnd.getTime()) {
+      const dateKey = iterDate.toISOString().slice(0, 10);
+      for (const fid of factoryIds) {
+        const mapKey = `${fid}_${dateKey}`;
+        const cap = capacityMap.has(mapKey)
+          ? capacityMap.get(mapKey)!
+          : (factoryDefaults.get(fid) ?? 0);
+        liveTotalAvailableInWindow += cap;
+      }
+      iterDate.setDate(iterDate.getDate() + 1);
+    }
+  }
+
+  // Scenario 1: maxFit
+  const maxFitInOriginalWindow = {
+    quantity: liveTotalAvailableInWindow,
+    originalDueDate,
+  };
+
+  // Scenario 2: earliest date for original quantity
+  // Scan day-by-day from windowEnd+1 until capacity >= requiredQty
+
+  let cumulativeCapacity = isSplittable ? liveTotalAvailableInWindow : 0;
   let earliestFitForOriginalQty: EarliestFitResult = null;
-  const iterDate = new Date(scanStart);
+
+  const futureScanStart = new Date(trueWindowEnd);
+  futureScanStart.setDate(futureScanStart.getDate() + 1);
+  futureScanStart.setHours(0, 0, 0, 0);
+
+  const iterDate = new Date(futureScanStart);
 
   for (let day = 0; day < SEARCH_HORIZON_DAYS; day++) {
     const dateKey = iterDate.toISOString().slice(0, 10);
