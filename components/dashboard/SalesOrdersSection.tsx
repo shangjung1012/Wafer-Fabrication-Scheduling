@@ -67,6 +67,9 @@ export function SalesOrdersSection({
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("dueDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [localFlaggedIds, setLocalFlaggedIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   const filteredOrders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -296,14 +299,20 @@ export function SalesOrdersSection({
                         )}
                         {canEdit &&
                           onFlag &&
-                          (flaggedOrderIds?.has(order.id) ? (
+                          (flaggedOrderIds?.has(order.id) ||
+                          localFlaggedIds.has(order.id) ? (
                             <span className="rounded border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold text-orange-600">
                               Flagged
                             </span>
                           ) : (
                             <button
                               type="button"
-                              onClick={() => onFlag(order)}
+                              onClick={() => {
+                                setLocalFlaggedIds((prev) =>
+                                  new Set(prev).add(order.id),
+                                );
+                                onFlag(order);
+                              }}
                               className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-semibold text-red-600 hover:bg-red-100"
                             >
                               Flag
