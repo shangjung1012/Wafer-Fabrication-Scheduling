@@ -728,16 +728,6 @@ function DetailPanel({
 // Pending orders sidebar (SALES only)
 // ---------------------------------------------------------------------------
 
-type SidebarOrder = {
-  id: string;
-  name: string;
-  status: "PENDING" | "APPROVED" | "CONFLICT";
-  quantity: number;
-  dueDate: string;
-  createdAt: string;
-  risk: OrderRisk;
-};
-
 function PendingSidebar({
   orders,
   today,
@@ -748,7 +738,7 @@ function PendingSidebar({
   onPreviewSelected,
   previewLoading = false,
 }: {
-  orders: SidebarOrder[];
+  orders: PendingOrderInfo[];
   today: string;
   onEditOrder: (order: OrderEditorValues) => void;
   onCreate?: () => void;
@@ -757,7 +747,6 @@ function PendingSidebar({
   onPreviewSelected?: (targetOrderIds: string[]) => void;
   previewLoading?: boolean;
 }) {
-  const conflictList = orders.filter((o) => o.status === "CONFLICT");
   const multiSelectEnabled = Boolean(setSelectedOrderIds && onPreviewSelected);
   const selected = selectedOrderIds ?? new Set<string>();
   const pending = orders.filter((o) => o.status === "PENDING");
@@ -816,7 +805,7 @@ function PendingSidebar({
     return `${diff}d left`;
   };
 
-  const renderOrders = (list: SidebarOrder[]) =>
+  const renderOrders = (list: PendingOrderInfo[]) =>
     list.map((o) => (
       <div
         key={o.id}
@@ -945,15 +934,6 @@ function PendingSidebar({
             No pending orders
           </p>
         )}
-        {conflictList.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wide">
-              Conflicts
-            </p>
-            {renderOrders(conflictList)}
-          </div>
-        )}
-
         {pending.length > 0 && (
           <div className="space-y-2">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
@@ -1354,7 +1334,6 @@ export default function SchedulePage() {
   const router = useRouter();
   const session = useClientAuthSession();
   const isSales = session?.user.role === "SALES";
-  const isAdmin = session?.user.role === "ADMIN";
   const productionType = session?.user.group ?? "";
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -1411,7 +1390,6 @@ export default function SchedulePage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorState | null>(null);
-  const [adminSalesOrders, setAdminSalesOrders] = useState<SidebarOrder[]>([]);
 
   // T4A: multi-select pending orders for targeted preview.
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(
@@ -1450,55 +1428,6 @@ export default function SchedulePage() {
         setLoading(false);
       });
   }, [router, session, startDate, endDate, refreshKey]);
-
-  // For ADMIN: fetch sales-provided pending/conflict orders to show in sidebar
-  useEffect(() => {
-    if (!isAdmin) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/orders`, { credentials: "same-origin" });
-        if (!res.ok) return;
-        const list = await res.json();
-        if (cancelled) return;
-        const filtered = (list || [])
-          .filter(
-            (o: any) =>
-              o.applicantId &&
-              ["PENDING", "CONFLICT", "FAILED"].includes(o.status),
-          )
-          .map((o: any) => ({
-            id: o.id,
-            name: o.name,
-            status: o.status === "PENDING" ? "PENDING" : "CONFLICT",
-            quantity: o.quantity,
-            dueDate: o.dueDate ? o.dueDate.slice(0, 10) : "",
-            createdAt: o.createdAt ? o.createdAt.slice(0, 10) : "",
-            risk: (() => {
-              try {
-                const diff = differenceInDays(
-                  parseISO(o.dueDate),
-                  parseISO(startDate),
-                );
-                return diff < 0
-                  ? "OVERDUE"
-                  : diff <= 3
-                    ? "AT_RISK"
-                    : "ON_TRACK";
-              } catch {
-                return "ON_TRACK";
-              }
-            })(),
-          }));
-        setAdminSalesOrders(filtered);
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAdmin, startDate, refreshKey]);
 
   // Run schedule handler (applies the selected algorithm directly)
   const handleRunSchedule = async (algorithmOverride?: string) => {
@@ -2446,90 +2375,84 @@ export default function SchedulePage() {
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans">
       {/* Top bar */}
-      <div className="flex-none bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">
-              Production Schedule
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Factory gantt — click a cell to inspect orders
-            </p>
-          </div>
+      <div className="flex-none bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 flex-wrap">
+        <div>
+          <h1 className="text-base font-semibold text-gray-900">
+            Production Schedule
+          </h1>
+          <p className="text-xs text-gray-500">
+            Factory gantt — click a cell to inspect orders
+          </p>
+        </div>
 
-          <nav
-            className="flex items-center gap-2 flex-wrap"
-            aria-label="Dashboard navigation"
+        <nav
+          className="flex items-center gap-2 flex-wrap"
+          aria-label="Dashboard navigation"
+        >
+          <a
+            href="/orders"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
           >
-            <a
-              href="/orders"
-              className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-            >
-              Orders
-            </a>
-            <Link
-              href="/conflict-issues"
-              className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-            >
-              Conflicts
-            </Link>
-            <a
-              href="/visualization"
-              className="text-xs font-medium px-2.5 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700"
-            >
-              Visualization
-            </a>
-            <a
-              href="/visualization/dashboard"
-              className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-            >
-              Dashboard
-            </a>
-            <a
-              href="/users"
-              className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-            >
-              Users
-            </a>
-            <a
-              href="/profile"
-              className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-            >
-              Profile
-            </a>
-          </nav>
+            Orders
+          </a>
+          <Link
+            href="/conflict-issues"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Conflicts
+          </Link>
+          <a
+            href="/visualization"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700"
+          >
+            Visualization
+          </a>
+          <a
+            href="/visualization/dashboard"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Dashboard
+          </a>
+          <a
+            href="/users"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Users
+          </a>
+          <a
+            href="/profile"
+            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Profile
+          </a>
+        </nav>
 
-          <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
-            <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
-              Signed in as:
-            </span>
-            <span className="text-xs font-semibold text-gray-800">
-              {session.user.username}
-            </span>
-            <span className="text-xs text-gray-500">
-              ({session.user.email})
-            </span>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-              {session.user.role}
-            </span>
-            {productionType && (
-              <span className="text-xs text-gray-500">
-                Type {productionType}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="text-xs font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-            >
-              Logout
-            </button>
-          </div>
+        <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
+          <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+            Signed in as:
+          </span>
+          <span className="text-xs font-semibold text-gray-800">
+            {session.user.username}
+          </span>
+          <span className="text-xs text-gray-500">({session.user.email})</span>
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+            {session.user.role}
+          </span>
+          {productionType && (
+            <span className="text-xs text-gray-500">Type {productionType}</span>
+          )}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="text-xs font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+          >
+            Logout
+          </button>
         </div>
 
         {/* Schedule controls (admin/superadmin only) */}
         {!isSales && (
-          <div className="mt-4 flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Reschedule policy dropdown */}
             <label className="flex items-center gap-1 text-xs text-gray-600">
               <span className="text-gray-500">Policy</span>
@@ -2621,32 +2544,33 @@ export default function SchedulePage() {
                 Save failed: {saveErrorMsg ?? "unknown"}
               </span>
             )}
-            {/* Date range */}
-            <div className="flex items-center gap-2 ml-auto">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  setLoading(true);
-                  setFetchError(null);
-                }}
-                className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
-              <span className="text-gray-400 text-sm">→</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setLoading(true);
-                  setFetchError(null);
-                }}
-                className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
-            </div>
           </div>
         )}
+
+        {/* Date range */}
+        <div className="flex items-center gap-2 ml-auto">
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => {
+              setStartDate(e.target.value);
+              setLoading(true);
+              setFetchError(null);
+            }}
+            className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <span className="text-gray-400 text-sm">→</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => {
+              setEndDate(e.target.value);
+              setLoading(true);
+              setFetchError(null);
+            }}
+            className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+        </div>
 
         {/* Summary badges */}
         <div className="flex items-center gap-2 text-xs">
@@ -2921,82 +2845,29 @@ export default function SchedulePage() {
 
       {/* Gantt body */}
       <div className="flex-1 overflow-hidden flex">
-        {/* Pending + Conflict sidebar (SALES only) */}
-        {(isSales || isAdmin) &&
-          data &&
-          !loading &&
-          !fetchError &&
-          (() => {
-            // Build conflict order list from data.conflicts + timeline
-            const pendingSet = new Set(
-              (data.salesContext?.pendingOrders ?? []).map((o) => o.id),
-            );
-            const conflictIds = new Set<string>();
-            for (const c of data.conflicts || []) {
-              for (const id of c.orderIds) conflictIds.add(id);
+        {/* Pending sidebar — SALES: read-only listing of their own orders */}
+        {isSales && data?.salesContext && !loading && !fetchError && (
+          <PendingSidebar
+            orders={data.salesContext.pendingOrders}
+            today={data.today}
+            onEditOrder={(order) => setEditOrder(order)}
+            onCreate={() => setCreateOpen(true)}
+          />
+        )}
+        {/* Pending sidebar — ADMIN/SUPERADMIN: multi-select for targeted preview (T4A-C / T8) */}
+        {!isSales && data?.adminContext && !loading && !fetchError && (
+          <PendingSidebar
+            orders={data.adminContext.pendingOrders}
+            today={data.today}
+            onEditOrder={(order) => setEditOrder(order)}
+            selectedOrderIds={selectedOrderIds}
+            setSelectedOrderIds={setSelectedOrderIds}
+            onPreviewSelected={(targetOrderIds) =>
+              handlePreviewSchedule(targetOrderIds)
             }
-
-            const conflictOrders = Array.from(conflictIds)
-              .filter((id) => !pendingSet.has(id))
-              .map((id) => {
-                const items = (data.timeline || []).filter(
-                  (t) => t.orderId === id,
-                );
-                const name = items[0]?.orderName ?? id;
-                const quantity = items.reduce(
-                  (s, it) => s + (it.assignedQuantity || 0),
-                  0,
-                );
-                const dueDate = items[0]?.dueDate ?? data.today ?? "";
-                // compute simple risk similar to service.calcRisk
-                let risk: OrderRisk = "ON_TRACK";
-                if (dueDate) {
-                  const diff = differenceInDays(
-                    parseISO(dueDate),
-                    parseISO(data.today || new Date().toISOString()),
-                  );
-                  risk =
-                    diff < 0 ? "OVERDUE" : diff <= 3 ? "AT_RISK" : "ON_TRACK";
-                }
-                return {
-                  id,
-                  name,
-                  status: "CONFLICT" as const,
-                  quantity,
-                  dueDate,
-                  createdAt: data.today ?? "",
-                  risk,
-                } as SidebarOrder;
-              });
-
-            // For ADMIN show sales-provided pending/conflict orders; for SALES use salesContext
-            let combined: SidebarOrder[] = [];
-            if (isAdmin) {
-              const ids = new Set<string>();
-              const merged: SidebarOrder[] = [];
-              for (const o of [...adminSalesOrders, ...conflictOrders]) {
-                if (!ids.has(o.id)) {
-                  ids.add(o.id);
-                  merged.push(o);
-                }
-              }
-              combined = merged;
-            } else {
-              combined = [
-                ...(data.salesContext?.pendingOrders ?? []),
-                ...conflictOrders,
-              ];
-            }
-
-            return (
-              <PendingSidebar
-                orders={combined}
-                today={data.today}
-                onEditOrder={(order) => setEditOrder(order)}
-                onCreate={isSales ? () => setCreateOpen(true) : undefined}
-              />
-            );
-          })()}
+            previewLoading={previewLoading}
+          />
+        )}
 
         <div className="flex-1 overflow-auto">
           {loading && (
