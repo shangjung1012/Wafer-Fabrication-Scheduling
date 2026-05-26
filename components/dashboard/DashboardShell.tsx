@@ -9,7 +9,6 @@ export function DashboardShell({
   topSection,
   leftSection,
   rightSection,
-  onBack: _onBack,
   hideTopBar,
   hideRightSection,
 }: {
