@@ -189,7 +189,7 @@ export default function ConflictIssuesPage() {
     <div style={pageShellStyle}>
       {/* Header */}
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-        WOMS — Conflict Issues
+        WOMS — Order Issues
       </h1>
 
       {/* Nav */}
@@ -312,7 +312,7 @@ export default function ConflictIssuesPage() {
       {error && <p style={{ color: "#dc2626", fontSize: 14 }}>{error}</p>}
       {!loading && !error && issues.length === 0 && (
         <p style={{ color: "#64748b", fontSize: 14 }}>
-          No {activeTab === "open" ? "open" : "closed"} conflict issues.
+          No {activeTab === "open" ? "open" : "closed"} order issues.
         </p>
       )}
 
