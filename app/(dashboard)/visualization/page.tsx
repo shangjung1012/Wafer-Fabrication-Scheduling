@@ -3061,7 +3061,7 @@ export default function SchedulePage() {
             href="/conflict-issues"
             className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
           >
-            Conflicts
+            Issues
           </Link>
           <a
             href="/visualization"
@@ -3448,7 +3448,7 @@ export default function SchedulePage() {
               href="/conflict-issues"
               className="font-semibold underline hover:text-amber-700"
             >
-              conflict issues
+              order issues
             </Link>{" "}
             page to review and resolve.
           </span>
