@@ -11,7 +11,6 @@ import {
   upsertSystemState,
 } from "@/infra/db/system-state-repository";
 import { handleSimulationTimeAdvance } from "@/modules/schedule/simulation-service";
-import { getTime } from "@/lib/get-time";
 
 export async function GET(request: Request) {
   try {
@@ -88,16 +87,18 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const state = await upsertSystemState(prisma, patch);
-
     if (patch.simulationDate) {
-      const newTime = new Date(await getTime());
+      const newTime = new Date(patch.simulationDate);
       const oldTime = currentState.simulationDate
         ? new Date(currentState.simulationDate)
         : null;
 
-      await handleSimulationTimeAdvance(oldTime, newTime);
+      await handleSimulationTimeAdvance(oldTime, newTime, patch);
+    } else if (Object.keys(patch).length > 0) {
+      await upsertSystemState(prisma, patch);
     }
+
+    const state = await getSystemState(prisma);
 
     return NextResponse.json(state);
   } catch (error) {
