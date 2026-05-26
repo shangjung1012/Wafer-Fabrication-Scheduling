@@ -156,6 +156,11 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
       }
     }
 
+    // Pre-allocate factory map for O(1) lookups to prevent event loop blocking
+    const factoryMapById = new Map<string, SchedulingFactoryInput>(
+      factories.map((f) => [f.id, f]),
+    );
+
     // 2. Initialize in-memory capacity map
     const capacityMap = new Map<string, CapacityDraft>();
     for (const cap of capacities) {
@@ -173,7 +178,7 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
         let cap = capacityMap.get(mapKey);
 
         if (!cap) {
-          const factory = factories.find((f) => f.id === assignment.factoryId);
+          const factory = factoryMapById.get(assignment.factoryId);
           const maxCap = factory ? factory.maxCapacity : 10000; // Fallback
           cap = {
             factoryId: assignment.factoryId,

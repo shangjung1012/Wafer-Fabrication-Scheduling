@@ -68,6 +68,7 @@ export async function getTimeline(
     dueDate: r.dueDate,
     createdAt: r.createdAt,
     risk: calcRisk(r.dueDate, today),
+    isPrioritized: r.isPrioritized,
   }));
 
   return {
@@ -105,6 +106,7 @@ async function getSalesTimeline(
     dueDate: r.dueDate,
     createdAt: r.createdAt,
     risk: calcRisk(r.dueDate, today),
+    isPrioritized: r.isPrioritized,
   }));
 
   if (factoryIds.length === 0) {
@@ -172,6 +174,7 @@ function mapTimeline(
     orderId: a.orderId,
     orderName: a.orderName,
     isFixed: a.orderIsFixed,
+    isPrioritized: a.orderIsPrioritized,
     factoryId: a.factoryId,
     productionDate: a.productionDate,
     assignedQuantity: a.assignedQuantity,

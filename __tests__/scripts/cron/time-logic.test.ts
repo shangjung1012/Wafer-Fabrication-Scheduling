@@ -3,11 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { advanceOrderStatuses } from "@/modules/schedule/daily-execution";
 import { triggerAutoSchedule } from "@/modules/schedule/auto-scheduler";
 import { findFactoriesWithCapacities } from "@/infra/db/factory-repository";
-import {
-  FactoryStatus,
-  type PrismaClient,
-  type SystemState,
-} from "@/lib/generated/prisma";
+import { FactoryStatus, type SystemState } from "@/lib/generated/prisma";
 import { handleSimulationTimeAdvance } from "@/modules/schedule/simulation-service";
 import { runAutoSchedulerCron, runDailyExecutionCron } from "@/scripts/cron";
 

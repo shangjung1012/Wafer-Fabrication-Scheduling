@@ -29,11 +29,15 @@ export function DraggableAssignmentChip({
   isMoved,
   editMode = false,
   onToggleOrderFixed,
+  onToggleOrderPrioritized,
+  onClickItem,
 }: {
   item: TimelineItem;
   isMoved: boolean;
   editMode?: boolean;
   onToggleOrderFixed?: (orderId: string, next: boolean) => void;
+  onToggleOrderPrioritized?: (orderId: string, next: boolean) => void;
+  onClickItem?: (item: TimelineItem) => void;
 }) {
   const isLockedByStatus = item.status !== "SCHEDULED";
   const isFixed = item.isFixed;
@@ -54,15 +58,19 @@ export function DraggableAssignmentChip({
 
   const showFixedToggle =
     editMode && item.status === "SCHEDULED" && onToggleOrderFixed;
+  const showPrioritizedToggle =
+    editMode && item.status === "SCHEDULED" && onToggleOrderPrioritized;
 
   if (isLockedByStatus) {
     return (
       <div
-        className={`text-[9px] leading-tight rounded px-1 py-0.5 select-none border cursor-not-allowed ${assignmentChipToneClasses(item.status, false)}`}
+        onClick={onClickItem ? () => onClickItem(item) : undefined}
+        className={`text-[9px] leading-tight rounded px-1 py-0.5 select-none border ${onClickItem ? "cursor-pointer" : "cursor-not-allowed"} ${assignmentChipToneClasses(item.status, false)}`}
         title={`${item.orderName} · qty ${item.assignedQuantity} · ${item.status} (locked)`}
       >
         <span className="font-semibold truncate block max-w-[64px]">
-          🔒 {item.orderName}
+          🔒 {item.isPrioritized ? "👑 " : ""}
+          {item.orderName}
         </span>
         <span className="text-[8px] opacity-70">
           ×{item.assignedQuantity} · {item.status}
@@ -83,6 +91,7 @@ export function DraggableAssignmentChip({
       ref={setNodeRef}
       style={style}
       {...(dragDisabled ? {} : { ...listeners, ...attributes })}
+      onClick={onClickItem && !isDragging ? () => onClickItem(item) : undefined}
       className={`text-[9px] leading-tight rounded px-1 py-0.5 select-none border ${cursorClass} ${tone}`}
       title={
         isFixed
@@ -92,26 +101,52 @@ export function DraggableAssignmentChip({
     >
       <span className="font-semibold truncate block max-w-[64px]">
         {isFixed ? "🔒 " : ""}
+        {item.isPrioritized ? "👑 " : ""}
         {item.orderName}
       </span>
       <span className="text-[8px] opacity-70 block">
         ×{item.assignedQuantity}
         {isFixed ? " · SCHEDULED" : null}
       </span>
-      {showFixedToggle && (
-        <label
-          className="mt-0.5 flex items-center gap-0.5 pointer-events-auto"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            type="checkbox"
-            checked={isFixed}
-            onChange={(e) => onToggleOrderFixed(item.orderId, e.target.checked)}
-            className="h-2.5 w-2.5 rounded border-gray-400 shrink-0"
-          />
-          <span className="text-[7px] text-gray-700 leading-none">Lock</span>
-        </label>
+      {(showFixedToggle || showPrioritizedToggle) && (
+        <div className="mt-0.5 flex items-center gap-1.5 pointer-events-auto">
+          {showFixedToggle && (
+            <label
+              className="flex items-center gap-0.5"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={isFixed}
+                onChange={(e) =>
+                  onToggleOrderFixed(item.orderId, e.target.checked)
+                }
+                className="h-2.5 w-2.5 rounded border-gray-400 shrink-0"
+              />
+              <span className="text-[7px] text-gray-700 leading-none">
+                Lock
+              </span>
+            </label>
+          )}
+          {showPrioritizedToggle && (
+            <label
+              className="flex items-center gap-0.5"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={item.isPrioritized}
+                onChange={(e) =>
+                  onToggleOrderPrioritized(item.orderId, e.target.checked)
+                }
+                className="h-2.5 w-2.5 rounded border-gray-400 shrink-0"
+              />
+              <span className="text-[7px] text-amber-600 leading-none">👑</span>
+            </label>
+          )}
+        </div>
       )}
     </div>
   );
@@ -142,6 +177,62 @@ export function DroppableCell({
             ? "ring-2 ring-blue-500 ring-inset bg-blue-100/40"
             : ""
       }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function DraggableSplitChip({
+  splitId,
+  children,
+}: {
+  splitId: string;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: `pending-split:${splitId}` });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className="cursor-grab active:cursor-grabbing"
+    >
+      {children}
+    </div>
+  );
+}
+
+export function DraggablePendingOrderCard({
+  orderId,
+  children,
+}: {
+  orderId: string;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: `pending-order:${orderId}` });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className="cursor-grab active:cursor-grabbing"
     >
       {children}
     </div>

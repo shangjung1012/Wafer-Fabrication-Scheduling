@@ -23,8 +23,25 @@ const STATUS_STYLE: Record<string, string> = {
   OPEN: "bg-green-100 text-green-700 border-green-200",
   IN_DISCUSSION: "bg-blue-100 text-blue-700 border-blue-200",
   RESOLVED: "bg-gray-100 text-gray-600 border-gray-200",
-  CLOSED: "bg-red-100 text-red-700 border-red-200",
+  CLOSED: "bg-gray-100 text-gray-600 border-gray-200",
 };
+
+function issueKind(title: string): "cancel" | "conflict" {
+  return title.startsWith("Cancellation Request") ? "cancel" : "conflict";
+}
+
+function KindBadge({ title }: { title: string }) {
+  const kind = issueKind(title);
+  return kind === "cancel" ? (
+    <span className="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-red-50 text-red-600 border-red-200">
+      Cancel
+    </span>
+  ) : (
+    <span className="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-700 border-amber-200">
+      Conflict
+    </span>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   return (
@@ -111,7 +128,7 @@ export function ConflictIssueSection() {
     <>
       <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-          Conflict Issues
+          Order Issues
         </h2>
         <Link
           href="/conflict-issues"
@@ -152,7 +169,7 @@ export function ConflictIssueSection() {
             <div className="text-center">
               <div className="text-4xl mb-2">✓</div>
               <p className="text-sm text-gray-400">
-                No {activeTab === "open" ? "open" : "closed"} conflict issues
+                No {activeTab === "open" ? "open" : "closed"} order issues
               </p>
             </div>
           </div>
@@ -161,7 +178,10 @@ export function ConflictIssueSection() {
         {!loading && !error && issues.length > 0 && (
           <ul className="divide-y divide-gray-100">
             {issues.map((issue) => (
-              <li key={issue.id}>
+              <li
+                key={issue.id}
+                className={`border-l-4 ${issueKind(issue.title) === "cancel" ? "border-l-red-400" : "border-l-amber-400"}`}
+              >
                 <Link
                   href={`/conflict-issues/${issue.number}`}
                   className="block px-5 py-3 hover:bg-gray-50 transition-colors"
@@ -175,6 +195,7 @@ export function ConflictIssueSection() {
                         <span className="text-sm font-semibold text-gray-900 truncate">
                           {issue.title}
                         </span>
+                        <KindBadge title={issue.title} />
                         <StatusBadge status={issue.status} />
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[11px] text-gray-500">
