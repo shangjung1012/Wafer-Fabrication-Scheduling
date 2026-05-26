@@ -789,6 +789,27 @@ function Sidebar({
     }
   };
 
+  const doCancelOrder = async () => {
+    setActioning(true);
+    setActionError(null);
+    try {
+      const res = await apiFetch(`/api/conflict-issues/${issue.number}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "CANCEL_ORDER" }),
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        setActionError(data.error ?? "Cancel failed.");
+      } else {
+        onAction();
+      }
+    } catch {
+      setActionError("Network error.");
+    } finally {
+      setActioning(false);
+    }
+  };
+
   const doReassign = async () => {
     if (!reassignId.trim()) return;
     setActioning(true);
@@ -1048,31 +1069,55 @@ function Sidebar({
           "ACTIONS",
           <>
             {issue.status !== "RESOLVED" && issue.status !== "CLOSED" && (
-              <button
-                type="button"
-                disabled={actioning}
-                onClick={() => {
-                  setAdminAction("CLOSE");
-                  void setTimeout(doAdminAction, 0);
-                }}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  padding: "6px 12px",
-                  marginBottom: 6,
-                  background: "#f1f5f9",
-                  color: "#374151",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 6,
-                  cursor: "pointer",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textAlign: "left",
-                  opacity: actioning ? 0.6 : 1,
-                }}
-              >
-                Close as won&apos;t fix
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={actioning}
+                  onClick={() => void doCancelOrder()}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "6px 12px",
+                    marginBottom: 6,
+                    background: "#fef2f2",
+                    color: "#991b1b",
+                    border: "1px solid #fecaca",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textAlign: "left",
+                    opacity: actioning ? 0.6 : 1,
+                  }}
+                >
+                  Cancel order
+                </button>
+                <button
+                  type="button"
+                  disabled={actioning}
+                  onClick={() => {
+                    setAdminAction("CLOSE");
+                    void setTimeout(doAdminAction, 0);
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "6px 12px",
+                    marginBottom: 6,
+                    background: "#f1f5f9",
+                    color: "#374151",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textAlign: "left",
+                    opacity: actioning ? 0.6 : 1,
+                  }}
+                >
+                  Close as won&apos;t fix
+                </button>
+              </>
             )}
 
             {(issue.status === "CLOSED" || issue.status === "RESOLVED") && (
