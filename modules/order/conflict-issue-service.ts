@@ -34,6 +34,8 @@ import {
   OrderStatus,
   findOrderForIssueCreation,
   findCompetingScheduledOrders,
+  findOrderById,
+  deleteOrders,
 } from "@/infra/db/order-repository";
 import { findFactoriesForIssueSnapshot } from "@/infra/db/factory-repository";
 import { calculateOrderDeadline } from "@/modules/schedule/validation-utils";
@@ -44,6 +46,7 @@ import {
 } from "@/modules/schedule/strategy";
 import { renderAndSend } from "@/modules/mail/mail-template";
 import { issueCreatedTemplate } from "@/modules/mail/templates/issue-created";
+import { cancelRequestTemplate } from "@/modules/mail/templates/cancel-request";
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -452,10 +455,11 @@ export async function rejectProposal(
 // Service: update issue status (admin actions)
 // ---------------------------------------------------------------------------
 
-export type UpdateIssueStatusInput = {
-  action: "CLOSE" | "REOPEN" | "REASSIGN";
-  assigneeId?: string; // required for REASSIGN
-};
+export type UpdateIssueStatusInput =
+  | { action: "CLOSE" }
+  | { action: "REOPEN" }
+  | { action: "REASSIGN"; assigneeId: string }
+  | { action: "CANCEL_ORDER" };
 
 export async function updateIssueStatus(
   ctx: RequestContext,
@@ -511,15 +515,6 @@ export async function updateIssueStatus(
       type: ConflictIssueEventType.REOPENED,
     });
   } else if (input.action === "REASSIGN") {
-    if (!input.assigneeId) {
-      throw Object.assign(
-        new Error("assigneeId is required for REASSIGN action."),
-        {
-          status: 400,
-          code: "BAD_REQUEST",
-        },
-      );
-    }
     const newAssignee = await db.user.findUnique({
       where: { id: input.assigneeId },
       select: { id: true, role: true },
@@ -537,7 +532,124 @@ export async function updateIssueStatus(
       type: ConflictIssueEventType.REASSIGNED,
       payload: { newAssigneeId: input.assigneeId },
     });
+  } else if (input.action === "CANCEL_ORDER") {
+    if (
+      issue.status === ConflictIssueStatus.RESOLVED ||
+      issue.status === ConflictIssueStatus.CLOSED
+    ) {
+      conflict("Cannot cancel order on a resolved or closed issue.");
+    }
+    await deleteOrders(db, [issue.orderId]);
+    await updateConflictIssue(db, issueId, {
+      status: ConflictIssueStatus.CLOSED,
+      resolution: ConflictResolution.CANCELLED,
+      closedAt: new Date(),
+    });
+    await createConflictIssueEvent(db, {
+      issueId,
+      actorId: ctx.user.id,
+      type: ConflictIssueEventType.CLOSED,
+      payload: { resolution: ConflictResolution.CANCELLED },
+    });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Service: create cancellation request (Sales)
+// ---------------------------------------------------------------------------
+
+export async function createCancellationRequest(
+  ctx: RequestContext,
+  db: PrismaClient,
+  orderId: string,
+): Promise<{ issueId: string; issueNumber: number }> {
+  requireRole(ctx, ["SALES"]);
+
+  const order = await findOrderById(db, orderId);
+  if (!order) {
+    throw Object.assign(new Error("Order not found."), {
+      status: 404,
+      code: "NOT_FOUND",
+    });
+  }
+
+  if (order.applicantId !== ctx.user.id) {
+    throw new ForbiddenError("You can only flag your own orders.");
+  }
+
+  if (
+    order.status !== OrderStatus.PENDING &&
+    order.status !== OrderStatus.SCHEDULED
+  ) {
+    throw Object.assign(
+      new Error(
+        "Only PENDING or SCHEDULED orders can be flagged for cancellation.",
+      ),
+      { status: 409, code: "CONFLICT" },
+    );
+  }
+
+  const existing = await findOpenIssueByOrderId(db, orderId);
+  if (existing) {
+    conflict(
+      "A cancellation request is already open for this order. Review the existing issue.",
+    );
+  }
+
+  const created = await createConflictIssue(db, {
+    orderId,
+    title: `Cancellation Request: "${order.name}"`,
+    status: ConflictIssueStatus.OPEN,
+    resolution: null,
+    createdById: ctx.user.id,
+    assigneeId: ctx.user.id,
+    contextSnapshot: {},
+  });
+
+  await createConflictIssueEvent(db, {
+    issueId: created.id,
+    actorId: ctx.user.id,
+    type: ConflictIssueEventType.OPENED,
+    payload: { reason: "CANCEL_REQUEST" },
+  });
+
+  // Notify admins of the relevant production type
+  const now = new Date();
+  const factories = await findFactoriesForIssueSnapshot(
+    db,
+    order.type,
+    now,
+    now,
+  );
+  const adminRecipients: Array<{ email: string; username: string | null }> = [];
+  for (const f of factories) {
+    for (const admin of f.admins) {
+      if (admin?.email) {
+        adminRecipients.push({ email: admin.email, username: admin.username });
+      }
+    }
+  }
+
+  const seenEmails = new Set<string>();
+  const uniqueAdmins = adminRecipients.filter((r) => {
+    if (seenEmails.has(r.email)) return false;
+    seenEmails.add(r.email);
+    return true;
+  });
+
+  await Promise.allSettled(
+    uniqueAdmins.map((r) =>
+      renderAndSend(cancelRequestTemplate, {
+        orderName: order.name,
+        issueNumber: created.number,
+        requesterUsername: ctx.user.username ?? null,
+        recipientEmail: r.email,
+        recipientUsername: r.username,
+      }),
+    ),
+  );
+
+  return { issueId: created.id, issueNumber: created.number };
 }
 
 // ---------------------------------------------------------------------------

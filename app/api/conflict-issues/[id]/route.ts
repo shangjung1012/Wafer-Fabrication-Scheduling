@@ -62,6 +62,7 @@ const PatchBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("CLOSE") }),
   z.object({ action: z.literal("REOPEN") }),
   z.object({ action: z.literal("REASSIGN"), assigneeId: z.string().min(1) }),
+  z.object({ action: z.literal("CANCEL_ORDER") }),
 ]);
 
 export async function PATCH(
