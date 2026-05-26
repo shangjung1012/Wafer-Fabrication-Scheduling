@@ -36,7 +36,7 @@ import type {
   SchedulePreviewResponse,
   DailyCapacityInfo,
 } from "@/modules/visualization/types";
-import { logoutClientAuthSession } from "@/modules/auth/client-session";
+import { AppHeader } from "@/components/dashboard/AppHeader";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 import {
   DraggableAssignmentChip,
@@ -2431,11 +2431,6 @@ export default function SchedulePage() {
     });
   };
 
-  const handleLogout = async () => {
-    await logoutClientAuthSession();
-    router.replace("/login");
-  };
-
   // Effective timeline/capacities/conflicts/factories/diffs:
   // - previewData wins
   // - else if editMode + pendingMoves, apply moves locally
@@ -3037,180 +3032,112 @@ export default function SchedulePage() {
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans">
       {/* Top bar */}
-      <div className="flex-none bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 flex-wrap">
-        <div>
-          <h1 className="text-base font-semibold text-gray-900">
-            Production Schedule
-          </h1>
-          <p className="text-xs text-gray-500">
-            Factory gantt — click a cell to inspect orders
-          </p>
-        </div>
+      <AppHeader
+        title="Production Schedule"
+        subtitle="Factory gantt — click a cell to inspect orders"
+      />
 
-        <nav
-          className="flex items-center gap-2 flex-wrap"
-          aria-label="Dashboard navigation"
-        >
-          <a
-            href="/orders"
-            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-          >
-            Orders
-          </a>
-          <Link
-            href="/conflict-issues"
-            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-          >
-            Issues
-          </Link>
-          <a
-            href="/visualization"
-            className="text-xs font-medium px-2.5 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700"
-          >
-            Visualization
-          </a>
-          <a
-            href="/visualization/dashboard"
-            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-          >
-            Dashboard
-          </a>
-          <a
-            href="/users"
-            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-          >
-            Users
-          </a>
-          <a
-            href="/profile"
-            className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-          >
-            Profile
-          </a>
-        </nav>
+      {/* Schedule controls (admin/superadmin only) */}
+      {!isSales && (
+        <div className="flex-none bg-white border-b border-gray-100 px-6 py-2 flex items-center gap-2 flex-wrap">
+          {/* Reschedule policy dropdown */}
+          <label className="flex items-center gap-1 text-xs text-gray-600">
+            <span className="text-gray-500">Policy</span>
+            <select
+              value={reschedulePolicy}
+              onChange={(e) =>
+                setReschedulePolicy(
+                  e.target.value as
+                    | "GLOBAL_OPTIMIZE"
+                    | "PRIORITY_RETAIN"
+                    | "GAP_FILLING",
+                )
+              }
+              disabled={editMode || previewLoading}
+              className="text-xs border border-gray-200 rounded px-2 py-1 bg-white disabled:bg-gray-100 disabled:text-gray-400"
+            >
+              <option value="GAP_FILLING">Gap filling (GAP_FILLING)</option>
+              <option value="PRIORITY_RETAIN">
+                Retain priority placement (PRIORITY_RETAIN)
+              </option>
+              <option value="GLOBAL_OPTIMIZE">
+                Global optimize (GLOBAL_OPTIMIZE)
+              </option>
+            </select>
+          </label>
 
-        <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
-          <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
-            Signed in as:
-          </span>
-          <span className="text-xs font-semibold text-gray-800">
-            {session.user.username}
-          </span>
-          <span className="text-xs text-gray-500">({session.user.email})</span>
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-            {session.user.role}
-          </span>
-          {productionType && (
-            <span className="text-xs text-gray-500">Type {productionType}</span>
-          )}
           <button
-            type="button"
-            onClick={handleLogout}
-            className="text-xs font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+            onClick={() => handlePreviewSchedule()}
+            disabled={
+              previewLoading || editMode || scheduleStatus === "running"
+            }
+            className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
+              previewLoading || editMode
+                ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
+                : "bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50"
+            }`}
           >
-            Logout
+            {previewLoading ? "Previewing…" : "🔍 Preview"}
           </button>
+
+          <button
+            onClick={() => handleRunSchedule()}
+            disabled={
+              scheduleStatus === "running" || editMode || previewLoading
+            }
+            className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
+              scheduleStatus === "running" || editMode
+                ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
+                : "bg-green-700 text-white border-green-700 hover:bg-green-800"
+            }`}
+          >
+            {scheduleStatus === "running"
+              ? "Running…"
+              : `▶ Run (Type ${productionType || "-"})`}
+          </button>
+
+          {!editMode && !previewData && (
+            <button
+              onClick={handleEnterEditMode}
+              className="text-xs font-medium px-3 py-1.5 rounded border bg-white text-purple-700 border-purple-300 hover:bg-purple-50"
+            >
+              ✏️ Edit
+            </button>
+          )}
+
+          {scheduleStatus === "success" && (
+            <span className="text-xs text-green-600 font-medium">
+              Scheduled ✓
+            </span>
+          )}
+          {scheduleStatus === "conflict" && (
+            <span className="text-xs text-yellow-600 font-medium">
+              Already running
+            </span>
+          )}
+          {scheduleStatus === "error" && (
+            <span className="text-xs text-red-600 font-medium">Failed</span>
+          )}
+          {saveStatus === "success" && (
+            <span className="text-xs text-green-600 font-medium">
+              {saveErrorMsg ? `Saved ✓ (${saveErrorMsg})` : "Saved ✓"}
+            </span>
+          )}
+          {saveStatus === "error" && (
+            <span
+              className="text-xs text-red-600 font-medium"
+              title={saveErrorMsg ?? ""}
+            >
+              Save failed: {saveErrorMsg ?? "unknown"}
+            </span>
+          )}
         </div>
+      )}
 
-        {/* Schedule controls (admin/superadmin only) */}
-        {!isSales && (
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Reschedule policy dropdown */}
-            <label className="flex items-center gap-1 text-xs text-gray-600">
-              <span className="text-gray-500">Policy</span>
-              <select
-                value={reschedulePolicy}
-                onChange={(e) =>
-                  setReschedulePolicy(
-                    e.target.value as
-                      | "GLOBAL_OPTIMIZE"
-                      | "PRIORITY_RETAIN"
-                      | "GAP_FILLING",
-                  )
-                }
-                disabled={editMode || previewLoading}
-                className="text-xs border border-gray-200 rounded px-2 py-1 bg-white disabled:bg-gray-100 disabled:text-gray-400"
-              >
-                <option value="GAP_FILLING">Gap filling (GAP_FILLING)</option>
-                <option value="PRIORITY_RETAIN">
-                  Retain priority placement (PRIORITY_RETAIN)
-                </option>
-                <option value="GLOBAL_OPTIMIZE">
-                  Global optimize (GLOBAL_OPTIMIZE)
-                </option>
-              </select>
-            </label>
-
-            <button
-              onClick={() => handlePreviewSchedule()}
-              disabled={
-                previewLoading || editMode || scheduleStatus === "running"
-              }
-              className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
-                previewLoading || editMode
-                  ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
-                  : "bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50"
-              }`}
-            >
-              {previewLoading ? "Previewing…" : "🔍 Preview"}
-            </button>
-
-            <button
-              onClick={() => handleRunSchedule()}
-              disabled={
-                scheduleStatus === "running" || editMode || previewLoading
-              }
-              className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
-                scheduleStatus === "running" || editMode
-                  ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
-                  : "bg-green-700 text-white border-green-700 hover:bg-green-800"
-              }`}
-            >
-              {scheduleStatus === "running"
-                ? "Running…"
-                : `▶ Run (Type ${productionType || "-"})`}
-            </button>
-
-            {!editMode && !previewData && (
-              <button
-                onClick={handleEnterEditMode}
-                className="text-xs font-medium px-3 py-1.5 rounded border bg-white text-purple-700 border-purple-300 hover:bg-purple-50"
-              >
-                ✏️ Edit
-              </button>
-            )}
-
-            {scheduleStatus === "success" && (
-              <span className="text-xs text-green-600 font-medium">
-                Scheduled ✓
-              </span>
-            )}
-            {scheduleStatus === "conflict" && (
-              <span className="text-xs text-yellow-600 font-medium">
-                Already running
-              </span>
-            )}
-            {scheduleStatus === "error" && (
-              <span className="text-xs text-red-600 font-medium">Failed</span>
-            )}
-            {saveStatus === "success" && (
-              <span className="text-xs text-green-600 font-medium">
-                {saveErrorMsg ? `Saved ✓ (${saveErrorMsg})` : "Saved ✓"}
-              </span>
-            )}
-            {saveStatus === "error" && (
-              <span
-                className="text-xs text-red-600 font-medium"
-                title={saveErrorMsg ?? ""}
-              >
-                Save failed: {saveErrorMsg ?? "unknown"}
-              </span>
-            )}
-          </div>
-        )}
-
+      {/* Date range + summary bar */}
+      <div className="flex-none bg-white border-b border-gray-100 px-6 py-2 flex items-center gap-4 flex-wrap">
         {/* Date range */}
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex items-center gap-2">
           <input
             type="date"
             value={startDate}
