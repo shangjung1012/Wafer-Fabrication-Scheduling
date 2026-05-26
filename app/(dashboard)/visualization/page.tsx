@@ -67,6 +67,20 @@ function applyPendingIsFixedByOrder(
   });
 }
 
+/** Overlay pending order-level `isPrioritized` edits onto timeline rows (edit mode). */
+function applyPendingIsPrioritizedByOrder(
+  timeline: TimelineItem[],
+  pending: Map<string, boolean>,
+): TimelineItem[] {
+  if (pending.size === 0) return timeline;
+  return timeline.map((t) => {
+    const p = pending.get(t.orderId);
+    if (p === undefined) return t;
+    if (t.isPrioritized === p) return t;
+    return { ...t, isPrioritized: p };
+  });
+}
+
 /** Default window: 10 calendar days starting at anchor (anchor + 9 inclusive). */
 function defaultTimelineRange(anchorDayYmd: string) {
   const startDate = anchorDayYmd.slice(0, 10);
@@ -152,6 +166,9 @@ function convertNewScheduleToPreview(args: {
     const orderIsFixed = Boolean(
       (order as { isFixed?: boolean }).isFixed === true,
     );
+    const orderIsPrioritized = Boolean(
+      (order as { isPrioritized?: boolean }).isPrioritized === true,
+    );
     for (const a of order.assignments ?? []) {
       if (!a.factoryId || !a.productionDate) continue;
       timeline.push({
@@ -159,6 +176,7 @@ function convertNewScheduleToPreview(args: {
         orderId: a.orderId ?? order.id,
         orderName: order.name ?? order.id,
         isFixed: orderIsFixed,
+        isPrioritized: orderIsPrioritized,
         factoryId: a.factoryId,
         productionDate: toIsoDate(a.productionDate),
         assignedQuantity: a.assignedQuantity ?? 0,
@@ -470,6 +488,7 @@ function DetailPanel({
   editMode,
   onEditOrder,
   onToggleOrderFixed,
+  onToggleOrderPrioritized,
   onClose,
 }: {
   cell: CellData;
@@ -481,6 +500,7 @@ function DetailPanel({
   editMode?: boolean;
   onEditOrder: (order: OrderEditorValues) => void;
   onToggleOrderFixed?: (orderId: string, next: boolean) => void;
+  onToggleOrderPrioritized?: (orderId: string, next: boolean) => void;
   onClose: () => void;
 }) {
   const myOrderIdSet = new Set(myOrderIds ?? []);
@@ -577,6 +597,9 @@ function DetailPanel({
                   className={`text-sm font-medium ${item.status === "COMPLETED" ? "text-neutral-800" : "text-gray-900"}`}
                 >
                   {item.status === "SCHEDULED" && item.isFixed ? "🔒 " : ""}
+                  {item.status === "SCHEDULED" && item.isPrioritized
+                    ? "👑 "
+                    : ""}
                   {item.orderName}
                 </span>
                 <div className="flex items-center gap-2">
@@ -592,6 +615,7 @@ function DetailPanel({
                           status: item.status,
                           dueDate: item.dueDate,
                           type: factory.productionType,
+                          isPrioritized: item.isPrioritized,
                         })
                       }
                       className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:text-gray-900"
@@ -647,6 +671,29 @@ function DetailPanel({
                         checked={item.isFixed}
                         onChange={(e) =>
                           onToggleOrderFixed(item.orderId, e.target.checked)
+                        }
+                        className="h-3.5 w-3.5 rounded border-gray-300 shrink-0"
+                      />
+                    </label>
+                  )}
+                {editMode &&
+                  item.status === "SCHEDULED" &&
+                  onToggleOrderPrioritized && (
+                    <label
+                      className="flex items-center justify-between gap-2 pt-1 cursor-pointer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-[10px] text-amber-600 leading-snug">
+                        👑 Prioritize (scheduled first in auto-schedule)
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={item.isPrioritized}
+                        onChange={(e) =>
+                          onToggleOrderPrioritized(
+                            item.orderId,
+                            e.target.checked,
+                          )
                         }
                         className="h-3.5 w-3.5 rounded border-gray-300 shrink-0"
                       />
@@ -774,11 +821,16 @@ function PendingSidebar({
   const multiSelectEnabled =
     !editMode && Boolean(setSelectedOrderIds && onPreviewSelected);
   const selected = selectedOrderIds ?? new Set<string>();
-  const pending = orders.filter(
-    (o) =>
-      o.status === "PENDING" &&
-      (!pendingPlaceOrderIds || !pendingPlaceOrderIds.has(o.id)),
-  );
+  const pending = orders
+    .filter(
+      (o) =>
+        o.status === "PENDING" &&
+        (!pendingPlaceOrderIds || !pendingPlaceOrderIds.has(o.id)),
+    )
+    .sort((a, b) => {
+      if (a.isPrioritized !== b.isPrioritized) return a.isPrioritized ? -1 : 1;
+      return 0;
+    });
   const pendingIds = pending.map((o) => o.id);
   const allSelected =
     pendingIds.length > 0 && pendingIds.every((id) => selected.has(id));
@@ -893,7 +945,17 @@ function PendingSidebar({
                 {o.name}
               </span>
             )}
-            {riskDot(o.risk)}
+            <div className="flex items-center gap-1 shrink-0">
+              {o.isPrioritized && (
+                <span
+                  className="text-sm leading-none text-amber-500"
+                  title="Prioritized"
+                >
+                  👑
+                </span>
+              )}
+              {riskDot(o.risk)}
+            </div>
           </div>
           <div className="flex justify-between text-gray-500">
             <span>Qty</span>
@@ -925,6 +987,7 @@ function PendingSidebar({
                     quantity: String(o.quantity),
                     status: o.status,
                     dueDate: o.dueDate,
+                    isPrioritized: o.isPrioritized,
                   })
                 }
                 className="text-[10px] font-semibold px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
@@ -970,10 +1033,7 @@ function PendingSidebar({
             {split.parts.map((part, i) => {
               if (pendingSplitPlacements?.has(part.splitId)) return null;
               return (
-                <DraggableSplitChip
-                  key={part.splitId}
-                  splitId={part.splitId}
-                >
+                <DraggableSplitChip key={part.splitId} splitId={part.splitId}>
                   <div className="bg-white rounded border border-indigo-200 px-2 py-1.5 text-xs flex items-center justify-between gap-2 shadow-sm">
                     <span className="font-semibold text-indigo-700">
                       #{i + 1}
@@ -1025,10 +1085,7 @@ function PendingSidebar({
               </div>
               {draftApplied &&
                 draftParts.map((part, i) => (
-                  <div
-                    key={part.splitId}
-                    className="flex items-center gap-2"
-                  >
+                  <div key={part.splitId} className="flex items-center gap-2">
                     <span className="text-gray-500 w-6">#{i + 1}</span>
                     <span className="text-gray-500">Qty:</span>
                     <input
@@ -1036,10 +1093,7 @@ function PendingSidebar({
                       min={1}
                       value={part.quantity}
                       onChange={(e) => {
-                        const val = Math.max(
-                          1,
-                          Number(e.target.value) || 0,
-                        );
+                        const val = Math.max(1, Number(e.target.value) || 0);
                         setDraftParts((prev) =>
                           prev.map((p, j) =>
                             j === i ? { ...p, quantity: val } : p,
@@ -1155,7 +1209,9 @@ function PendingSidebar({
           </label>
         </div>
       )}
-      <div className={`flex-1 overflow-x-hidden p-3 space-y-4 ${isDragging ? "overflow-y-hidden" : "overflow-y-auto"}`}>
+      <div
+        className={`flex-1 overflow-x-hidden p-3 space-y-4 ${isDragging ? "overflow-y-hidden" : "overflow-y-auto"}`}
+      >
         {orders.length === 0 && (
           <p className="text-xs text-gray-400 text-center pt-4">
             No pending orders
@@ -1185,18 +1241,21 @@ type OrderEditorValues = {
   dueDate?: string;
   orderId?: string;
   status?: string;
+  isPrioritized?: boolean;
 };
 
 function OrderFormModal({
   title,
   mode,
   initialValues,
+  canEditPrioritized = false,
   onClose,
   onSubmit,
 }: {
   title: string;
   mode: "create" | "edit";
   initialValues: OrderEditorValues;
+  canEditPrioritized?: boolean;
   onClose: () => void;
   onSubmit: (values: OrderEditorValues) => Promise<void>;
 }) {
@@ -1205,6 +1264,9 @@ function OrderFormModal({
   const [type, setType] = useState(initialValues.type ?? "A");
   const [dueDate, setDueDate] = useState(
     toDateInputValue(initialValues.dueDate) || "2026-12-31",
+  );
+  const [isPrioritized, setIsPrioritized] = useState(
+    initialValues.isPrioritized ?? false,
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -1223,6 +1285,7 @@ function OrderFormModal({
         dueDate,
         orderId: initialValues.orderId,
         status: initialValues.status,
+        isPrioritized,
       });
       onClose();
     } catch (err) {
@@ -1330,6 +1393,20 @@ function OrderFormModal({
             />
           </label>
 
+          {!isCreate && canEditPrioritized && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPrioritized}
+                onChange={(e) => setIsPrioritized(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 accent-amber-500"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                👑 Prioritize (scheduled first in auto-schedule)
+              </span>
+            </label>
+          )}
+
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               type="button"
@@ -1368,6 +1445,7 @@ function GanttCell({
   dropDisabledReason,
   columnHasInProduction = false,
   onToggleOrderFixed,
+  onToggleOrderPrioritized,
   onClickItem,
   onClick,
 }: {
@@ -1383,6 +1461,7 @@ function GanttCell({
   /** True when this column day has any IN_PRODUCTION assignment (column accent). */
   columnHasInProduction?: boolean;
   onToggleOrderFixed?: (orderId: string, next: boolean) => void;
+  onToggleOrderPrioritized?: (orderId: string, next: boolean) => void;
   onClickItem?: (item: TimelineItem) => void;
   onClick: () => void;
 }) {
@@ -1393,7 +1472,10 @@ function GanttCell({
   const fixedScheduledCount = cell.items.filter(
     (i) => i.status === "SCHEDULED" && i.isFixed,
   ).length;
-  const otherAssignmentCount = cell.items.length - fixedScheduledCount;
+  const prioritizedScheduledCount = cell.items.filter(
+    (i) => i.status === "SCHEDULED" && i.isPrioritized,
+  ).length;
+  const totalCount = cell.items.length;
   const tdBorderClass = columnHasInProduction
     ? "border-2 border-emerald-500"
     : "border border-gray-100";
@@ -1421,6 +1503,7 @@ function GanttCell({
                 isMoved={movedAssignmentIds.has(item.assignmentId)}
                 editMode={editMode}
                 onToggleOrderFixed={onToggleOrderFixed}
+                onToggleOrderPrioritized={onToggleOrderPrioritized}
                 onClickItem={onClickItem}
               />
             ))}
@@ -1487,24 +1570,32 @@ function GanttCell({
           </span>
         )}
 
-        {/* Assignment counts: other vs locked (isFixed) SCHEDULED */}
+        {/* Assignment counts: total ×N (🔒×M 👑×K) */}
         {cell.items.length > 0 && (
           <span
             className="absolute top-1 left-1 text-[9px] font-bold text-gray-500 inline-flex flex-wrap items-center gap-x-1 gap-y-0 max-w-[68px] leading-tight"
-            title={
-              fixedScheduledCount > 0
-                ? `${otherAssignmentCount} non-fixed, ${fixedScheduledCount} locked (fixed) assignment(s)`
-                : `${cell.items.length} assignment(s)`
-            }
+            title={`${totalCount} assignment(s)${fixedScheduledCount > 0 ? `, ${fixedScheduledCount} locked` : ""}${prioritizedScheduledCount > 0 ? `, ${prioritizedScheduledCount} prioritized` : ""}`}
           >
-            {otherAssignmentCount > 0 && <span>×{otherAssignmentCount}</span>}
-            {fixedScheduledCount > 0 && (
-              <span
-                className="text-gray-700 inline-flex items-center gap-px"
-                title={`Locked (fixed) assignments ×${fixedScheduledCount}`}
-              >
-                <span aria-hidden>🔒</span>
-                <span>×{fixedScheduledCount}</span>
+            <span>×{totalCount}</span>
+            {(fixedScheduledCount > 0 || prioritizedScheduledCount > 0) && (
+              <span className="inline-flex items-center gap-px">
+                <span>(</span>
+                {fixedScheduledCount > 0 && (
+                  <span className="text-gray-700 inline-flex items-center gap-px">
+                    <span aria-hidden>🔒</span>
+                    <span>×{fixedScheduledCount}</span>
+                  </span>
+                )}
+                {fixedScheduledCount > 0 && prioritizedScheduledCount > 0 && (
+                  <span className="mx-px"> </span>
+                )}
+                {prioritizedScheduledCount > 0 && (
+                  <span className="text-amber-600 inline-flex items-center gap-px">
+                    <span aria-hidden>👑</span>
+                    <span>×{prioritizedScheduledCount}</span>
+                  </span>
+                )}
+                <span>)</span>
               </span>
             )}
             {isMyOrder && (
@@ -1614,6 +1705,9 @@ export default function SchedulePage() {
   const [pendingIsFixedByOrderId, setPendingIsFixedByOrderId] = useState<
     Map<string, boolean>
   >(() => new Map());
+  /** Pending order-level `isPrioritized` overrides while in edit mode (key = orderId). */
+  const [pendingIsPrioritizedByOrderId, setPendingIsPrioritizedByOrderId] =
+    useState<Map<string, boolean>>(() => new Map());
   const [draggingAssignment, setDraggingAssignment] =
     useState<TimelineItem | null>(null);
   const [pendingPlaceByOrderId, setPendingPlaceByOrderId] = useState<
@@ -1869,6 +1963,7 @@ export default function SchedulePage() {
     setEditMode(true);
     setPendingMoves(new Map());
     setPendingIsFixedByOrderId(new Map());
+    setPendingIsPrioritizedByOrderId(new Map());
     setPendingPlaceByOrderId(new Map());
     setPendingSplitByOrderId(new Map());
     setPendingSplitPlacements(new Map());
@@ -1883,6 +1978,7 @@ export default function SchedulePage() {
     setEditMode(false);
     setPendingMoves(new Map());
     setPendingIsFixedByOrderId(new Map());
+    setPendingIsPrioritizedByOrderId(new Map());
     setPendingPlaceByOrderId(new Map());
     setPendingSplitByOrderId(new Map());
     setPendingSplitPlacements(new Map());
@@ -1896,6 +1992,22 @@ export default function SchedulePage() {
       const baseline =
         data.timeline.find((t) => t.orderId === orderId)?.isFixed ?? false;
       setPendingIsFixedByOrderId((prev) => {
+        const n = new Map(prev);
+        if (next === baseline) n.delete(orderId);
+        else n.set(orderId, next);
+        return n;
+      });
+    },
+    [data],
+  );
+
+  const handleToggleOrderPrioritized = useCallback(
+    (orderId: string, next: boolean) => {
+      if (!data) return;
+      const baseline =
+        data.timeline.find((t) => t.orderId === orderId)?.isPrioritized ??
+        false;
+      setPendingIsPrioritizedByOrderId((prev) => {
         const n = new Map(prev);
         if (next === baseline) n.delete(orderId);
         else n.set(orderId, next);
@@ -1975,7 +2087,13 @@ export default function SchedulePage() {
       }
     }
 
-    if (cellMoveEntries.length === 0 && pendingIsFixedByOrderId.size === 0 && pendingPlaceByOrderId.size === 0 && pendingSplitPlacements.size === 0) {
+    if (
+      cellMoveEntries.length === 0 &&
+      pendingIsFixedByOrderId.size === 0 &&
+      pendingIsPrioritizedByOrderId.size === 0 &&
+      pendingPlaceByOrderId.size === 0 &&
+      pendingSplitPlacements.size === 0
+    ) {
       setEditMode(false);
       return;
     }
@@ -1985,12 +2103,23 @@ export default function SchedulePage() {
 
     const baselineFixed = (orderId: string) =>
       data.timeline.find((t) => t.orderId === orderId)?.isFixed ?? false;
+    const baselinePrioritized = (orderId: string) =>
+      data.timeline.find((t) => t.orderId === orderId)?.isPrioritized ?? false;
 
     const toUnlock: string[] = [];
     const toLock: string[] = [];
     for (const [orderId, next] of pendingIsFixedByOrderId) {
       if (next === false && baselineFixed(orderId)) toUnlock.push(orderId);
       else if (next === true && !baselineFixed(orderId)) toLock.push(orderId);
+    }
+
+    const toPrioritize: string[] = [];
+    const toUnprioritize: string[] = [];
+    for (const [orderId, next] of pendingIsPrioritizedByOrderId) {
+      if (next === true && !baselinePrioritized(orderId))
+        toPrioritize.push(orderId);
+      else if (next === false && baselinePrioritized(orderId))
+        toUnprioritize.push(orderId);
     }
 
     try {
@@ -2048,11 +2177,15 @@ export default function SchedulePage() {
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
           setSaveStatus("error");
-          const violations: { reason: string }[] =
-            Array.isArray(body.violations) ? body.violations : [];
-          const detail = violations.length > 0
-            ? violations.map((v) => v.reason).join("; ")
-            : (body.message ?? `HTTP ${res.status}`);
+          const violations: { reason: string }[] = Array.isArray(
+            body.violations,
+          )
+            ? body.violations
+            : [];
+          const detail =
+            violations.length > 0
+              ? violations.map((v) => v.reason).join("; ")
+              : (body.message ?? `HTTP ${res.status}`);
           setSaveErrorMsg(`Save failed: ${detail}`);
           setTimeout(() => setSaveStatus("idle"), 6000);
           return;
@@ -2089,11 +2222,31 @@ export default function SchedulePage() {
         }
       }
 
+      for (const id of [...toPrioritize, ...toUnprioritize]) {
+        const next = toPrioritize.includes(id);
+        const res = await fetch(`/api/orders/${id}`, {
+          method: "PUT",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isPrioritized: next }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setSaveStatus("error");
+          setSaveErrorMsg(
+            body.message ?? `Failed to update priority (${res.status})`,
+          );
+          setTimeout(() => setSaveStatus("idle"), 6000);
+          return;
+        }
+      }
+
       setSaveStatus("success");
       setSaveErrorMsg(movePartialWarning);
       setEditMode(false);
       setPendingMoves(new Map());
       setPendingIsFixedByOrderId(new Map());
+      setPendingIsPrioritizedByOrderId(new Map());
       setPendingPlaceByOrderId(new Map());
       setPendingSplitByOrderId(new Map());
       setPendingSplitPlacements(new Map());
@@ -2299,7 +2452,12 @@ export default function SchedulePage() {
     }
     if (!data) return null;
 
-    if (editMode && (pendingMoves.size > 0 || pendingPlaceByOrderId.size > 0 || pendingSplitPlacements.size > 0)) {
+    if (
+      editMode &&
+      (pendingMoves.size > 0 ||
+        pendingPlaceByOrderId.size > 0 ||
+        pendingSplitPlacements.size > 0)
+    ) {
       const movedTimeline: TimelineItem[] = [];
       for (const t of data.timeline) {
         const move = pendingMoves.get(t.assignmentId);
@@ -2329,6 +2487,7 @@ export default function SchedulePage() {
           assignedQuantity: order.quantity,
           status: "SCHEDULED",
           isFixed: false,
+          isPrioritized: order.isPrioritized,
         } as TimelineItem);
       }
       for (const [splitId, place] of pendingSplitPlacements) {
@@ -2346,11 +2505,12 @@ export default function SchedulePage() {
           assignedQuantity: place.quantity,
           status: "SCHEDULED",
           isFixed: false,
+          isPrioritized: order.isPrioritized,
         } as TimelineItem);
       }
-      const timelineWithFixed = applyPendingIsFixedByOrder(
-        movedTimeline,
-        pendingIsFixedByOrderId,
+      const timelineWithFixed = applyPendingIsPrioritizedByOrder(
+        applyPendingIsFixedByOrder(movedTimeline, pendingIsFixedByOrderId),
+        pendingIsPrioritizedByOrderId,
       );
       // Recompute daily capacities from moved timeline
       const usedByCell = new Map<string, number>();
@@ -2426,12 +2586,16 @@ export default function SchedulePage() {
       };
     }
 
-    if (editMode && pendingIsFixedByOrderId.size > 0) {
+    if (
+      editMode &&
+      (pendingIsFixedByOrderId.size > 0 ||
+        pendingIsPrioritizedByOrderId.size > 0)
+    ) {
       return {
         factories: data.factories,
-        timeline: applyPendingIsFixedByOrder(
-          data.timeline,
-          pendingIsFixedByOrderId,
+        timeline: applyPendingIsPrioritizedByOrder(
+          applyPendingIsFixedByOrder(data.timeline, pendingIsFixedByOrderId),
+          pendingIsPrioritizedByOrderId,
         ),
         dailyCapacities: data.dailyCapacities,
         conflicts: data.conflicts,
@@ -2446,7 +2610,16 @@ export default function SchedulePage() {
       conflicts: data.conflicts,
       diffs: data.diffs,
     };
-  }, [data, previewData, editMode, pendingMoves, pendingIsFixedByOrderId, pendingPlaceByOrderId, pendingSplitPlacements]);
+  }, [
+    data,
+    previewData,
+    editMode,
+    pendingMoves,
+    pendingIsFixedByOrderId,
+    pendingIsPrioritizedByOrderId,
+    pendingPlaceByOrderId,
+    pendingSplitPlacements,
+  ]);
   const handleCreateOrder = async (values: OrderEditorValues) => {
     if (!values.name) {
       throw new Error("Name is required.");
@@ -2501,6 +2674,9 @@ export default function SchedulePage() {
 
     if (values.dueDate) {
       body.dueDate = new Date(values.dueDate).toISOString();
+    }
+    if (values.isPrioritized !== undefined) {
+      body.isPrioritized = values.isPrioritized;
     }
 
     if (Object.keys(body).length === 0) {
@@ -2774,8 +2950,19 @@ export default function SchedulePage() {
   );
 
   const pendingEditCount = useMemo(
-    () => pendingMoves.size + pendingIsFixedByOrderId.size + pendingPlaceByOrderId.size + pendingSplitPlacements.size,
-    [pendingMoves, pendingIsFixedByOrderId, pendingPlaceByOrderId, pendingSplitPlacements],
+    () =>
+      pendingMoves.size +
+      pendingIsFixedByOrderId.size +
+      pendingIsPrioritizedByOrderId.size +
+      pendingPlaceByOrderId.size +
+      pendingSplitPlacements.size,
+    [
+      pendingMoves,
+      pendingIsFixedByOrderId,
+      pendingIsPrioritizedByOrderId,
+      pendingPlaceByOrderId,
+      pendingSplitPlacements,
+    ],
   );
 
   /** Timeline rows held in the edit-mode staging strip (off the Gantt grid). */
@@ -2786,14 +2973,23 @@ export default function SchedulePage() {
       if (m.kind !== "staging") continue;
       const t = data.timeline.find((x) => x.assignmentId === id);
       if (t) {
-        const p = pendingIsFixedByOrderId.get(t.orderId);
-        items.push(
-          p !== undefined && p !== t.isFixed ? { ...t, isFixed: p } : t,
-        );
+        const pFixed = pendingIsFixedByOrderId.get(t.orderId);
+        const pPrio = pendingIsPrioritizedByOrderId.get(t.orderId);
+        let merged = t;
+        if (pFixed !== undefined && pFixed !== t.isFixed)
+          merged = { ...merged, isFixed: pFixed };
+        if (pPrio !== undefined && pPrio !== t.isPrioritized)
+          merged = { ...merged, isPrioritized: pPrio };
+        items.push(merged);
       }
     }
     return items;
-  }, [data, pendingMoves, pendingIsFixedByOrderId]);
+  }, [
+    data,
+    pendingMoves,
+    pendingIsFixedByOrderId,
+    pendingIsPrioritizedByOrderId,
+  ]);
 
   // Selected cell detail
   const selectedCellData = useMemo(() => {
@@ -3307,6 +3503,12 @@ export default function SchedulePage() {
           </span>
           Fixed
         </span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-[10px] leading-none" aria-hidden>
+            👑
+          </span>
+          Prioritized
+        </span>
       </div>
 
       {/* Gantt body */}
@@ -3340,7 +3542,9 @@ export default function SchedulePage() {
                 previewLoading={previewLoading}
                 editMode={editMode}
                 pendingPlaceOrderIds={new Set(pendingPlaceByOrderId.keys())}
-                isDragging={draggingPendingOrder !== null || draggingAssignment !== null}
+                isDragging={
+                  draggingPendingOrder !== null || draggingAssignment !== null
+                }
                 pendingSplitByOrderId={pendingSplitByOrderId}
                 pendingSplitPlacements={pendingSplitPlacements}
                 onConfirmSplit={handleConfirmSplit}
@@ -3375,6 +3579,9 @@ export default function SchedulePage() {
                           isMoved={movedAssignmentIds.has(st.assignmentId)}
                           editMode={editMode}
                           onToggleOrderFixed={handleToggleOrderFixed}
+                          onToggleOrderPrioritized={
+                            handleToggleOrderPrioritized
+                          }
                         />
                       ))
                     )}
@@ -3545,6 +3752,9 @@ export default function SchedulePage() {
                                   date,
                                 )}
                                 onToggleOrderFixed={handleToggleOrderFixed}
+                                onToggleOrderPrioritized={
+                                  handleToggleOrderPrioritized
+                                }
                                 onClickItem={
                                   editMode
                                     ? (item) =>
@@ -3556,6 +3766,7 @@ export default function SchedulePage() {
                                           ),
                                           status: item.status,
                                           dueDate: item.dueDate,
+                                          isPrioritized: item.isPrioritized,
                                         })
                                     : undefined
                                 }
@@ -3644,6 +3855,7 @@ export default function SchedulePage() {
             editMode={editMode}
             onEditOrder={(order) => setEditOrder(order)}
             onToggleOrderFixed={handleToggleOrderFixed}
+            onToggleOrderPrioritized={handleToggleOrderPrioritized}
             onClose={() => setSelectedCell(null)}
           />
         </>
@@ -3676,7 +3888,9 @@ export default function SchedulePage() {
             status: editOrder.status,
             dueDate: editOrder.dueDate,
             type: editOrder.type,
+            isPrioritized: editOrder.isPrioritized,
           }}
+          canEditPrioritized={!isSales}
           onClose={() => setEditOrder(null)}
           onSubmit={handleUpdateOrder}
         />

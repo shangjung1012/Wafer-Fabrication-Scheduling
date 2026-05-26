@@ -19,6 +19,8 @@ export type TimelineItem = {
   orderName: string;
   /** Order-level flag; duplicated on each assignment row for convenience. */
   isFixed: boolean;
+  /** Order-level flag; duplicated on each assignment row for convenience. */
+  isPrioritized: boolean;
   factoryId: string;
   productionDate: string; // YYYY-MM-DD
   assignedQuantity: number;
@@ -63,6 +65,7 @@ export type PendingOrderInfo = {
   dueDate: string; // YYYY-MM-DD
   createdAt: string; // YYYY-MM-DD
   risk: OrderRisk;
+  isPrioritized: boolean;
 };
 
 export type SalesContext = {

@@ -29,12 +29,14 @@ export function DraggableAssignmentChip({
   isMoved,
   editMode = false,
   onToggleOrderFixed,
+  onToggleOrderPrioritized,
   onClickItem,
 }: {
   item: TimelineItem;
   isMoved: boolean;
   editMode?: boolean;
   onToggleOrderFixed?: (orderId: string, next: boolean) => void;
+  onToggleOrderPrioritized?: (orderId: string, next: boolean) => void;
   onClickItem?: (item: TimelineItem) => void;
 }) {
   const isLockedByStatus = item.status !== "SCHEDULED";
@@ -56,6 +58,8 @@ export function DraggableAssignmentChip({
 
   const showFixedToggle =
     editMode && item.status === "SCHEDULED" && onToggleOrderFixed;
+  const showPrioritizedToggle =
+    editMode && item.status === "SCHEDULED" && onToggleOrderPrioritized;
 
   if (isLockedByStatus) {
     return (
@@ -65,7 +69,8 @@ export function DraggableAssignmentChip({
         title={`${item.orderName} · qty ${item.assignedQuantity} · ${item.status} (locked)`}
       >
         <span className="font-semibold truncate block max-w-[64px]">
-          🔒 {item.orderName}
+          🔒 {item.isPrioritized ? "👑 " : ""}
+          {item.orderName}
         </span>
         <span className="text-[8px] opacity-70">
           ×{item.assignedQuantity} · {item.status}
@@ -96,26 +101,52 @@ export function DraggableAssignmentChip({
     >
       <span className="font-semibold truncate block max-w-[64px]">
         {isFixed ? "🔒 " : ""}
+        {item.isPrioritized ? "👑 " : ""}
         {item.orderName}
       </span>
       <span className="text-[8px] opacity-70 block">
         ×{item.assignedQuantity}
         {isFixed ? " · SCHEDULED" : null}
       </span>
-      {showFixedToggle && (
-        <label
-          className="mt-0.5 flex items-center gap-0.5 pointer-events-auto"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            type="checkbox"
-            checked={isFixed}
-            onChange={(e) => onToggleOrderFixed(item.orderId, e.target.checked)}
-            className="h-2.5 w-2.5 rounded border-gray-400 shrink-0"
-          />
-          <span className="text-[7px] text-gray-700 leading-none">Lock</span>
-        </label>
+      {(showFixedToggle || showPrioritizedToggle) && (
+        <div className="mt-0.5 flex items-center gap-1.5 pointer-events-auto">
+          {showFixedToggle && (
+            <label
+              className="flex items-center gap-0.5"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={isFixed}
+                onChange={(e) =>
+                  onToggleOrderFixed(item.orderId, e.target.checked)
+                }
+                className="h-2.5 w-2.5 rounded border-gray-400 shrink-0"
+              />
+              <span className="text-[7px] text-gray-700 leading-none">
+                Lock
+              </span>
+            </label>
+          )}
+          {showPrioritizedToggle && (
+            <label
+              className="flex items-center gap-0.5"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={item.isPrioritized}
+                onChange={(e) =>
+                  onToggleOrderPrioritized(item.orderId, e.target.checked)
+                }
+                className="h-2.5 w-2.5 rounded border-gray-400 shrink-0"
+              />
+              <span className="text-[7px] text-amber-600 leading-none">👑</span>
+            </label>
+          )}
+        </div>
       )}
     </div>
   );
