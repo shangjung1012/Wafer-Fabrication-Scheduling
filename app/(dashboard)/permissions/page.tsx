@@ -2,11 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { Mail, RefreshCw, RotateCw, ShieldAlert, UserPlus } from "lucide-react";
+import {
+  LogOut,
+  Mail,
+  RefreshCw,
+  RotateCw,
+  ShieldAlert,
+  UserPlus,
+  Users,
+} from "lucide-react";
 
-import { type ClientAuthSession } from "@/modules/auth/client-session";
+import {
+  logoutClientAuthSession,
+  type ClientAuthSession,
+} from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 
 type Role = ClientAuthSession["user"]["role"];
@@ -123,9 +135,10 @@ export default function PermissionsPage() {
   );
   const [textFilter, setTextFilter] = useState("");
   const [loading, setLoading] = useState<
-    "list" | "invite" | `resend:${string}` | null
+    "list" | "invite" | `resend:${string}` | "logout" | null
   >(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [apiResult, setApiResult] = useState<ApiResult | null>(null);
 
   const isSuperAdmin = session?.user.role === "SUPERADMIN";
   const inviteGroup = form.group.trim() || session?.user.group || "";
@@ -153,6 +166,7 @@ export default function PermissionsPage() {
           : "/api/users";
         const response = await apiFetch(url);
         const result = await parseResponse(response);
+        setApiResult(result);
         if (!response.ok) {
           setMessage(`Unable to load users (${result.status})`);
           return;
@@ -179,12 +193,19 @@ export default function PermissionsPage() {
     return () => window.clearTimeout(timer);
   }, [loadUsers, router, session]);
 
+  const handleLogout = async () => {
+    setLoading("logout");
+    await logoutClientAuthSession();
+    router.replace("/login");
+  };
+
   const handleInvite = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!isSuperAdmin) return;
 
     setLoading("invite");
     setMessage(null);
+    setApiResult(null);
 
     try {
       const response = await apiFetch("/api/users", {
@@ -192,6 +213,7 @@ export default function PermissionsPage() {
         body: JSON.stringify({ ...form, group: inviteGroup }),
       });
       const result = await parseResponse(response);
+      setApiResult(result);
       if (!response.ok) {
         setMessage(`Invitation failed (${result.status})`);
         return;
@@ -241,6 +263,7 @@ export default function PermissionsPage() {
 
     setLoading(`resend:${user.id}`);
     setMessage(null);
+    setApiResult(null);
 
     try {
       const response = await apiFetch(
@@ -248,6 +271,7 @@ export default function PermissionsPage() {
         { method: "POST" },
       );
       const result = await parseResponse(response);
+      setApiResult(result);
       if (!response.ok) {
         setMessage(`Resend failed (${result.status})`);
         return;
@@ -607,6 +631,43 @@ const topBarStyle: React.CSSProperties = {
   marginBottom: 18,
 };
 
+const navStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const navLinkStyle: React.CSSProperties = {
+  border: "1px solid #cbd5e1",
+  borderRadius: 6,
+  padding: "7px 11px",
+  color: "#1e293b",
+  background: "#fff",
+  textDecoration: "none",
+  fontSize: 13,
+  fontWeight: 650,
+};
+
+const activeNavLinkStyle: React.CSSProperties = {
+  borderColor: "#93c5fd",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+};
+
+const sessionBarStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  border: "1px solid #dbe3ef",
+  background: "#f1f5f9",
+  borderRadius: 8,
+  padding: 12,
+  marginBottom: 16,
+};
+
 const panelStyle: React.CSSProperties = {
   border: "1px solid #dbe3ef",
   borderRadius: 8,
@@ -761,6 +822,18 @@ const messageStyle: React.CSSProperties = {
   margin: "0 0 16px",
   color: "#1e293b",
   fontSize: 13,
+};
+
+const resultStyle: React.CSSProperties = {
+  border: "1px solid #dbe3ef",
+  background: "#f1f5f9",
+  borderRadius: 8,
+  padding: 12,
+  margin: 0,
+  color: "#1e293b",
+  fontSize: 12,
+  overflowX: "auto",
+  maxHeight: 260,
 };
 
 const mutedTextStyle: React.CSSProperties = {
