@@ -54,12 +54,14 @@ export function SalesOrdersSection({
   onEdit,
   onCreate,
   onFlag,
+  flaggedOrderIds,
 }: {
   orders: OrderRow[];
   scheduleByOrderId: Map<string, string>;
   onEdit: (order: OrderRow) => void;
   onCreate: () => void;
   onFlag?: (order: OrderRow) => void;
+  flaggedOrderIds?: Set<string>;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -292,15 +294,21 @@ export function SalesOrdersSection({
                             Edit
                           </button>
                         )}
-                        {canEdit && onFlag && (
-                          <button
-                            type="button"
-                            onClick={() => onFlag(order)}
-                            className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-semibold text-red-600 hover:bg-red-100"
-                          >
-                            Flag
-                          </button>
-                        )}
+                        {canEdit &&
+                          onFlag &&
+                          (flaggedOrderIds?.has(order.id) ? (
+                            <span className="rounded border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold text-orange-600">
+                              Flagged
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => onFlag(order)}
+                              className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-semibold text-red-600 hover:bg-red-100"
+                            >
+                              Flag
+                            </button>
+                          ))}
                       </div>
                     </td>
                   </tr>
