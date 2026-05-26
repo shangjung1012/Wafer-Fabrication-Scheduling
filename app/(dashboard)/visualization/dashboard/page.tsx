@@ -281,11 +281,25 @@ export default function DashboardPage() {
         const body = await res.json().catch(() => ({}) as TimelineResponse);
         return body as TimelineResponse;
       }),
+      apiFetch("/api/conflict-issues").then(async (res) => {
+        const body = await res.json().catch(() => []);
+        return Array.isArray(body) ? body : [];
+      }),
     ])
-      .then(([ordersRes, timelineRes]) => {
+      .then(([ordersRes, timelineRes, issuesRes]) => {
         if (cancelled) return;
         setOrders(ordersRes);
         setTimelineData(timelineRes);
+        const flagged = new Set<string>(
+          (issuesRes as { orderId: string; status: string; title: string }[])
+            .filter(
+              (i) =>
+                (i.status === "OPEN" || i.status === "IN_DISCUSSION") &&
+                i.title.startsWith("Cancellation Request"),
+            )
+            .map((i) => i.orderId),
+        );
+        setFlaggedOrderIds(flagged);
         setLoading(false);
       })
       .catch((err) => {
@@ -492,7 +506,6 @@ export default function DashboardPage() {
         type: "success",
         message: "Cancellation request submitted. Admins have been notified.",
       });
-      setFlaggedOrderIds((prev) => new Set(prev).add(order.id));
       setRefreshKey((v) => v + 1);
     }
     setTimeout(() => setFlagBanner(null), 5000);
