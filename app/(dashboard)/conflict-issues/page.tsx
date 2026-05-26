@@ -209,7 +209,7 @@ export default function ConflictIssuesPage() {
           href="/conflict-issues"
           style={{ ...navLinkStyle, background: "#dbeafe", fontWeight: 700 }}
         >
-          Conflicts
+          Issues
         </Link>
         <a href="/visualization" style={navLinkStyle}>
           Visualization
@@ -333,6 +333,7 @@ export default function ConflictIssuesPage() {
                 display: "block",
                 padding: "14px 16px",
                 borderTop: i > 0 ? "1px solid #f1f5f9" : "none",
+                borderLeft: `4px solid ${issue.title.startsWith("Cancellation Request") ? "#f87171" : "#fbbf24"}`,
                 textDecoration: "none",
                 color: "inherit",
                 transition: "background 0.1s",
@@ -381,6 +382,31 @@ export default function ConflictIssuesPage() {
                       }}
                     >
                       {issue.title}
+                    </span>
+                    <span
+                      style={{
+                        padding: "1px 6px",
+                        borderRadius: 99,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                        border: "1px solid",
+                        ...(issue.title.startsWith("Cancellation Request")
+                          ? {
+                              background: "#fff1f2",
+                              color: "#dc2626",
+                              borderColor: "#fecaca",
+                            }
+                          : {
+                              background: "#fffbeb",
+                              color: "#b45309",
+                              borderColor: "#fde68a",
+                            }),
+                      }}
+                    >
+                      {issue.title.startsWith("Cancellation Request")
+                        ? "Cancel"
+                        : "Conflict"}
                     </span>
                     <StatusBadge status={issue.status} />
                   </div>
