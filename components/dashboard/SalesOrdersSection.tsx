@@ -53,11 +53,13 @@ export function SalesOrdersSection({
   scheduleByOrderId,
   onEdit,
   onCreate,
+  onFlag,
 }: {
   orders: OrderRow[];
   scheduleByOrderId: Map<string, string>;
   onEdit: (order: OrderRow) => void;
   onCreate: () => void;
+  onFlag?: (order: OrderRow) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -280,15 +282,26 @@ export function SalesOrdersSection({
                       {scheduleDate ? formatDateValue(scheduleDate) : "—"}
                     </td>
                     <td className="border-b border-gray-100 px-4 py-3">
-                      {canEdit && (
-                        <button
-                          type="button"
-                          onClick={() => onEdit(order)}
-                          className="rounded border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-600 hover:text-gray-900"
-                        >
-                          Edit
-                        </button>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => onEdit(order)}
+                            className="rounded border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-600 hover:text-gray-900"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {canEdit && onFlag && (
+                          <button
+                            type="button"
+                            onClick={() => onFlag(order)}
+                            className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-semibold text-red-600 hover:bg-red-100"
+                          >
+                            Flag
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

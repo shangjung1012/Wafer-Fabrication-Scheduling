@@ -251,6 +251,10 @@ export default function DashboardPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorValues | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [flagBanner, setFlagBanner] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const isSales = session?.user.role === "SALES";
   const isAdmin =
@@ -468,6 +472,28 @@ export default function DashboardPage() {
     setRefreshKey((value) => value + 1);
   };
 
+  const handleFlagOrder = async (order: OrderRow) => {
+    const res = await apiFetch(`/api/orders/${order.id}/cancel-request`, {
+      method: "POST",
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setFlagBanner({
+        type: "error",
+        message:
+          (body as { error?: string }).error ??
+          "Failed to submit cancellation request.",
+      });
+    } else {
+      setFlagBanner({
+        type: "success",
+        message: "Cancellation request submitted. Admins have been notified.",
+      });
+      setRefreshKey((v) => v + 1);
+    }
+    setTimeout(() => setFlagBanner(null), 5000);
+  };
+
   if (session === undefined || loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">
@@ -491,6 +517,7 @@ export default function DashboardPage() {
           })
         }
         onCreate={() => setCreateOpen(true)}
+        onFlag={(order) => void handleFlagOrder(order)}
       />
     ) : (
       <AdminPendingSection
@@ -548,6 +575,18 @@ export default function DashboardPage() {
           onClose={() => setEditOrder(null)}
           onSubmit={handleUpdateOrder}
         />
+      )}
+
+      {flagBanner && (
+        <div
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-lg border px-4 py-3 text-sm font-medium shadow-lg ${
+            flagBanner.type === "success"
+              ? "border-green-200 bg-green-50 text-green-800"
+              : "border-red-200 bg-red-50 text-red-800"
+          }`}
+        >
+          {flagBanner.message}
+        </div>
       )}
     </>
   );
