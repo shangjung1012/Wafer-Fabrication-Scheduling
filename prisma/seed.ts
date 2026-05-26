@@ -510,12 +510,13 @@ async function main() {
   const capacities = buildDailyCapacities(factories, assignments);
 
   await cleanupStaleState();
+  // Seed system configs FIRST so partial crashes don't trigger real-time cron jobs
+  await seedSystemAndConfigs();
   await seedUsers(users);
   await seedFactories(factories);
   await seedOrders(orders);
   await seedAssignments(assignments);
   await seedDailyCapacities(capacities);
-  await seedSystemAndConfigs();
 
   console.log("");
   console.log("✅ Seed complete.");
