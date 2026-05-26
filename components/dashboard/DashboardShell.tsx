@@ -47,7 +47,7 @@ export function DashboardShell({
                 href="/conflict-issues"
                 className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
               >
-                Conflicts
+                Issues
               </Link>
               <Link
                 href="/visualization"

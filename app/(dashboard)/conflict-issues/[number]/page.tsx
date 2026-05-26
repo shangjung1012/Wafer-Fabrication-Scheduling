@@ -867,6 +867,7 @@ function Sidebar({
         "ORDER",
         <>
           {metaRow("Name", issue.orderName)}
+          {metaRow("ID", issue.orderId)}
           {metaRow("Type", issue.orderType)}
           {metaRow("Quantity", issue.orderQuantity.toLocaleString())}
           {metaRow("Due Date", formatDate(issue.orderDueDate))}
