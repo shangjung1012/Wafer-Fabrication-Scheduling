@@ -3,11 +3,9 @@
 import { useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  logoutClientAuthSession,
-  type ClientAuthSession,
-} from "@/modules/auth/client-session";
+import { type ClientAuthSession } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
+import { AppHeader } from "@/components/dashboard/AppHeader";
 
 type Role = ClientAuthSession["user"]["role"];
 
@@ -125,25 +123,6 @@ type SuggestionResult = {
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
-
-const pageShellStyle: React.CSSProperties = {
-  maxWidth: 1100,
-  margin: "0 auto",
-  padding: "20px 16px",
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  color: "#0f172a",
-};
-
-const navLinkStyle: React.CSSProperties = {
-  padding: "4px 10px",
-  background: "#f1f5f9",
-  borderRadius: 6,
-  fontSize: 13,
-  color: "#1e40af",
-  textDecoration: "none",
-  fontWeight: 500,
-};
 
 const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   OPEN: { bg: "#dcfce7", color: "#166534" },
@@ -1256,291 +1235,204 @@ export default function ConflictIssueDetailPage({
       .finally(() => setLoading(false));
   }, [session, issueNumber]);
 
-  const handleLogout = async () => {
-    await apiFetch("/api/auth/logout", { method: "POST" });
-    logoutClientAuthSession();
-    router.push("/login");
-  };
-
   if (!session) {
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>
-        Loading…
-      </div>
+      <div className="p-10 text-center text-sm text-gray-400">Loading…</div>
     );
   }
 
   return (
-    <div style={pageShellStyle}>
-      {/* Header */}
-      <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-        WOMS — Conflict Issues
-      </h1>
+    <div className="flex flex-col min-h-screen bg-gray-50 font-sans">
+      <AppHeader title="Order Issues" subtitle="Issue detail" />
+      <div className="max-w-5xl mx-auto w-full px-4 py-5">
+        {/* Breadcrumb */}
+        <div style={{ marginBottom: 16, fontSize: 13, color: "#64748b" }}>
+          <Link
+            href="/conflict-issues"
+            style={{ color: "#1d4ed8", textDecoration: "none" }}
+          >
+            Conflict Issues
+          </Link>
+          {" / "}
+          <span style={{ color: "#0f172a" }}>#{issueNumber}</span>
+        </div>
 
-      {/* Nav */}
-      <nav
-        aria-label="Dashboard navigation"
-        style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          margin: "12px 0 18px",
-        }}
-      >
-        <a href="/orders" style={navLinkStyle}>
-          Orders
-        </a>
-        <Link
-          href="/conflict-issues"
-          style={{ ...navLinkStyle, background: "#dbeafe", fontWeight: 700 }}
-        >
-          Conflicts
-        </Link>
-        <a href="/visualization" style={navLinkStyle}>
-          Visualization
-        </a>
-        <a href="/users" style={navLinkStyle}>
-          Users
-        </a>
-        <a href="/profile" style={navLinkStyle}>
-          Profile
-        </a>
-      </nav>
+        {loading && <p style={{ color: "#64748b" }}>Loading…</p>}
+        {error && <p style={{ color: "#dc2626" }}>{error}</p>}
 
-      {/* Session bar */}
-      <div
-        style={{
-          marginBottom: 20,
-          padding: 12,
-          background: "#f0f4ff",
-          color: "#1e293b",
-          borderRadius: 8,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Signed in as:</span>
-        <strong style={{ fontSize: 13 }}>{session.user.username}</strong>
-        <span style={{ fontSize: 12, color: "#334155" }}>
-          ({session.user.email})
-        </span>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            padding: "2px 8px",
-            borderRadius: 99,
-            background: "#dbeafe",
-            color: "#1e40af",
-          }}
-        >
-          {role}
-        </span>
-        <button
-          type="button"
-          onClick={handleLogout}
-          style={{
-            marginLeft: "auto",
-            padding: "4px 10px",
-            background: "#ef4444",
-            color: "#fff",
-            border: "none",
-            borderRadius: 6,
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 600,
-          }}
-        >
-          Sign out
-        </button>
-      </div>
-
-      {/* Breadcrumb */}
-      <div style={{ marginBottom: 16, fontSize: 13, color: "#64748b" }}>
-        <Link
-          href="/conflict-issues"
-          style={{ color: "#1d4ed8", textDecoration: "none" }}
-        >
-          Conflict Issues
-        </Link>
-        {" / "}
-        <span style={{ color: "#0f172a" }}>#{issueNumber}</span>
-      </div>
-
-      {loading && <p style={{ color: "#64748b" }}>Loading…</p>}
-      {error && <p style={{ color: "#dc2626" }}>{error}</p>}
-
-      {issue && (
-        <>
-          {/* Issue header */}
-          <div style={{ marginBottom: 20 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <h2
+        {issue && (
+          <>
+            {/* Issue header */}
+            <div style={{ marginBottom: 20 }}>
+              <div
                 style={{
-                  margin: 0,
-                  fontSize: 22,
-                  fontWeight: 700,
-                  color: "#0f172a",
-                  flex: 1,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 10,
+                  flexWrap: "wrap",
                 }}
               >
-                <span style={{ color: "#64748b", fontWeight: 500 }}>
-                  #{issue.number}
-                </span>{" "}
-                {issue.title}
-              </h2>
-              <StatusBadge status={issue.status} />
-            </div>
-            <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748b" }}>
-              Opened by{" "}
-              <strong>
-                @{issue.createdByUsername ?? issue.createdById.slice(0, 8)}
-              </strong>
-              {" · "}
-              assigned to{" "}
-              <strong>@{issue.assigneeUsername ?? issue.assigneeEmail}</strong>
-              {" · "}
-              {timeAgo(issue.createdAt)}
-              {" · "}
-              {issue.commentCount} comment{issue.commentCount !== 1 ? "s" : ""}
-            </p>
-          </div>
-
-          {/* Two-column layout */}
-          <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
-            {/* Main column: timeline + reply */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Timeline */}
-              {issue.timeline.length === 0 && (
-                <p
+                <h2
                   style={{
-                    color: "#64748b",
-                    fontSize: 13,
-                    fontStyle: "italic",
+                    margin: 0,
+                    fontSize: 22,
+                    fontWeight: 700,
+                    color: "#0f172a",
+                    flex: 1,
                   }}
                 >
-                  No comments yet.
-                </p>
-              )}
-
-              {issue.timeline.map((item) => {
-                if (item.kind === "event") {
-                  return <EventRow key={item.id} event={item} />;
-                }
-
-                const comment = item as TimelineComment;
-                const rc = ROLE_COLOR[comment.authorRole] ?? {
-                  bg: "#f3f4f6",
-                  color: "#374151",
-                };
-                void rc;
-                const isOwn = comment.authorId === session.user.id;
-
-                return (
-                  <div
-                    key={comment.id}
-                    style={{
-                      border: "1px solid #dbe3ef",
-                      borderRadius: 8,
-                      marginBottom: 12,
-                      background: isOwn ? "#f8fafc" : "#fff",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {/* Comment header */}
-                    <div
-                      style={{
-                        padding: "8px 12px",
-                        background: "#f8fafc",
-                        borderBottom: "1px solid #e2e8f0",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <strong style={{ fontSize: 13, color: "#0f172a" }}>
-                        @{comment.authorUsername ?? comment.authorEmail}
-                      </strong>
-                      <RoleBadge role={comment.authorRole} />
-                      {isOwn && (
-                        <span style={{ fontSize: 11, color: "#64748b" }}>
-                          You
-                        </span>
-                      )}
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color: "#94a3b8",
-                          marginLeft: "auto",
-                        }}
-                      >
-                        {timeAgo(comment.createdAt)}
-                        {comment.editedAt && " (edited)"}
-                      </span>
-                    </div>
-
-                    {/* Comment body */}
-                    <div style={{ padding: "10px 12px" }}>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 13,
-                          color: "#1e293b",
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        {comment.body}
-                      </p>
-
-                      {/* Proposal card */}
-                      {comment.proposal && (
-                        <ProposalCard
-                          proposal={comment.proposal}
-                          commentId={comment.id}
-                          issueNumber={issue.number}
-                          currentUserId={session.user.id}
-                          commentAuthorId={comment.authorId}
-                          currentUserRole={role}
-                          issueStatus={issue.status}
-                          onAction={() => void fetchIssue()}
-                        />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Reply box */}
-              <div style={{ marginTop: 20 }}>
-                <ReplyBox
-                  issueNumber={issue.number}
-                  issueId={issue.id}
-                  orderUpdatedAt={issue.orderUpdatedAt}
-                  issueStatus={issue.status}
-                  onSubmit={() => void fetchIssue()}
-                />
+                  <span style={{ color: "#64748b", fontWeight: 500 }}>
+                    #{issue.number}
+                  </span>{" "}
+                  {issue.title}
+                </h2>
+                <StatusBadge status={issue.status} />
               </div>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748b" }}>
+                Opened by{" "}
+                <strong>
+                  @{issue.createdByUsername ?? issue.createdById.slice(0, 8)}
+                </strong>
+                {" · "}
+                assigned to{" "}
+                <strong>
+                  @{issue.assigneeUsername ?? issue.assigneeEmail}
+                </strong>
+                {" · "}
+                {timeAgo(issue.createdAt)}
+                {" · "}
+                {issue.commentCount} comment
+                {issue.commentCount !== 1 ? "s" : ""}
+              </p>
             </div>
 
-            {/* Sidebar */}
-            <Sidebar
-              issue={issue}
-              currentUserRole={role}
-              onAction={() => void fetchIssue()}
-            />
-          </div>
-        </>
-      )}
+            {/* Two-column layout */}
+            <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+              {/* Main column: timeline + reply */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {/* Timeline */}
+                {issue.timeline.length === 0 && (
+                  <p
+                    style={{
+                      color: "#64748b",
+                      fontSize: 13,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    No comments yet.
+                  </p>
+                )}
+
+                {issue.timeline.map((item) => {
+                  if (item.kind === "event") {
+                    return <EventRow key={item.id} event={item} />;
+                  }
+
+                  const comment = item as TimelineComment;
+                  const rc = ROLE_COLOR[comment.authorRole] ?? {
+                    bg: "#f3f4f6",
+                    color: "#374151",
+                  };
+                  void rc;
+                  const isOwn = comment.authorId === session.user.id;
+
+                  return (
+                    <div
+                      key={comment.id}
+                      style={{
+                        border: "1px solid #dbe3ef",
+                        borderRadius: 8,
+                        marginBottom: 12,
+                        background: isOwn ? "#f8fafc" : "#fff",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {/* Comment header */}
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          background: "#f8fafc",
+                          borderBottom: "1px solid #e2e8f0",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <strong style={{ fontSize: 13, color: "#0f172a" }}>
+                          @{comment.authorUsername ?? comment.authorEmail}
+                        </strong>
+                        <RoleBadge role={comment.authorRole} />
+                        {isOwn && (
+                          <span style={{ fontSize: 11, color: "#64748b" }}>
+                            You
+                          </span>
+                        )}
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "#94a3b8",
+                            marginLeft: "auto",
+                          }}
+                        >
+                          {timeAgo(comment.createdAt)}
+                          {comment.editedAt && " (edited)"}
+                        </span>
+                      </div>
+
+                      {/* Comment body */}
+                      <div style={{ padding: "10px 12px" }}>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 13,
+                            color: "#1e293b",
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {comment.body}
+                        </p>
+
+                        {/* Proposal card */}
+                        {comment.proposal && (
+                          <ProposalCard
+                            proposal={comment.proposal}
+                            commentId={comment.id}
+                            issueNumber={issue.number}
+                            currentUserId={session.user.id}
+                            commentAuthorId={comment.authorId}
+                            currentUserRole={role}
+                            issueStatus={issue.status}
+                            onAction={() => void fetchIssue()}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Reply box */}
+                <div style={{ marginTop: 20 }}>
+                  <ReplyBox
+                    issueNumber={issue.number}
+                    issueId={issue.id}
+                    orderUpdatedAt={issue.orderUpdatedAt}
+                    issueStatus={issue.status}
+                    onSubmit={() => void fetchIssue()}
+                  />
+                </div>
+              </div>
+
+              {/* Sidebar */}
+              <Sidebar
+                issue={issue}
+                currentUserRole={role}
+                onAction={() => void fetchIssue()}
+              />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
