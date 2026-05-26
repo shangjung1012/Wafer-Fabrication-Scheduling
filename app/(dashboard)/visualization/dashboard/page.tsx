@@ -299,7 +299,7 @@ export default function DashboardPage() {
             )
             .map((i) => i.orderId),
         );
-        setFlaggedOrderIds(flagged);
+        setFlaggedOrderIds((prev) => new Set([...prev, ...flagged]));
         setLoading(false);
       })
       .catch((err) => {
