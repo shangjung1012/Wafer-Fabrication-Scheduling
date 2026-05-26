@@ -506,6 +506,7 @@ export default function DashboardPage() {
         type: "success",
         message: "Cancellation request submitted. Admins have been notified.",
       });
+      setFlaggedOrderIds((prev) => new Set(prev).add(order.id));
       setRefreshKey((v) => v + 1);
     }
     setTimeout(() => setFlagBanner(null), 5000);
