@@ -407,7 +407,7 @@ describe("Greedy Best-Fit Strategy", () => {
         id: "C1",
         factoryId: "F1",
         date: addDays(TODAY, 1),
-        curCapacity: 100,
+        curCapacity: 0, // Should be 0 since DB reflects the remaining capacity
         maxCapacity: 100,
       },
     ];
@@ -596,9 +596,9 @@ describe("Greedy Best-Fit Strategy", () => {
     const assignedDate = result.newAssignments[0].productionDate;
 
     function toLocalString(d: Date) {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(d.getUTCDate()).padStart(2, "0");
       return `${year}-${month}-${day}`;
     }
 
@@ -740,6 +740,52 @@ describe("Greedy Best-Fit Strategy", () => {
     );
     expect(result.processedOrders.find((o) => o.id === "O2")?.status).toBe(
       OrderStatus.SCHEDULED,
+    );
+  });
+});
+
+describe("greedyBestFitStrategy - completionDate", () => {
+  it("should calculate completionDate as productionDate + productionDays", () => {
+    const orders: SchedulingOrderInput[] = [
+      {
+        id: "o1",
+        status: OrderStatus.PENDING,
+        dueDate: new Date("2026-06-01"),
+        quantity: 100,
+        createdAt: new Date(),
+        isFixed: false,
+        isPrioritized: false,
+        assignments: [],
+      },
+    ];
+    const factories: SchedulingFactoryInput[] = [
+      { id: "f1", maxCapacity: 1000 },
+    ];
+    const config: SchedulingConfig = {
+      startDate: new Date("2026-05-01"),
+      frozenDays: 0,
+      productionDays: 3,
+      bufferDays: 0,
+      reschedulePolicy: "GAP_FILLING",
+      algorithm: "GREEDY_BEST_FIT",
+      splittable: true,
+    };
+
+    const result = greedyBestFitStrategy.execute(
+      orders,
+      factories,
+      [],
+      config,
+      new Date("2026-05-01"),
+    );
+
+    expect(result.newAssignments.length).toBeGreaterThan(0);
+    const assignment = result.newAssignments[0];
+    const expectedCompletion = new Date(assignment.productionDate!);
+    expectedCompletion.setDate(expectedCompletion.getDate() + 3);
+
+    expect(assignment.completionDate!.getTime()).toBe(
+      expectedCompletion.getTime(),
     );
   });
 });

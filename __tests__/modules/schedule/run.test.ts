@@ -9,7 +9,13 @@ import * as core from "@/modules/schedule/core";
 
 vi.mock("@/modules/schedule/core", () => ({
   prepareSchedulingData: vi.fn(),
-  applyScheduleTransaction: vi.fn(),
+  _applyScheduleTransaction: vi.fn(),
+}));
+
+vi.mock("@/infra/redis/schedule-store", () => ({
+  withScheduleLock: vi.fn(async (type, cb) => {
+    return cb();
+  }),
 }));
 
 vi.mock("@/modules/schedule/strategy", () => ({
@@ -28,7 +34,7 @@ describe("Schedule Engine - Run", () => {
       orders: [
         {
           id: "O1",
-          status: "APPROVED",
+          status: "PENDING",
           dueDate: new Date(),
           quantity: 100,
           createdAt: new Date(),
@@ -65,6 +71,7 @@ describe("Schedule Engine - Run", () => {
       reschedulePolicy: "GLOBAL_OPTIMIZE",
       algorithm: "GREEDY_BEST_FIT",
       splittable: true,
+      targetOrderIds: ["O1", "O2"],
     };
     const currentDate = new Date();
     await runSchedule("Type A", dummyConfig, currentDate);
@@ -73,6 +80,7 @@ describe("Schedule Engine - Run", () => {
       "Type A",
       dummyConfig,
       currentDate,
+      true, // fetchAllPending = true
     );
     expect(greedyBestFitStrategy.execute).toHaveBeenCalledWith(
       mockData.orders,
@@ -80,11 +88,13 @@ describe("Schedule Engine - Run", () => {
       mockData.capacities,
       dummyConfig,
       currentDate,
+      undefined,
     );
-    expect(core.applyScheduleTransaction).toHaveBeenCalledWith(
+    expect(core._applyScheduleTransaction).toHaveBeenCalledWith(
       "Type A",
       dummyConfig,
       mockStrategyResult,
+      "system-user",
     );
   });
 });

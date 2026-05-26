@@ -19,16 +19,20 @@ import {
   updateDailyCapacityById,
 } from "@/infra/db/capacity-repository";
 import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
+import { withScheduleLock } from "@/infra/redis/schedule-store";
+import { calculateMinimumStartDate } from "@/modules/schedule/validation-utils";
 
 export async function prepareSchedulingData(
   type: string,
   config: SchedulingConfig,
   currentDate: Date,
+  fetchAllPending: boolean = false,
 ) {
   const orders = await findOrdersForScheduling(
     prisma,
     type,
     config.targetOrderIds,
+    fetchAllPending,
   );
   const factories = await findFactoriesWithCapacities(
     prisma,
@@ -36,11 +40,36 @@ export async function prepareSchedulingData(
     currentDate,
   );
 
+  // Calculate minimumStartDate = currentDate + 1 day + config.frozenDays (normalized to UTC midnight)
+  const minimumStartDate = calculateMinimumStartDate(
+    currentDate,
+    config.frozenDays,
+  );
+
+  // Auto-correct config.startDate if it's earlier than minimumStartDate
+  if (
+    !config.startDate ||
+    new Date(config.startDate).getTime() < minimumStartDate.getTime()
+  ) {
+    config.startDate = minimumStartDate;
+  } else {
+    // Normalize existing startDate to UTC midnight
+    config.startDate = new Date(
+      Date.UTC(
+        new Date(config.startDate).getUTCFullYear(),
+        new Date(config.startDate).getUTCMonth(),
+        new Date(config.startDate).getUTCDate(),
+      ),
+    );
+  }
+
   // In-memory reset: restore capacity used by SCHEDULED assignments
+  const dbCapacities: SchedulingCapacityInput[] = [];
   const capacities: SchedulingCapacityInput[] = [];
   for (const factory of factories) {
     if (factory.dailyCapacities) {
-      capacities.push(...factory.dailyCapacities);
+      dbCapacities.push(...factory.dailyCapacities.map((c) => ({ ...c })));
+      capacities.push(...factory.dailyCapacities.map((c) => ({ ...c })));
     }
   }
 
@@ -84,14 +113,15 @@ export async function prepareSchedulingData(
     }
   }
 
-  return { orders, factories, capacities };
+  return { orders, factories, capacities, dbCapacities };
 }
 
-export async function applyScheduleTransaction(
+export async function _applyScheduleTransaction(
   type: string,
   config: SchedulingConfig,
   strategyResult: StrategyResult,
-) {
+  operatorId: string = "system-user",
+): Promise<{ failedIds: string[] }> {
   const scheduledIds = strategyResult.processedOrders
     .filter((o) => o.status === OrderStatus.SCHEDULED)
     .map((o) => o.id);
@@ -124,7 +154,7 @@ export async function applyScheduleTransaction(
       }
     }
 
-    await applyScheduleOrdersUpdate(db, scheduledIds, failedIds);
+    await applyScheduleOrdersUpdate(db, scheduledIds, failedIds, operatorId);
 
     await createDailyCapacities(db, strategyResult.newCapacities);
 
@@ -133,5 +163,18 @@ export async function applyScheduleTransaction(
     }
 
     await createAssignments(db, strategyResult.newAssignments);
+  });
+
+  return { failedIds };
+}
+
+export async function applyScheduleTransaction(
+  type: string,
+  config: SchedulingConfig,
+  strategyResult: StrategyResult,
+  operatorId: string = "system-user",
+): Promise<{ failedIds: string[] }> {
+  return withScheduleLock(type, async () => {
+    return _applyScheduleTransaction(type, config, strategyResult, operatorId);
   });
 }

@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,6 +14,7 @@ import {
   eachDayOfInterval,
   parseISO,
   differenceInDays,
+  addDays,
 } from "date-fns";
 import {
   DndContext,
@@ -44,8 +51,29 @@ function toDateStr(d: Date) {
   return format(d, "yyyy-MM-dd");
 }
 
+/** Overlay pending order-level `isFixed` edits onto timeline rows (edit mode). */
+function applyPendingIsFixedByOrder(
+  timeline: TimelineItem[],
+  pending: Map<string, boolean>,
+): TimelineItem[] {
+  if (pending.size === 0) return timeline;
+  return timeline.map((t) => {
+    const p = pending.get(t.orderId);
+    if (p === undefined) return t;
+    if (t.isFixed === p) return t;
+    return { ...t, isFixed: p };
+  });
+}
+
+/** Default window: 10 calendar days starting at anchor (anchor + 9 inclusive). */
+function defaultTimelineRange(anchorDayYmd: string) {
+  const startDate = anchorDayYmd.slice(0, 10);
+  const endDate = toDateStr(addDays(parseISO(startDate), 9));
+  return { startDate, endDate };
+}
+
 function dateInputToIso(value: string) {
-  return new Date(`${value}T00:00:00`).toISOString();
+  return `${value}T00:00:00.000Z`;
 }
 
 function toDateInputValue(value?: string) {
@@ -103,26 +131,32 @@ function convertNewScheduleToPreview(args: {
 
   const toIsoDate = (d: string | Date | undefined): string => {
     if (!d) return "";
-    if (d instanceof Date) return format(d, "yyyy-MM-dd");
-    // Accept both ISO and already-yyyy-MM-dd strings.
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-    try {
-      return format(parseISO(d), "yyyy-MM-dd");
-    } catch {
-      return String(d).slice(0, 10);
+    if (typeof d === "string") {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      if (d.includes("T")) return d.split("T")[0];
+      return d.slice(0, 10);
     }
+    if (d instanceof Date) {
+      return format(d, "yyyy-MM-dd");
+    }
+    return String(d).slice(0, 10);
   };
 
   // Build TimelineItem[] from every assignment on every order in newSchedule.
   const timeline: TimelineItem[] = [];
   let synthAssignmentSeq = 0;
+  const previewedOrderIds = new Set(newSchedule.map((o) => o.id));
   for (const order of newSchedule) {
+    const orderIsFixed = Boolean(
+      (order as { isFixed?: boolean }).isFixed === true,
+    );
     for (const a of order.assignments ?? []) {
       if (!a.factoryId || !a.productionDate) continue;
       timeline.push({
         assignmentId: a.id ?? `preview-${order.id}-${synthAssignmentSeq++}`,
         orderId: a.orderId ?? order.id,
         orderName: order.name ?? order.id,
+        isFixed: orderIsFixed,
         factoryId: a.factoryId,
         productionDate: toIsoDate(a.productionDate),
         assignedQuantity: a.assignedQuantity ?? 0,
@@ -131,6 +165,15 @@ function convertNewScheduleToPreview(args: {
         applicantId: order.applicantId ?? "",
         lastModifiedById: order.lastModifiedById ?? null,
       });
+    }
+  }
+
+  // When previewing a subset (targetOrderIds), the API only returns those orders.
+  // Carry over the baseline timeline items for everything else so existing
+  // scheduled orders stay visible on the preview.
+  for (const t of baseTimeline?.timeline ?? []) {
+    if (!previewedOrderIds.has(t.orderId)) {
+      timeline.push(t);
     }
   }
 
@@ -344,6 +387,27 @@ function getCellStyle(cell: CellData): {
       fillRatio: Math.min(ratio, 1),
     };
   }
+
+  // Whole-cell tone from assignment statuses (no conflict on this cell).
+  const statuses = cell.items.map((i) => i.status);
+  const anyInProduction = statuses.some((s) => s === "IN_PRODUCTION");
+  const allCompleted =
+    statuses.length > 0 && statuses.every((s) => s === "COMPLETED");
+  if (anyInProduction) {
+    return {
+      bg: "bg-emerald-50",
+      barColor: "bg-emerald-500",
+      fillRatio: Math.min(ratio, 1),
+    };
+  }
+  if (allCompleted) {
+    return {
+      bg: "grayscale bg-neutral-100",
+      barColor: "bg-neutral-500",
+      fillRatio: Math.min(ratio, 1),
+    };
+  }
+
   if (ratio > 0.8) {
     return { bg: "bg-yellow-50", barColor: "bg-yellow-400", fillRatio: ratio };
   }
@@ -356,8 +420,8 @@ function getCellStyle(cell: CellData): {
 
 const STATUS_STYLE: Record<string, string> = {
   SCHEDULED: "bg-blue-100 text-blue-700",
-  IN_PRODUCTION: "bg-green-100 text-green-700",
-  COMPLETED: "bg-gray-100 text-gray-600",
+  IN_PRODUCTION: "bg-emerald-100 text-emerald-900",
+  COMPLETED: "bg-neutral-200 text-neutral-600 grayscale",
   CANCELLED: "bg-red-100 text-red-600",
 };
 
@@ -371,6 +435,26 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/** Full-card surface for an assignment row in the detail panel. */
+function detailOrderCardClass(
+  item: TimelineItem,
+  hasPreviewDiff: boolean,
+): string {
+  if (hasPreviewDiff) {
+    return "border-purple-300 bg-purple-50/70 hover:border-purple-400";
+  }
+  if (item.status === "IN_PRODUCTION") {
+    return "border-emerald-300 bg-emerald-50/95 hover:border-emerald-500";
+  }
+  if (item.status === "COMPLETED") {
+    return "grayscale border-neutral-300 bg-neutral-100/95 hover:border-neutral-400";
+  }
+  if (item.status === "CANCELLED") {
+    return "border-rose-200 bg-rose-50/95 hover:border-rose-300";
+  }
+  return "border-slate-200 bg-slate-50/80 hover:border-slate-300";
+}
+
 // ---------------------------------------------------------------------------
 // Detail panel
 // ---------------------------------------------------------------------------
@@ -381,7 +465,9 @@ function DetailPanel({
   diffByOrderId,
   myOrderIds,
   etaByOrderId,
+  editMode,
   onEditOrder,
+  onToggleOrderFixed,
   onClose,
 }: {
   cell: CellData;
@@ -389,7 +475,10 @@ function DetailPanel({
   diffByOrderId: Map<string, DiffEntry>;
   myOrderIds?: string[];
   etaByOrderId?: Map<string, string>;
+  /** When true, show per-order lock (isFixed) toggle for SCHEDULED rows. */
+  editMode?: boolean;
   onEditOrder: (order: OrderEditorValues) => void;
+  onToggleOrderFixed?: (orderId: string, next: boolean) => void;
   onClose: () => void;
 }) {
   const myOrderIdSet = new Set(myOrderIds ?? []);
@@ -479,10 +568,13 @@ function DetailPanel({
           return (
             <div
               key={item.orderId}
-              className={`border rounded-lg p-3 transition-colors ${diff ? "border-purple-200 bg-purple-50/40 hover:border-purple-300" : "border-gray-100 hover:border-gray-200"}`}
+              className={`border rounded-lg p-3 transition-colors ${detailOrderCardClass(item, Boolean(diff))}`}
             >
               <div className="flex items-start justify-between gap-2 mb-1.5">
-                <span className="text-sm font-medium text-gray-900">
+                <span
+                  className={`text-sm font-medium ${item.status === "COMPLETED" ? "text-neutral-800" : "text-gray-900"}`}
+                >
+                  {item.status === "SCHEDULED" && item.isFixed ? "🔒 " : ""}
                   {item.orderName}
                 </span>
                 <div className="flex items-center gap-2">
@@ -537,6 +629,27 @@ function DetailPanel({
                     {item.lastModifiedById ?? "—"}
                   </span>
                 </div>
+                {editMode &&
+                  item.status === "SCHEDULED" &&
+                  onToggleOrderFixed && (
+                    <label
+                      className="flex items-center justify-between gap-2 pt-2 mt-1 border-t border-gray-100 cursor-pointer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-[10px] text-gray-600 leading-snug">
+                        Lock schedule (excluded from auto-reschedule; not
+                        draggable)
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={item.isFixed}
+                        onChange={(e) =>
+                          onToggleOrderFixed(item.orderId, e.target.checked)
+                        }
+                        className="h-3.5 w-3.5 rounded border-gray-300 shrink-0"
+                      />
+                    </label>
+                  )}
               </div>
               {diff && (
                 <div className="mt-2 pt-2 border-t border-purple-100">
@@ -630,15 +743,57 @@ function PendingSidebar({
   today,
   onEditOrder,
   onCreate,
+  selectedOrderIds,
+  setSelectedOrderIds,
+  onPreviewSelected,
+  previewLoading = false,
 }: {
   orders: SidebarOrder[];
   today: string;
   onEditOrder: (order: OrderEditorValues) => void;
   onCreate?: () => void;
+  selectedOrderIds?: Set<string>;
+  setSelectedOrderIds?: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onPreviewSelected?: (targetOrderIds: string[]) => void;
+  previewLoading?: boolean;
 }) {
   const conflictList = orders.filter((o) => o.status === "CONFLICT");
+  const multiSelectEnabled = Boolean(setSelectedOrderIds && onPreviewSelected);
+  const selected = selectedOrderIds ?? new Set<string>();
   const pending = orders.filter((o) => o.status === "PENDING");
-  const approved = orders.filter((o) => o.status === "APPROVED");
+  const pendingIds = pending.map((o) => o.id);
+  const allSelected =
+    pendingIds.length > 0 && pendingIds.every((id) => selected.has(id));
+  const someSelected =
+    !allSelected && pendingIds.some((id) => selected.has(id));
+  const selectedCount = selected.size;
+
+  const toggleOne = (id: string) => {
+    if (!setSelectedOrderIds) return;
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (!setSelectedOrderIds) return;
+    setSelectedOrderIds((prev) => {
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const id of pendingIds) next.delete(id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const id of pendingIds) next.add(id);
+      return next;
+    });
+  };
 
   const riskDot = (risk: OrderRisk) => {
     if (risk === "OVERDUE")
@@ -668,9 +823,24 @@ function PendingSidebar({
         className={`bg-white rounded-lg p-3 text-xs space-y-1 shadow-sm ${borderColor(o.risk)}`}
       >
         <div className="flex items-start justify-between gap-1">
-          <span className="font-medium text-gray-900 leading-tight">
-            {o.name}
-          </span>
+          {multiSelectEnabled ? (
+            <label className="flex items-start gap-1.5 cursor-pointer flex-1 min-w-0">
+              <input
+                type="checkbox"
+                checked={selected.has(o.id)}
+                onChange={() => toggleOne(o.id)}
+                className="mt-0.5 h-3 w-3 shrink-0 cursor-pointer accent-indigo-600"
+                aria-label={`Select order ${o.name}`}
+              />
+              <span className="font-medium text-gray-900 leading-tight">
+                {o.name}
+              </span>
+            </label>
+          ) : (
+            <span className="font-medium text-gray-900 leading-tight flex-1 min-w-0">
+              {o.name}
+            </span>
+          )}
           {riskDot(o.risk)}
         </div>
         <div className="flex justify-between text-gray-500">
@@ -736,6 +906,39 @@ function PendingSidebar({
           )}
         </div>
       </div>
+      {multiSelectEnabled && pending.length > 0 && (
+        <div className="px-3 py-2 border-b border-gray-200 bg-white space-y-2">
+          <button
+            type="button"
+            onClick={() => onPreviewSelected?.(Array.from(selected))}
+            disabled={selectedCount === 0 || previewLoading}
+            className={`w-full text-xs font-semibold px-2 py-1.5 rounded border transition-colors ${
+              selectedCount === 0 || previewLoading
+                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
+            }`}
+          >
+            {previewLoading
+              ? "Previewing…"
+              : selectedCount === 0
+                ? "Preview Selected"
+                : `🔍 Preview Selected (${selectedCount})`}
+          </button>
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someSelected;
+              }}
+              onChange={toggleAll}
+              className="h-3 w-3 cursor-pointer accent-indigo-600"
+              aria-label="Select all pending orders"
+            />
+            <span className="font-medium">Select all ({pending.length})</span>
+          </label>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {orders.length === 0 && (
           <p className="text-xs text-gray-400 text-center pt-4">
@@ -754,17 +957,9 @@ function PendingSidebar({
         {pending.length > 0 && (
           <div className="space-y-2">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Awaiting Approval
+              My Pending Orders
             </p>
             {renderOrders(pending)}
-          </div>
-        )}
-        {approved.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Awaiting Schedule
-            </p>
-            {renderOrders(approved)}
           </div>
         )}
       </div>
@@ -957,32 +1152,52 @@ function OrderFormModal({
 function GanttCell({
   cell,
   hasRescheduled,
+  hasNewlyPlaced,
   isMyOrder,
   isSales,
   editMode,
   movedAssignmentIds,
+  dropDisabled = false,
+  dropDisabledReason,
+  columnHasInProduction = false,
+  onToggleOrderFixed,
   onClick,
 }: {
   cell: CellData;
   hasRescheduled: boolean;
+  hasNewlyPlaced: boolean;
   isMyOrder: boolean;
   isSales: boolean;
   editMode: boolean;
   movedAssignmentIds: Set<string>;
+  dropDisabled?: boolean;
+  dropDisabledReason?: string;
+  /** True when this column day has any IN_PRODUCTION assignment (column accent). */
+  columnHasInProduction?: boolean;
+  onToggleOrderFixed?: (orderId: string, next: boolean) => void;
   onClick: () => void;
 }) {
   const { bg, barColor, fillRatio } = getCellStyle(cell);
   const hasConflict = cell.conflicts.length > 0;
   const pct = Math.round(fillRatio * 100);
   const cellId = `${cell.factoryId}|${cell.date}`;
+  const fixedScheduledCount = cell.items.filter(
+    (i) => i.status === "SCHEDULED" && i.isFixed,
+  ).length;
+  const otherAssignmentCount = cell.items.length - fixedScheduledCount;
+  const tdBorderClass = columnHasInProduction
+    ? "border-2 border-emerald-500"
+    : "border border-gray-100";
 
   // Edit-mode cell: shows draggable chips + drop target, no click handler.
   if (editMode) {
     return (
-      <td className="border border-gray-100 w-[72px] min-w-[72px] p-0 align-top">
+      <td className={`w-[72px] min-w-[72px] p-0 align-top ${tdBorderClass}`}>
         <DroppableCell
           cellId={cellId}
           className={`w-full min-h-14 relative ${bg}`}
+          disabled={dropDisabled}
+          invalidReason={dropDisabledReason}
         >
           {hasConflict && (
             <span className="absolute top-0.5 right-0.5 text-[9px] leading-none z-10">
@@ -995,6 +1210,8 @@ function GanttCell({
                 key={item.assignmentId}
                 item={item}
                 isMoved={movedAssignmentIds.has(item.assignmentId)}
+                editMode={editMode}
+                onToggleOrderFixed={onToggleOrderFixed}
               />
             ))}
           </div>
@@ -1020,17 +1237,17 @@ function GanttCell({
 
   if (cell.items.length === 0) {
     return (
-      <td className="border border-gray-100 w-[72px] min-w-[72px] h-14 p-0">
+      <td className={`w-[72px] min-w-[72px] h-14 p-0 ${tdBorderClass}`}>
         <div className="w-full h-full bg-gray-50" />
       </td>
     );
   }
 
   return (
-    <td className="border border-gray-100 w-[72px] min-w-[72px] h-14 p-0">
+    <td className={`w-[72px] min-w-[72px] h-14 p-0 ${tdBorderClass}`}>
       <button
         onClick={onClick}
-        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""}`}
+        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""} ${hasNewlyPlaced && !isMyOrder ? "ring-2 ring-inset ring-emerald-500" : ""}`}
       >
         {/* Conflict marker */}
         {hasConflict && (
@@ -1051,17 +1268,43 @@ function GanttCell({
           </span>
         )}
 
-        {/* Order count badge */}
-        {cell.items.length > 0 && (
-          <span className="absolute top-1 left-1 text-[9px] font-bold text-gray-500">
-            ×{cell.items.length}
+        {/* Newly placed (preview) marker */}
+        {hasNewlyPlaced && (
+          <span
+            className={`absolute ${hasRescheduled || hasConflict ? "top-1 right-7" : "top-1 right-1"} text-[10px] leading-none text-emerald-600 font-bold`}
+          >
+            +
           </span>
         )}
 
-        {/* My order indicator (SALES view) */}
-        {isMyOrder && (
-          <span className="absolute top-1 left-5 text-[8px] leading-none text-blue-600">
-            ●
+        {/* Assignment counts: other vs locked (isFixed) SCHEDULED */}
+        {cell.items.length > 0 && (
+          <span
+            className="absolute top-1 left-1 text-[9px] font-bold text-gray-500 inline-flex flex-wrap items-center gap-x-1 gap-y-0 max-w-[68px] leading-tight"
+            title={
+              fixedScheduledCount > 0
+                ? `${otherAssignmentCount} non-fixed, ${fixedScheduledCount} locked (fixed) assignment(s)`
+                : `${cell.items.length} assignment(s)`
+            }
+          >
+            {otherAssignmentCount > 0 && <span>×{otherAssignmentCount}</span>}
+            {fixedScheduledCount > 0 && (
+              <span
+                className="text-gray-700 inline-flex items-center gap-px"
+                title={`Locked (fixed) assignments ×${fixedScheduledCount}`}
+              >
+                <span aria-hidden>🔒</span>
+                <span>×{fixedScheduledCount}</span>
+              </span>
+            )}
+            {isMyOrder && (
+              <span
+                className="text-[8px] leading-none text-blue-600"
+                title="Includes my order"
+              >
+                ●
+              </span>
+            )}
           </span>
         )}
 
@@ -1088,29 +1331,23 @@ function GanttCell({
 // Main page
 // ---------------------------------------------------------------------------
 
-const DEFAULT_START = "2026-05-10";
-const DEFAULT_END = "2026-05-23";
-
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
-type NotifyStatus = "idle" | "sending" | "sent" | "error";
 
-type ConflictOrderInfo = {
-  id: string;
-  name: string;
-  quantity: number;
-  dueDate: string;
-  applicantEmail: string | null;
-  applicantUsername: string | null;
-  adminEmail: string | null;
-  adminUsername: string | null;
-};
+/** dnd-kit droppable id — must not contain `|` (grid cells use `factoryId|date`). */
+const EDIT_STAGING_DROP_ID = "__VIS_EDIT_STAGING__";
 
-type AssignmentMove = {
-  factoryId: string;
-  productionDate: string;
-  original: { factoryId: string; productionDate: string };
-};
+type AssignmentMove =
+  | {
+      kind: "cell";
+      factoryId: string;
+      productionDate: string;
+      original: { factoryId: string; productionDate: string };
+    }
+  | {
+      kind: "staging";
+      original: { factoryId: string; productionDate: string };
+    };
 type OrderEditorState = OrderEditorValues & { orderId?: string };
 
 export default function SchedulePage() {
@@ -1119,8 +1356,8 @@ export default function SchedulePage() {
   const isSales = session?.user.role === "SALES";
   const isAdmin = session?.user.role === "ADMIN";
   const productionType = session?.user.group ?? "";
-  const [startDate, setStartDate] = useState(DEFAULT_START);
-  const [endDate, setEndDate] = useState(DEFAULT_END);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [data, setData] = useState<TimelineResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<FetchError | null>(null);
@@ -1130,12 +1367,6 @@ export default function SchedulePage() {
   } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>("idle");
-  const [scheduleConflicts, setScheduleConflicts] = useState<
-    ConflictOrderInfo[]
-  >([]);
-  const [emailsAutoSent, setEmailsAutoSent] = useState(false);
-  const [notifyStatus, setNotifyStatus] = useState<NotifyStatus>("idle");
-  const [notifiedCount, setNotifiedCount] = useState<number>(0);
 
   // Reschedule policy selector + preview state
   const [reschedulePolicy, setReschedulePolicy] = useState<
@@ -1147,6 +1378,11 @@ export default function SchedulePage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  // After a successful apply, if the preview contained FAILED orders, surface
+  // a persistent banner so the user knows ConflictIssues were auto-created.
+  const [applyConflictNotice, setApplyConflictNotice] = useState<{
+    failedCount: number;
+  } | null>(null);
 
   // Edit-mode state
   const [editMode, setEditMode] = useState(false);
@@ -1154,6 +1390,10 @@ export default function SchedulePage() {
   const [pendingMoves, setPendingMoves] = useState<Map<string, AssignmentMove>>(
     () => new Map(),
   );
+  /** Pending order-level `isFixed` overrides while in edit mode (key = orderId). */
+  const [pendingIsFixedByOrderId, setPendingIsFixedByOrderId] = useState<
+    Map<string, boolean>
+  >(() => new Map());
   const [draggingAssignment, setDraggingAssignment] =
     useState<TimelineItem | null>(null);
   const [saveStatus, setSaveStatus] = useState<
@@ -1164,11 +1404,19 @@ export default function SchedulePage() {
   // Simulation mode state (from dev)
   const [simMode, setSimMode] = useState(false);
   const [simDate, setSimDate] = useState("");
+  const [simDateTime, setSimDateTime] = useState("");
   const [simLoading, setSimLoading] = useState(false);
+  /** Last simulation calendar day from server; used to realign range only when it changes. */
+  const serverSimCalendarDayRef = useRef<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorState | null>(null);
   const [adminSalesOrders, setAdminSalesOrders] = useState<SidebarOrder[]>([]);
+
+  // T4A: multi-select pending orders for targeted preview.
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   // Fetch timeline data
   useEffect(() => {
@@ -1177,6 +1425,7 @@ export default function SchedulePage() {
       return;
     }
     if (session === undefined) return;
+    if (!startDate || !endDate) return;
 
     const params = new URLSearchParams({ startDate, endDate });
     fetch(`/api/visualization/timeline?${params}`, {
@@ -1191,7 +1440,8 @@ export default function SchedulePage() {
           });
           setData(null);
         } else {
-          setData(await r.json());
+          const payload = (await r.json()) as TimelineResponse;
+          setData(payload);
         }
         setLoading(false);
       })
@@ -1253,19 +1503,25 @@ export default function SchedulePage() {
   // Run schedule handler (applies the selected algorithm directly)
   const handleRunSchedule = async (algorithmOverride?: string) => {
     if (!productionType) return;
-    const algorithm = algorithmOverride ?? reschedulePolicy;
+    const policy = algorithmOverride ?? reschedulePolicy;
     setScheduleStatus("running");
-    setScheduleConflicts([]);
-    setEmailsAutoSent(false);
-    setNotifyStatus("idle");
     try {
+      const baseConfig: Record<string, unknown> = {
+        reschedulePolicy: policy,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+
       const res = await fetch("/api/schedule/run", {
         method: "POST",
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ type: productionType, algorithm }),
+        body: JSON.stringify({ type: productionType, config: baseConfig }),
       });
       if (res.status === 409) {
         setScheduleStatus("conflict");
@@ -1290,25 +1546,29 @@ export default function SchedulePage() {
     }
   };
 
-  const handlePreviewSchedule = async () => {
+  const handlePreviewSchedule = async (targetOrderIds?: string[]) => {
     if (!productionType) return;
     setPreviewLoading(true);
     setPreviewError(null);
     try {
+      const baseConfig: Record<string, unknown> = {
+        reschedulePolicy,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+      if (targetOrderIds && targetOrderIds.length > 0) {
+        baseConfig.targetOrderIds = targetOrderIds;
+      }
       const res = await fetch("/api/schedule/preview", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: productionType,
-          config: {
-            reschedulePolicy,
-            frozenDays: 0,
-            productionDays: 1,
-            bufferDays: 0,
-            algorithm: "GREEDY_BEST_FIT",
-            splittable: true,
-          },
+          config: baseConfig,
         }),
       });
       if (!res.ok) {
@@ -1322,9 +1582,6 @@ export default function SchedulePage() {
         newSchedule = [],
         affectedOrders = [],
         failedOrderIds = [],
-        conflictOrderIds = [],
-        conflictOrders = [],
-        conflictWarnings = [],
       } = previewBody ?? {};
 
       // Adapter: convert hydrated newSchedule -> SchedulePreviewResponse view model.
@@ -1338,21 +1595,6 @@ export default function SchedulePage() {
 
       setPreviewId(nextPreviewId ?? null);
       setPreviewData(preview);
-      // T4D: conflict banner is driven by preview. Hydrated conflictOrders
-      // (with applicant + admin email) feed scheduleConflicts; Notify button
-      // POSTs them to /api/schedule/notify. Reset notify state so the amber
-      // (action-required) banner shows on each fresh preview.
-      if (Array.isArray(conflictOrders) && conflictOrders.length > 0) {
-        setScheduleConflicts(conflictOrders as ConflictOrderInfo[]);
-        setNotifyStatus("idle");
-        setEmailsAutoSent(false);
-      } else {
-        setScheduleConflicts([]);
-      }
-      // conflictOrderIds / conflictWarnings are intentionally unused here:
-      // the hydrated conflictOrders payload already covers the banner.
-      void conflictOrderIds;
-      void conflictWarnings;
     } catch {
       setPreviewError("Network error");
     } finally {
@@ -1362,7 +1604,7 @@ export default function SchedulePage() {
 
   const handleApplyPreview = async () => {
     if (!previewId) {
-      setPreviewError("沒有可套用的 preview，請先按 Preview");
+      setPreviewError("No preview to apply — run Preview first.");
       return;
     }
     setApplying(true);
@@ -1378,7 +1620,7 @@ export default function SchedulePage() {
       if (res.status === 409) {
         // OCC failure or concurrent lock — discard preview and surface error.
         const body = await res.json().catch(() => ({}));
-        setPreviewError(body?.message ?? "資料已變更，請重新預覽");
+        setPreviewError(body?.message ?? "Data changed — re-run Preview.");
         setPreviewData(null);
         setPreviewId(null);
         return;
@@ -1386,7 +1628,7 @@ export default function SchedulePage() {
 
       if (res.status === 404) {
         const body = await res.json().catch(() => ({}));
-        setPreviewError(body?.message ?? "Preview 已過期，請重新預覽");
+        setPreviewError(body?.message ?? "Preview expired — re-run Preview.");
         setPreviewData(null);
         setPreviewId(null);
         return;
@@ -1394,17 +1636,23 @@ export default function SchedulePage() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setPreviewError(body?.message ?? "套用失敗");
+        setPreviewError(body?.message ?? "Apply failed");
         setScheduleStatus("error");
         setTimeout(() => setScheduleStatus("idle"), 4000);
         return;
       }
 
-      // Success — clear preview state and refetch timeline.
+      // Success — capture FAILED count from the preview before clearing it,
+      // so we can surface a persistent notice pointing the user to issues.
+      const failedCount = previewData?.unscheduledOrders.length ?? 0;
       setPreviewData(null);
       setPreviewId(null);
+      setSelectedOrderIds(new Set());
       setScheduleStatus("success");
       setTimeout(() => setScheduleStatus("idle"), 4000);
+      if (failedCount > 0) {
+        setApplyConflictNotice({ failedCount });
+      }
       setLoading(true);
       setFetchError(null);
       setRefreshKey((k) => k + 1);
@@ -1428,6 +1676,7 @@ export default function SchedulePage() {
   const handleEnterEditMode = () => {
     setEditMode(true);
     setPendingMoves(new Map());
+    setPendingIsFixedByOrderId(new Map());
     setSaveStatus("idle");
     setSelectedCell(null);
     setPreviewData(null);
@@ -1437,57 +1686,140 @@ export default function SchedulePage() {
   const handleDiscardEdits = () => {
     setEditMode(false);
     setPendingMoves(new Map());
+    setPendingIsFixedByOrderId(new Map());
     setSaveStatus("idle");
   };
 
+  const handleToggleOrderFixed = useCallback(
+    (orderId: string, next: boolean) => {
+      if (!data) return;
+      const baseline =
+        data.timeline.find((t) => t.orderId === orderId)?.isFixed ?? false;
+      setPendingIsFixedByOrderId((prev) => {
+        const n = new Map(prev);
+        if (next === baseline) n.delete(orderId);
+        else n.set(orderId, next);
+        return n;
+      });
+    },
+    [data],
+  );
+
   const handleSaveEdits = async () => {
-    if (pendingMoves.size === 0) {
+    if (!data) return;
+
+    const cellMoveEntries = Array.from(pendingMoves.entries()).filter(
+      (e): e is [string, Extract<AssignmentMove, { kind: "cell" }>] =>
+        e[1].kind === "cell",
+    );
+
+    const hasStaging = Array.from(pendingMoves.values()).some(
+      (m) => m.kind === "staging",
+    );
+    if (hasStaging) {
+      setSaveStatus("error");
+      setSaveErrorMsg(
+        "Assignments remain in staging — drag them back onto a factory/date cell before saving, or Discard to revert.",
+      );
+      setTimeout(() => setSaveStatus("idle"), 6000);
+      return;
+    }
+
+    if (cellMoveEntries.length === 0 && pendingIsFixedByOrderId.size === 0) {
       setEditMode(false);
       return;
     }
+
     setSaveStatus("saving");
     setSaveErrorMsg(null);
+
+    const baselineFixed = (orderId: string) =>
+      data.timeline.find((t) => t.orderId === orderId)?.isFixed ?? false;
+
+    const toUnlock: string[] = [];
+    const toLock: string[] = [];
+    for (const [orderId, next] of pendingIsFixedByOrderId) {
+      if (next === false && baselineFixed(orderId)) toUnlock.push(orderId);
+      else if (next === true && !baselineFixed(orderId)) toLock.push(orderId);
+    }
+
     try {
-      const moves = Array.from(pendingMoves.entries()).map(([id, m]) => ({
-        assignmentId: id,
-        factoryId: m.factoryId,
-        productionDate: m.productionDate,
-      }));
-      const res = await fetch("/api/assignments/bulk", {
-        method: "PATCH",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ moves }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setSaveStatus("error");
-        setSaveErrorMsg(body.message ?? `HTTP ${res.status}`);
-        setTimeout(() => setSaveStatus("idle"), 6000);
-        return;
+      let movePartialWarning: string | null = null;
+
+      for (const id of toUnlock) {
+        const res = await fetch(`/api/orders/${id}`, {
+          method: "PUT",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isFixed: false }),
+        });
+        const unlockBody = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setSaveStatus("error");
+          setSaveErrorMsg(
+            unlockBody.message ?? `Failed to unlock (${res.status})`,
+          );
+          setTimeout(() => setSaveStatus("idle"), 6000);
+          return;
+        }
       }
-      const applied = typeof body.applied === "number" ? body.applied : 0;
-      const errors: { assignmentId: string; reason: string }[] = Array.isArray(
-        body.errors,
-      )
-        ? body.errors
-        : [];
-      if (applied === 0 && errors.length > 0) {
-        setSaveStatus("error");
-        setSaveErrorMsg(
-          `0 / ${moves.length} moves saved. ${errors[0].reason}${errors.length > 1 ? ` (+${errors.length - 1} more)` : ""}`,
-        );
-        setTimeout(() => setSaveStatus("idle"), 6000);
-        return;
+
+      if (cellMoveEntries.length > 0) {
+        const moves = cellMoveEntries.map(([id, m]) => ({
+          assignmentId: id,
+          factoryId: m.factoryId,
+          productionDate: m.productionDate,
+        }));
+        const res = await fetch("/api/assignments/bulk", {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ moves }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setSaveStatus("error");
+          setSaveErrorMsg(body.message ?? `HTTP ${res.status}`);
+          setTimeout(() => setSaveStatus("idle"), 6000);
+          return;
+        }
+        const applied = typeof body.applied === "number" ? body.applied : 0;
+        const errors: { assignmentId: string; reason: string }[] =
+          Array.isArray(body.errors) ? body.errors : [];
+        if (applied === 0 && errors.length > 0) {
+          setSaveStatus("error");
+          setSaveErrorMsg(
+            `0 / ${moves.length} moves saved. ${errors[0].reason}${errors.length > 1 ? ` (+${errors.length - 1} more)` : ""}`,
+          );
+          setTimeout(() => setSaveStatus("idle"), 6000);
+          return;
+        }
+        if (errors.length > 0) {
+          movePartialWarning = `${applied} saved, ${errors.length} rejected: ${errors[0].reason}`;
+        }
       }
+
+      for (const id of toLock) {
+        const res = await fetch(`/api/orders/${id}`, {
+          method: "PUT",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isFixed: true }),
+        });
+        const lockBody = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setSaveStatus("error");
+          setSaveErrorMsg(lockBody.message ?? `Failed to lock (${res.status})`);
+          setTimeout(() => setSaveStatus("idle"), 6000);
+          return;
+        }
+      }
+
       setSaveStatus("success");
-      setSaveErrorMsg(
-        errors.length > 0
-          ? `${applied} saved, ${errors.length} rejected: ${errors[0].reason}`
-          : null,
-      );
+      setSaveErrorMsg(movePartialWarning);
       setEditMode(false);
       setPendingMoves(new Map());
+      setPendingIsFixedByOrderId(new Map());
       setLoading(true);
       setRefreshKey((k) => k + 1);
       setTimeout(() => {
@@ -1505,22 +1837,65 @@ export default function SchedulePage() {
     const assignmentId = String(event.active.id);
     const baseTimeline = data?.timeline ?? [];
     const item = baseTimeline.find((t) => t.assignmentId === assignmentId);
-    if (item) setDraggingAssignment(item);
+    if (!item) return;
+    const effectiveFixed =
+      pendingIsFixedByOrderId.get(item.orderId) ?? item.isFixed;
+    if (item.status !== "SCHEDULED" || effectiveFixed) return;
+    setDraggingAssignment(item);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     setDraggingAssignment(null);
     if (!event.over) return;
     const assignmentId = String(event.active.id);
-    const [factoryId, date] = String(event.over.id).split("|");
-    if (!factoryId || !date) return;
+    const overId = String(event.over.id);
     const item = data?.timeline.find((t) => t.assignmentId === assignmentId);
     if (!item) return;
-    // No-op if dropping onto current slot, account for pending move
+
+    const effectiveFixed =
+      pendingIsFixedByOrderId.get(item.orderId) ?? item.isFixed;
+
+    if (overId === EDIT_STAGING_DROP_ID) {
+      if (item.status !== "SCHEDULED" || effectiveFixed) return;
+      setPendingMoves((prev) => {
+        if (prev.get(assignmentId)?.kind === "staging") return prev;
+        const next = new Map(prev);
+        next.set(assignmentId, {
+          kind: "staging",
+          original: {
+            factoryId: item.factoryId,
+            productionDate: item.productionDate,
+          },
+        });
+        return next;
+      });
+      return;
+    }
+
+    const [factoryId, date] = overId.split("|");
+    if (!factoryId || !date) return;
+
     const current = pendingMoves.get(assignmentId);
-    const currFactory = current?.factoryId ?? item.factoryId;
-    const currDate = current?.productionDate ?? item.productionDate;
-    if (currFactory === factoryId && currDate === date) return;
+    const currFactory =
+      current?.kind === "cell"
+        ? current.factoryId
+        : current?.kind === "staging"
+          ? null
+          : item.factoryId;
+    const currDate =
+      current?.kind === "cell"
+        ? current.productionDate
+        : current?.kind === "staging"
+          ? null
+          : item.productionDate;
+    if (
+      currFactory !== null &&
+      currDate !== null &&
+      currFactory === factoryId &&
+      currDate === date
+    ) {
+      return;
+    }
 
     setPendingMoves((prev) => {
       const next = new Map(prev);
@@ -1529,6 +1904,7 @@ export default function SchedulePage() {
         next.delete(assignmentId);
       } else {
         next.set(assignmentId, {
+          kind: "cell",
           factoryId,
           productionDate: date,
           original: {
@@ -1539,45 +1915,6 @@ export default function SchedulePage() {
       }
       return next;
     });
-  };
-
-  // Manual notify handler — POSTs scheduleConflicts to /api/schedule/notify.
-  // Banner is preview-driven (T4D); run no longer emits conflicts.
-  const handleSendNotifications = async () => {
-    if (scheduleConflicts.length === 0) return;
-    setNotifyStatus("sending");
-    // Notify schema requires applicantEmail to be a string|null but at least
-    // one of applicant/admin email needs to exist for a real send. Drop
-    // entries with neither so we never POST orders the server would silently
-    // skip (and so a 100%-skip set doesn't read as "sent").
-    const payloadOrders = scheduleConflicts.filter(
-      (o) => o.applicantEmail || o.adminEmail,
-    );
-    if (payloadOrders.length === 0) {
-      setNotifyStatus("error");
-      return;
-    }
-    try {
-      const res = await fetch("/api/schedule/notify", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orders: payloadOrders }),
-      });
-      if (res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const failedCount = Array.isArray(body.failed) ? body.failed.length : 0;
-        const sentCount = Array.isArray(body.sent)
-          ? body.sent.length
-          : payloadOrders.length;
-        setNotifiedCount(sentCount);
-        setNotifyStatus(failedCount === 0 && sentCount > 0 ? "sent" : "error");
-      } else {
-        setNotifyStatus("error");
-      }
-    } catch {
-      setNotifyStatus("error");
-    }
   };
 
   const handleLogout = async () => {
@@ -1600,19 +1937,29 @@ export default function SchedulePage() {
       };
     }
     if (!data) return null;
+
     if (editMode && pendingMoves.size > 0) {
-      const movedTimeline: TimelineItem[] = data.timeline.map((t) => {
+      const movedTimeline: TimelineItem[] = [];
+      for (const t of data.timeline) {
         const move = pendingMoves.get(t.assignmentId);
-        if (!move) return t;
-        return {
+        if (move?.kind === "staging") continue;
+        if (!move) {
+          movedTimeline.push(t);
+          continue;
+        }
+        movedTimeline.push({
           ...t,
           factoryId: move.factoryId,
           productionDate: move.productionDate,
-        };
-      });
+        });
+      }
+      const timelineWithFixed = applyPendingIsFixedByOrder(
+        movedTimeline,
+        pendingIsFixedByOrderId,
+      );
       // Recompute daily capacities from moved timeline
       const usedByCell = new Map<string, number>();
-      for (const t of movedTimeline) {
+      for (const t of timelineWithFixed) {
         const key = `${t.factoryId}__${t.productionDate}`;
         usedByCell.set(key, (usedByCell.get(key) ?? 0) + t.assignedQuantity);
       }
@@ -1647,7 +1994,7 @@ export default function SchedulePage() {
       const conflicts: ConflictInfo[] = [];
       for (const dc of dailyCapMap.values()) {
         if (dc.usedCapacity > dc.maxCapacity) {
-          const affected = movedTimeline
+          const affected = timelineWithFixed
             .filter(
               (t) =>
                 t.factoryId === dc.factoryId && t.productionDate === dc.date,
@@ -1663,7 +2010,7 @@ export default function SchedulePage() {
           });
         }
       }
-      for (const t of movedTimeline) {
+      for (const t of timelineWithFixed) {
         if (t.productionDate > t.dueDate) {
           conflicts.push({
             conflictType: "DUE_DATE",
@@ -1677,12 +2024,26 @@ export default function SchedulePage() {
       }
       return {
         factories: data.factories,
-        timeline: movedTimeline,
+        timeline: timelineWithFixed,
         dailyCapacities: Array.from(dailyCapMap.values()),
         conflicts,
         diffs: data.diffs,
       };
     }
+
+    if (editMode && pendingIsFixedByOrderId.size > 0) {
+      return {
+        factories: data.factories,
+        timeline: applyPendingIsFixedByOrder(
+          data.timeline,
+          pendingIsFixedByOrderId,
+        ),
+        dailyCapacities: data.dailyCapacities,
+        conflicts: data.conflicts,
+        diffs: data.diffs,
+      };
+    }
+
     return {
       factories: data.factories,
       timeline: data.timeline,
@@ -1690,7 +2051,7 @@ export default function SchedulePage() {
       conflicts: data.conflicts,
       diffs: data.diffs,
     };
-  }, [data, previewData, editMode, pendingMoves]);
+  }, [data, previewData, editMode, pendingMoves, pendingIsFixedByOrderId]);
   const handleCreateOrder = async (values: OrderEditorValues) => {
     if (!values.name) {
       throw new Error("Name is required.");
@@ -1713,7 +2074,7 @@ export default function SchedulePage() {
       body: JSON.stringify({
         name: values.name,
         type: values.type,
-        dueDate: new Date(values.dueDate).toISOString(),
+        dueDate: `${values.dueDate}T00:00:00.000Z`,
         quantity,
       }),
     });
@@ -1770,7 +2131,7 @@ export default function SchedulePage() {
     setRefreshKey((k) => k + 1);
   };
 
-  // Load simulation state on mount
+  // Load simulation state on mount and seed the timeline range (10-day default from anchor) before the first fetch.
   useEffect(() => {
     if (!session) return;
     fetch("/api/system/simulation", { credentials: "same-origin" })
@@ -1778,10 +2139,27 @@ export default function SchedulePage() {
       .then((body) => {
         setSimMode(!!body.isSimulationMode);
         if (body.simulationDate) {
-          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+          setSimDate(body.simulationDate.split("T")[0]);
+          setSimDateTime(body.simulationDate);
         }
+        const anchor =
+          body.isSimulationMode && body.simulationDate
+            ? String(body.simulationDate).split("T")[0]
+            : format(new Date(), "yyyy-MM-dd");
+        const range = defaultTimelineRange(anchor);
+        setStartDate(range.startDate);
+        setEndDate(range.endDate);
+        serverSimCalendarDayRef.current =
+          body.isSimulationMode && body.simulationDate
+            ? String(body.simulationDate).split("T")[0]
+            : null;
       })
-      .catch(() => {});
+      .catch(() => {
+        const range = defaultTimelineRange(format(new Date(), "yyyy-MM-dd"));
+        setStartDate(range.startDate);
+        setEndDate(range.endDate);
+        serverSimCalendarDayRef.current = null;
+      });
   }, [session]);
 
   // Auto-refresh every 60 s while in Real-time mode
@@ -1809,10 +2187,24 @@ export default function SchedulePage() {
         const body = await res.json();
         setSimMode(!!body.isSimulationMode);
         if (body.simulationDate) {
-          setSimDate(format(new Date(body.simulationDate), "yyyy-MM-dd"));
+          setSimDate(body.simulationDate.split("T")[0]);
+          setSimDateTime(body.simulationDate);
         } else {
           setSimDate("");
+          setSimDateTime("");
         }
+        const nextSimDay =
+          body.isSimulationMode && body.simulationDate
+            ? String(body.simulationDate).split("T")[0]
+            : null;
+        const prevSimDay = serverSimCalendarDayRef.current;
+        if (nextSimDay && nextSimDay !== prevSimDay) {
+          const range = defaultTimelineRange(nextSimDay);
+          setStartDate(range.startDate);
+          setEndDate(range.endDate);
+        }
+        serverSimCalendarDayRef.current = nextSimDay;
+
         setLoading(true);
         setFetchError(null);
         setRefreshKey((k) => k + 1);
@@ -1846,13 +2238,30 @@ export default function SchedulePage() {
   };
 
   const stepSimDate = (days: number) => {
-    const base = simDate
-      ? new Date(simDate)
-      : parseISO(data?.today ?? format(new Date(), "yyyy-MM-dd"));
-    base.setDate(base.getDate() + days);
-    const next = format(base, "yyyy-MM-dd");
-    setSimDate(next);
-    patchSim({ simulationDate: dateInputToIso(next) });
+    const baseStr =
+      simDateTime || data?.today || format(new Date(), "yyyy-MM-dd");
+    const base = new Date(
+      baseStr.includes("T") ? baseStr : `${baseStr}T00:00:00.000Z`,
+    );
+    base.setUTCDate(base.getUTCDate() + days);
+    base.setUTCHours(0, 0, 0, 0);
+    const nextIso = base.toISOString();
+    setSimDateTime(nextIso);
+    setSimDate(nextIso.split("T")[0]);
+    patchSim({ simulationDate: nextIso });
+  };
+
+  const stepSimHours = (hours: number) => {
+    const baseStr =
+      simDateTime || data?.today || format(new Date(), "yyyy-MM-dd");
+    const base = new Date(
+      baseStr.includes("T") ? baseStr : `${baseStr}T00:00:00.000Z`,
+    );
+    base.setUTCHours(base.getUTCHours() + hours);
+    const nextIso = base.toISOString();
+    setSimDateTime(nextIso);
+    setSimDate(nextIso.split("T")[0]);
+    patchSim({ simulationDate: nextIso });
   };
 
   // Build date columns
@@ -1883,6 +2292,15 @@ export default function SchedulePage() {
         : new Map(),
     [effective, dates, data?.salesContext, data?.today],
   );
+
+  /** Calendar days where the effective timeline has any IN_PRODUCTION assignment. */
+  const datesWithInProduction = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of effective?.timeline ?? []) {
+      if (t.status === "IN_PRODUCTION") set.add(t.productionDate);
+    }
+    return set;
+  }, [effective?.timeline]);
 
   // Group factories by productionType
   const groups = useMemo(() => {
@@ -1923,11 +2341,26 @@ export default function SchedulePage() {
     return map;
   }, [effective, myOrderIdSet]);
 
-  // Per-cell: does it contain any rescheduled order?
+  // Per-cell: does it contain any rescheduled order (was already scheduled,
+  // moved to a different date)?
   const rescheduledCells = useMemo(() => {
     const set = new Set<string>();
     for (const item of effective?.timeline ?? []) {
-      if (diffByOrderId.has(item.orderId)) {
+      const d = diffByOrderId.get(item.orderId);
+      if (d && d.before !== "") {
+        set.add(`${item.factoryId}__${item.productionDate}`);
+      }
+    }
+    return set;
+  }, [effective, diffByOrderId]);
+
+  // Per-cell: does it contain any newly placed order (had no previous schedule,
+  // first placed by this preview)? Used for the preview "newly added" highlight.
+  const newlyPlacedCells = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of effective?.timeline ?? []) {
+      const d = diffByOrderId.get(item.orderId);
+      if (d && d.before === "") {
         set.add(`${item.factoryId}__${item.productionDate}`);
       }
     }
@@ -1939,6 +2372,33 @@ export default function SchedulePage() {
     () => new Set(pendingMoves.keys()),
     [pendingMoves],
   );
+
+  const hasPendingStaging = useMemo(
+    () => Array.from(pendingMoves.values()).some((m) => m.kind === "staging"),
+    [pendingMoves],
+  );
+
+  const pendingEditCount = useMemo(
+    () => pendingMoves.size + pendingIsFixedByOrderId.size,
+    [pendingMoves, pendingIsFixedByOrderId],
+  );
+
+  /** Timeline rows held in the edit-mode staging strip (off the Gantt grid). */
+  const stagedAssignmentItems = useMemo(() => {
+    if (!data) return [] as TimelineItem[];
+    const items: TimelineItem[] = [];
+    for (const [id, m] of pendingMoves) {
+      if (m.kind !== "staging") continue;
+      const t = data.timeline.find((x) => x.assignmentId === id);
+      if (t) {
+        const p = pendingIsFixedByOrderId.get(t.orderId);
+        items.push(
+          p !== undefined && p !== t.isFixed ? { ...t, isFixed: p } : t,
+        );
+      }
+    }
+    return items;
+  }, [data, pendingMoves, pendingIsFixedByOrderId]);
 
   // Selected cell detail
   const selectedCellData = useMemo(() => {
@@ -2086,18 +2546,18 @@ export default function SchedulePage() {
                 disabled={editMode || previewLoading}
                 className="text-xs border border-gray-200 rounded px-2 py-1 bg-white disabled:bg-gray-100 disabled:text-gray-400"
               >
-                <option value="GAP_FILLING">填補空隙 (GAP_FILLING)</option>
+                <option value="GAP_FILLING">Gap filling (GAP_FILLING)</option>
                 <option value="PRIORITY_RETAIN">
-                  優先保留現有 (PRIORITY_RETAIN)
+                  Retain priority placement (PRIORITY_RETAIN)
                 </option>
                 <option value="GLOBAL_OPTIMIZE">
-                  全域最佳化 (GLOBAL_OPTIMIZE)
+                  Global optimize (GLOBAL_OPTIMIZE)
                 </option>
               </select>
             </label>
 
             <button
-              onClick={handlePreviewSchedule}
+              onClick={() => handlePreviewSchedule()}
               disabled={
                 previewLoading || editMode || scheduleStatus === "running"
               }
@@ -2266,8 +2726,19 @@ export default function SchedulePage() {
             >
               +1d →
             </button>
+            <button
+              type="button"
+              onClick={() => stepSimHours(2)}
+              disabled={simLoading}
+              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium ml-1"
+            >
+              +2h
+            </button>
             <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-              Custom: {simDate || "—"}
+              Custom:{" "}
+              {simDateTime
+                ? simDateTime.substring(0, 16).replace("T", " ")
+                : "—"}
             </span>
           </>
         )}
@@ -2288,17 +2759,13 @@ export default function SchedulePage() {
             {previewData.diffs.length} order(s) would be rescheduled
             {previewData.unscheduledOrders.length > 0 &&
               `, ${previewData.unscheduledOrders.length} cannot fit`}
-            . Capacity conflicts:{" "}
-            {
-              previewData.conflicts.filter((c) => c.conflictType === "CAPACITY")
-                .length
-            }
-            , due-date conflicts:{" "}
-            {
-              previewData.conflicts.filter((c) => c.conflictType === "DUE_DATE")
-                .length
-            }
             .
+            {selectedOrderIds.size > 0 && (
+              <span className="ml-2 font-medium">
+                Targeted {selectedOrderIds.size} order
+                {selectedOrderIds.size === 1 ? "" : "s"}.
+              </span>
+            )}
           </span>
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -2311,7 +2778,7 @@ export default function SchedulePage() {
               }
               className="text-xs font-medium px-3 py-1.5 rounded border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:border-gray-300"
             >
-              {applying ? "套用中…" : "✓ Apply"}
+              {applying ? "Applying…" : "✓ Apply"}
             </button>
             <button
               onClick={handleDiscardPreview}
@@ -2342,14 +2809,26 @@ export default function SchedulePage() {
             ✏️ Edit mode
           </span>
           <span className="text-xs text-purple-700">
-            Drag assignment chips between cells.{" "}
-            <span className="font-semibold">{pendingMoves.size}</span> pending
-            move(s).
+            Drag chips between cells, or into the staging area below to pull an
+            assignment off the grid. Use the checkbox on each chip to lock the
+            order (no auto-reschedule / no drag).{" "}
+            <span className="font-semibold">{pendingEditCount}</span> pending
+            change(s).
+            {hasPendingStaging && (
+              <span className="ml-1 font-semibold text-amber-800">
+                (staging: cannot save until moved back)
+              </span>
+            )}
           </span>
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={handleSaveEdits}
-              disabled={saveStatus === "saving"}
+              disabled={saveStatus === "saving" || hasPendingStaging}
+              title={
+                hasPendingStaging
+                  ? "Clear the staging area by dragging assignments back onto the grid before saving."
+                  : undefined
+              }
               className="text-xs font-medium px-3 py-1.5 rounded border bg-purple-600 text-white border-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:border-gray-300"
             >
               {saveStatus === "saving" ? "Saving…" : "💾 Save Changes"}
@@ -2364,95 +2843,37 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* Scheduling conflict notification panel */}
-      {scheduleConflicts.length > 0 && (
-        <div
-          className={`flex-none px-6 py-3 border-b text-xs ${
-            emailsAutoSent || notifyStatus === "sent"
-              ? "bg-green-50 border-green-200"
-              : "bg-amber-50 border-amber-200"
-          }`}
-        >
-          {emailsAutoSent || notifyStatus === "sent" ? (
-            <div className="flex items-center justify-between">
-              <span className="text-green-700 font-medium">
-                {`已寄出 ${
-                  notifyStatus === "sent"
-                    ? notifiedCount || scheduleConflicts.length
-                    : scheduleConflicts.length
-                } 封通知 (Notification emails sent for ${
-                  notifyStatus === "sent"
-                    ? notifiedCount || scheduleConflicts.length
-                    : scheduleConflicts.length
-                } order(s) that could not be scheduled.)`}
-              </span>
-              <button
-                type="button"
-                onClick={() => setScheduleConflicts([])}
-                className="text-green-400 hover:text-green-600 shrink-0"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-amber-800 font-semibold">
-                    {scheduleConflicts.length} order(s) could not be scheduled:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleSendNotifications}
-                    disabled={
-                      notifyStatus === "sending" ||
-                      scheduleConflicts.length === 0
-                    }
-                    className={`px-2.5 py-1 rounded border font-medium transition-colors ${
-                      notifyStatus === "sending" ||
-                      scheduleConflicts.length === 0
-                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                        : "bg-amber-700 text-white border-amber-700 hover:bg-amber-800"
-                    }`}
-                  >
-                    {notifyStatus === "sending" ? "Sending…" : "Notify"}
-                  </button>
-                  {notifyStatus === "error" && (
-                    <span className="text-red-600 font-medium">
-                      Some emails failed — check server logs.
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setScheduleConflicts([])}
-                  className="text-amber-400 hover:text-amber-600 shrink-0"
-                >
-                  ✕
-                </button>
-              </div>
-              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-amber-700">
-                {scheduleConflicts.map((o) => (
-                  <li key={o.id}>
-                    <span className="font-medium">{o.name}</span>
-                    {" — qty "}
-                    <span>{o.quantity}</span>
-                    {", due "}
-                    <span>{o.dueDate}</span>
-                    {o.applicantEmail && (
-                      <>
-                        {" ("}
-                        <span className="text-amber-600">
-                          {o.applicantEmail}
-                        </span>
-                        {")"}
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+      {/* Preview-driven FAILED hint — auto-issue + email fires on apply */}
+      {previewData && previewData.unscheduledOrders.length > 0 && (
+        <div className="flex-none px-6 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
+          {previewData.unscheduledOrders.length} order(s) cannot be scheduled —
+          applying will automatically open conflict issues.
+        </div>
+      )}
+
+      {/* Post-apply conflict notice — persistent until dismissed */}
+      {applyConflictNotice && (
+        <div className="flex-none px-6 py-2 bg-amber-100 border-b border-amber-300 flex items-center justify-between gap-3 text-xs text-amber-900">
+          <span>
+            ⚠️ Schedule applied, but {applyConflictNotice.failedCount} order(s)
+            could not be placed. ConflictIssue records were created
+            automatically. Open the{" "}
+            <Link
+              href="/conflict-issues"
+              className="font-semibold underline hover:text-amber-700"
+            >
+              conflict issues
+            </Link>{" "}
+            page to review and resolve.
+          </span>
+          <button
+            type="button"
+            onClick={() => setApplyConflictNotice(null)}
+            className="font-semibold px-2 py-0.5 rounded border border-amber-300 bg-white hover:bg-amber-50"
+            aria-label="Dismiss"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -2483,8 +2904,18 @@ export default function SchedulePage() {
           Rescheduled
         </span>
         <span className="flex items-center gap-1.5">
+          <span className="text-[10px] font-bold text-emerald-600">+</span>{" "}
+          Newly placed
+        </span>
+        <span className="flex items-center gap-1.5">
           <span className="text-[10px] font-bold text-gray-500">×N</span> Order
           count
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-[10px] leading-none" aria-hidden>
+            🔒
+          </span>
+          Fixed
         </span>
       </div>
 
@@ -2602,6 +3033,39 @@ export default function SchedulePage() {
                 editMode ? handleDragEnd : () => setDraggingAssignment(null)
               }
             >
+              {editMode && (
+                <div className="px-4 py-2 border-b border-amber-200 bg-amber-50/90">
+                  <div className="text-[11px] font-semibold text-amber-950">
+                    Staging
+                  </div>
+                  <p className="text-[10px] text-amber-900/85 mt-0.5 mb-2 leading-snug">
+                    Drag movable assignments here to pull them off the Gantt
+                    (freeing capacity on the original cell), then drop them on a
+                    target factory/date. You cannot save while staging has items
+                    — move them back to the grid or press Discard.
+                  </p>
+                  <DroppableCell
+                    cellId={EDIT_STAGING_DROP_ID}
+                    className="min-h-[52px] rounded-lg border-2 border-dashed border-amber-400 bg-white p-2 flex flex-wrap gap-1 items-start content-start"
+                  >
+                    {stagedAssignmentItems.length === 0 ? (
+                      <span className="text-[10px] text-amber-700/80 italic py-1">
+                        Drop assignments here…
+                      </span>
+                    ) : (
+                      stagedAssignmentItems.map((st) => (
+                        <DraggableAssignmentChip
+                          key={st.assignmentId}
+                          item={st}
+                          isMoved={movedAssignmentIds.has(st.assignmentId)}
+                          editMode={editMode}
+                          onToggleOrderFixed={handleToggleOrderFixed}
+                        />
+                      ))
+                    )}
+                  </DroppableCell>
+                </div>
+              )}
               <table
                 className="border-collapse text-xs"
                 style={{ tableLayout: "fixed" }}
@@ -2617,10 +3081,19 @@ export default function SchedulePage() {
                       const day = parseISO(d);
                       const isWeekend =
                         day.getDay() === 0 || day.getDay() === 6;
+                      const inProdDay = datesWithInProduction.has(d);
                       return (
                         <th
                           key={d}
-                          className={`sticky top-0 z-20 border border-gray-200 w-[72px] min-w-[72px] px-1 py-2 text-center font-medium ${isWeekend ? "bg-gray-50 text-gray-400" : "bg-white text-gray-600"}`}
+                          className={`sticky top-0 z-20 w-[72px] min-w-[72px] px-1 py-2 text-center font-medium ${
+                            inProdDay
+                              ? "border-2 border-emerald-500 bg-emerald-50/95 text-emerald-950"
+                              : `border border-gray-200 ${
+                                  isWeekend
+                                    ? "bg-gray-50 text-gray-400"
+                                    : "bg-white text-gray-600"
+                                }`
+                          }`}
                         >
                           <div>{format(day, "d")}</div>
                           <div className="text-[9px] font-normal opacity-70">
@@ -2661,15 +3134,70 @@ export default function SchedulePage() {
                                   myOrderIdSet.has(i.orderId),
                                 )
                               : false;
+
+                            // Edit-mode drop validation: block drops that would
+                            // overflow the cell's maxCapacity or push the
+                            // assignment past its dueDate. Dropping back to the
+                            // dragging chip's current cell is always allowed
+                            // (it's a no-op).
+                            let dropDisabled = false;
+                            let dropDisabledReason: string | undefined;
+                            if (editMode && draggingAssignment) {
+                              const pending = pendingMoves.get(
+                                draggingAssignment.assignmentId,
+                              );
+                              const currFactoryId =
+                                pending?.kind === "cell"
+                                  ? pending.factoryId
+                                  : pending?.kind === "staging"
+                                    ? null
+                                    : draggingAssignment.factoryId;
+                              const currDate =
+                                pending?.kind === "cell"
+                                  ? pending.productionDate
+                                  : pending?.kind === "staging"
+                                    ? null
+                                    : draggingAssignment.productionDate;
+                              const isCurrentCell =
+                                currFactoryId !== null &&
+                                currDate !== null &&
+                                factory.id === currFactoryId &&
+                                date === currDate;
+                              if (!isCurrentCell) {
+                                if (date > draggingAssignment.dueDate) {
+                                  dropDisabled = true;
+                                  dropDisabledReason = `After due date ${draggingAssignment.dueDate}`;
+                                } else if (
+                                  cell.usedCapacity +
+                                    draggingAssignment.assignedQuantity >
+                                  cell.maxCapacity
+                                ) {
+                                  const remaining = Math.max(
+                                    0,
+                                    cell.maxCapacity - cell.usedCapacity,
+                                  );
+                                  dropDisabled = true;
+                                  dropDisabledReason = `Insufficient capacity (remaining ${remaining.toLocaleString()} / need ${draggingAssignment.assignedQuantity.toLocaleString()})`;
+                                }
+                              }
+                            }
+
                             return (
                               <GanttCell
                                 key={key}
                                 cell={cell}
                                 hasRescheduled={rescheduledCells.has(key)}
+                                hasNewlyPlaced={newlyPlacedCells.has(key)}
                                 isMyOrder={isMyOrder}
                                 isSales={isSales}
                                 editMode={editMode}
                                 movedAssignmentIds={movedAssignmentIds}
+                                dropDisabled={dropDisabled}
+                                dropDisabledReason={dropDisabledReason}
+                                columnHasInProduction={datesWithInProduction.has(
+                                  date,
+                                )}
+                                onToggleOrderFixed={handleToggleOrderFixed}
                                 onClick={() =>
                                   setSelectedCell({
                                     factoryId: factory.id,
@@ -2715,7 +3243,9 @@ export default function SchedulePage() {
             diffByOrderId={diffByOrderId}
             myOrderIds={data?.salesContext?.myOrderIds}
             etaByOrderId={etaByOrderId}
+            editMode={editMode}
             onEditOrder={(order) => setEditOrder(order)}
+            onToggleOrderFixed={handleToggleOrderFixed}
             onClose={() => setSelectedCell(null)}
           />
         </>

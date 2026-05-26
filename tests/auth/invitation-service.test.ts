@@ -196,20 +196,28 @@ function createDb() {
           data,
         }: {
           where: {
-            userId: string;
-            id?: { not: string };
+            id?: string | { not: string };
+            userId?: string;
             acceptedAt: null;
             revokedAt: null;
+            expiresAt?: { gt: Date };
           };
           data: Row;
         }) => {
           let count = 0;
           for (const invitation of invitations) {
+            const matchesId =
+              typeof where.id === "string"
+                ? invitation.id === where.id
+                : invitation.id !== where.id?.not;
             if (
-              invitation.userId === where.userId &&
-              invitation.id !== where.id?.not &&
+              (!where.userId || invitation.userId === where.userId) &&
+              matchesId &&
               invitation.acceptedAt === null &&
-              invitation.revokedAt === null
+              invitation.revokedAt === null &&
+              (!where.expiresAt ||
+                (invitation.expiresAt as Date).getTime() >
+                  where.expiresAt.gt.getTime())
             ) {
               Object.assign(invitation, data);
               count++;
@@ -359,6 +367,40 @@ describe("invitation-service", () => {
         password: "Password123!",
       }),
     ).rejects.toThrow(InvitationError);
+  });
+
+  it("allows only one concurrent accept for the same invitation token", async () => {
+    const { db, users } = createDb();
+    await createUserInvitation(ctx(), db as never, {
+      email: "sales-a@mail.shangjung.com",
+      role: "SALES",
+      group: "A",
+    });
+    const token = lastInvitationToken();
+
+    const results = await Promise.allSettled([
+      acceptInvitation(db as never, {
+        token,
+        username: "sales-A",
+        password: "Password123!",
+      }),
+      acceptInvitation(db as never, {
+        token,
+        username: "sales-B",
+        password: "Password456!",
+      }),
+    ]);
+
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+    const user = users.find(
+      (item) => item.email === "sales-a@mail.shangjung.com",
+    );
+    expect(["sales-A", "sales-B"]).toContain(user?.username);
   });
 
   it("rejects expired invitations and duplicate usernames", async () => {

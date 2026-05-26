@@ -188,6 +188,7 @@ describe("Schedule Engine - Database Integration", () => {
           orderId: order1.id,
           factoryId: factoryA.id,
           productionDate: oldDate,
+          completionDate: oldDate,
           assignedQuantity: 60,
           status: AssignmentStatus.SCHEDULED,
         },

@@ -34,6 +34,8 @@ const UpdateOrderBodySchema = z
     dueDate: z.string().datetime().optional(),
     quantity: z.number().int().positive().optional(),
     name: z.string().min(1).optional(),
+    isFixed: z.boolean().optional(),
+    isPrioritized: z.boolean().optional(),
   })
   .strict();
 
@@ -100,6 +102,8 @@ export async function PUT(
     const order = await updateOrderService(ctx, prisma, id, {
       ...data,
       dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+      isFixed: data.isFixed,
+      isPrioritized: data.isPrioritized,
     });
     return NextResponse.json(order);
   } catch (err) {

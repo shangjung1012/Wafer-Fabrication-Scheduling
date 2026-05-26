@@ -134,3 +134,7 @@ export async function deleteUser(
   await db.user.delete({ where: { id } });
   return { id };
 }
+
+export async function findUserByUsername(db: PrismaClient, username: string) {
+  return db.user.findUnique({ where: { username } });
+}

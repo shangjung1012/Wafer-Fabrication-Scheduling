@@ -19,7 +19,10 @@ import {
   badRequestResponse,
   notFoundResponse,
 } from "@/modules/auth/rbac";
-import { addComment } from "@/modules/order/conflict-issue-service";
+import {
+  addComment,
+  getConflictIssue,
+} from "@/modules/order/conflict-issue-service";
 import { prisma } from "@/lib/prisma";
 
 const ProposalSchema = z.discriminatedUnion("kind", [
@@ -44,7 +47,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id: issueId } = await params;
+  const { id } = await params;
+  const number = parseInt(id, 10);
+
+  if (isNaN(number)) return notFoundResponse("Invalid issue number.");
 
   try {
     const ctx = await requireAuth(req);
@@ -70,7 +76,8 @@ export async function POST(
       );
     }
 
-    const comment = await addComment(ctx, prisma, issueId, parsed.data);
+    const issue = await getConflictIssue(ctx, prisma, number);
+    const comment = await addComment(ctx, prisma, issue.id, parsed.data);
     return NextResponse.json(comment, { status: 201 });
   } catch (err) {
     if (err instanceof UnauthorizedError)

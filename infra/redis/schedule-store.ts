@@ -1,4 +1,14 @@
+import { randomUUID } from "node:crypto";
+
 import { getRedis } from "@/lib/redis";
+
+const SCHEDULE_LOCK_TTL_SECONDS = 300;
+const RELEASE_SCHEDULE_LOCK_SCRIPT = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+end
+return 0
+`;
 
 export async function getScheduleVersion(type: string): Promise<number> {
   const redis = getRedis();
@@ -35,4 +45,40 @@ export async function getPreview(
 export async function deletePreview(previewId: string): Promise<void> {
   const redis = getRedis();
   await redis.del(`preview:${previewId}`);
+}
+
+export async function withScheduleLock<T>(
+  typeOrTypes: string | string[],
+  fn: () => Promise<T>,
+): Promise<T> {
+  const types = Array.isArray(typeOrTypes)
+    ? Array.from(new Set(typeOrTypes)).sort()
+    : [typeOrTypes];
+  const redis = getRedis();
+  const acquiredLocks: Array<{ lockKey: string; ownerToken: string }> = [];
+
+  try {
+    for (const type of types) {
+      const lockKey = `schedule:lock:${type}`;
+      const ownerToken = randomUUID();
+      const lockAcquired = await redis.set(
+        lockKey,
+        ownerToken,
+        "EX",
+        SCHEDULE_LOCK_TTL_SECONDS,
+        "NX",
+      );
+      if (!lockAcquired) {
+        throw new Error(
+          `A scheduling process is already running for type: ${type}, refresh the page and try again`,
+        );
+      }
+      acquiredLocks.push({ lockKey, ownerToken });
+    }
+    return await fn();
+  } finally {
+    for (const { lockKey, ownerToken } of acquiredLocks) {
+      await redis.eval(RELEASE_SCHEDULE_LOCK_SCRIPT, 1, lockKey, ownerToken);
+    }
+  }
 }

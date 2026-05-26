@@ -20,6 +20,7 @@ export type AssignmentWithOrderRow = {
   status: string;
   orderName: string;
   orderDueDate: string; // YYYY-MM-DD
+  orderIsFixed: boolean;
   applicantId: string;
   lastModifiedById: string | null;
 };
@@ -107,6 +108,7 @@ export async function findAssignmentsForVisualization(
         select: {
           name: true,
           dueDate: true,
+          isFixed: true,
           applicantId: true,
           lastModifiedById: true,
         },
@@ -124,6 +126,7 @@ export async function findAssignmentsForVisualization(
     status: r.status,
     orderName: r.order.name,
     orderDueDate: format(r.order.dueDate, "yyyy-MM-dd"),
+    orderIsFixed: r.order.isFixed,
     applicantId: r.order.applicantId,
     lastModifiedById: r.order.lastModifiedById,
   }));
@@ -187,7 +190,49 @@ export async function findPendingOrdersForSales(
   const rows = await db.order.findMany({
     where: {
       applicantId,
-      status: { in: ["PENDING", "FAILED", "CONFLICT"] },
+      status: "PENDING",
+    },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      quantity: true,
+      dueDate: true,
+      createdAt: true,
+    },
+    orderBy: { dueDate: "asc" },
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    status: r.status,
+    quantity: r.quantity,
+    dueDate: format(r.dueDate, "yyyy-MM-dd"),
+    createdAt: format(r.createdAt, "yyyy-MM-dd"),
+  }));
+}
+
+/**
+ * Pending orders visible to an ADMIN / SUPERADMIN, scoped by production type.
+ *
+ * Pending orders don't have a factory yet — they are grouped by `Order.type`,
+ * which matches the admin's `productionType` (A/B/C). This mirrors how
+ * `getAdminTimeline` scopes factories and how the auto-scheduler iterates
+ * pending types.
+ *
+ * FAILED orders are intentionally excluded — they have a dedicated surface
+ * (ConflictIssue auto-created by the schedule route), so showing them in
+ * the pending sidebar would double-count and mislead users.
+ */
+export async function findPendingOrdersForAdmin(
+  db: PrismaClient,
+  productionType: string,
+): Promise<PendingOrderRow[]> {
+  const rows = await db.order.findMany({
+    where: {
+      type: productionType,
+      status: "PENDING",
     },
     select: {
       id: true,
@@ -216,8 +261,21 @@ export async function findPendingOrdersForSales(
 
 function buildDateWhere(startDate?: string, endDate?: string) {
   if (!startDate && !endDate) return null;
+  // productionDate / DailyCapacity.date are written at local-midnight (see
+  // modules/schedule/strategy.ts), so the filter must use local-day bounds
+  // too — otherwise on UTC+N servers the first day of the range loses its
+  // freshly-scheduled rows (local-midnight serialises to the previous UTC day).
+  const parseLocalDay = (s: string) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  };
+  const endOfLocalDay = (s: string) => {
+    const d = parseLocalDay(s);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  };
   return {
-    ...(startDate ? { gte: new Date(`${startDate}T00:00:00.000Z`) } : {}),
-    ...(endDate ? { lte: new Date(`${endDate}T23:59:59.999Z`) } : {}),
+    ...(startDate ? { gte: parseLocalDay(startDate) } : {}),
+    ...(endDate ? { lte: endOfLocalDay(endDate) } : {}),
   };
 }
