@@ -40,6 +40,8 @@ import { logoutClientAuthSession } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 import {
   DraggableAssignmentChip,
+  DraggablePendingOrderCard,
+  DraggableSplitChip,
   DroppableCell,
 } from "./_components/edit-cell";
 
@@ -737,6 +739,13 @@ function PendingSidebar({
   setSelectedOrderIds,
   onPreviewSelected,
   previewLoading = false,
+  editMode = false,
+  pendingPlaceOrderIds,
+  isDragging = false,
+  pendingSplitByOrderId,
+  pendingSplitPlacements,
+  onConfirmSplit,
+  onUndoSplit,
 }: {
   orders: PendingOrderInfo[];
   today: string;
@@ -746,16 +755,70 @@ function PendingSidebar({
   setSelectedOrderIds?: React.Dispatch<React.SetStateAction<Set<string>>>;
   onPreviewSelected?: (targetOrderIds: string[]) => void;
   previewLoading?: boolean;
+  editMode?: boolean;
+  pendingPlaceOrderIds?: Set<string>;
+  isDragging?: boolean;
+  pendingSplitByOrderId?: Map<string, PendingSplit>;
+  pendingSplitPlacements?: Map<
+    string,
+    {
+      orderId: string;
+      factoryId: string;
+      productionDate: string;
+      quantity: number;
+    }
+  >;
+  onConfirmSplit?: (orderId: string, parts: SplitPart[]) => void;
+  onUndoSplit?: (orderId: string) => void;
 }) {
-  const multiSelectEnabled = Boolean(setSelectedOrderIds && onPreviewSelected);
+  const multiSelectEnabled =
+    !editMode && Boolean(setSelectedOrderIds && onPreviewSelected);
   const selected = selectedOrderIds ?? new Set<string>();
-  const pending = orders.filter((o) => o.status === "PENDING");
+  const pending = orders.filter(
+    (o) =>
+      o.status === "PENDING" &&
+      (!pendingPlaceOrderIds || !pendingPlaceOrderIds.has(o.id)),
+  );
   const pendingIds = pending.map((o) => o.id);
   const allSelected =
     pendingIds.length > 0 && pendingIds.every((id) => selected.has(id));
   const someSelected =
     !allSelected && pendingIds.some((id) => selected.has(id));
   const selectedCount = selected.size;
+
+  const [expandedSplitOrderId, setExpandedSplitOrderId] = useState<
+    string | null
+  >(null);
+  const [draftSplitCount, setDraftSplitCount] = useState(2);
+  const [draftParts, setDraftParts] = useState<
+    { splitId: string; quantity: number }[]
+  >([]);
+  const [draftApplied, setDraftApplied] = useState(false);
+  const draftTotal = draftParts.reduce((sum, p) => sum + p.quantity, 0);
+
+  const applyDraft = (order: PendingOrderInfo) => {
+    const count = Math.max(2, Math.min(10, draftSplitCount));
+    const base = Math.floor(order.quantity / count);
+    const remainder = order.quantity % count;
+    const parts = Array.from({ length: count }, (_, i) => ({
+      splitId: `split-${order.id}-${i}`,
+      quantity: i === count - 1 ? base + remainder : base,
+    }));
+    setDraftParts(parts);
+    setDraftApplied(true);
+  };
+
+  const confirmSplit = (orderId: string) => {
+    if (!onConfirmSplit) return;
+    onConfirmSplit(
+      orderId,
+      draftParts.map((p) => ({ splitId: p.splitId, quantity: p.quantity })),
+    );
+    setExpandedSplitOrderId(null);
+    setDraftParts([]);
+    setDraftApplied(false);
+    setDraftSplitCount(2);
+  };
 
   const toggleOne = (id: string) => {
     if (!setSelectedOrderIds) return;
@@ -806,70 +869,234 @@ function PendingSidebar({
   };
 
   const renderOrders = (list: PendingOrderInfo[]) =>
-    list.map((o) => (
-      <div
-        key={o.id}
-        className={`bg-white rounded-lg p-3 text-xs space-y-1 shadow-sm ${borderColor(o.risk)}`}
-      >
-        <div className="flex items-start justify-between gap-1">
-          {multiSelectEnabled ? (
-            <label className="flex items-start gap-1.5 cursor-pointer flex-1 min-w-0">
-              <input
-                type="checkbox"
-                checked={selected.has(o.id)}
-                onChange={() => toggleOne(o.id)}
-                className="mt-0.5 h-3 w-3 shrink-0 cursor-pointer accent-indigo-600"
-                aria-label={`Select order ${o.name}`}
-              />
-              <span className="font-medium text-gray-900 leading-tight">
+    list.map((o) => {
+      const card = (
+        <div
+          className={`bg-white rounded-lg p-3 text-xs space-y-1 shadow-sm ${borderColor(o.risk)}`}
+        >
+          <div className="flex items-start justify-between gap-1">
+            {multiSelectEnabled ? (
+              <label className="flex items-start gap-1.5 cursor-pointer flex-1 min-w-0">
+                <input
+                  type="checkbox"
+                  checked={selected.has(o.id)}
+                  onChange={() => toggleOne(o.id)}
+                  className="mt-0.5 h-3 w-3 shrink-0 cursor-pointer accent-indigo-600"
+                  aria-label={`Select order ${o.name}`}
+                />
+                <span className="font-medium text-gray-900 leading-tight">
+                  {o.name}
+                </span>
+              </label>
+            ) : (
+              <span className="font-medium text-gray-900 leading-tight flex-1 min-w-0">
                 {o.name}
               </span>
-            </label>
-          ) : (
-            <span className="font-medium text-gray-900 leading-tight flex-1 min-w-0">
-              {o.name}
+            )}
+            {riskDot(o.risk)}
+          </div>
+          <div className="flex justify-between text-gray-500">
+            <span>Qty</span>
+            <span className="font-medium text-gray-700">
+              {o.quantity.toLocaleString()}
             </span>
+          </div>
+          <div className="flex justify-between text-gray-500">
+            <span>Due</span>
+            <span
+              className={`font-medium ${o.risk === "OVERDUE" ? "text-red-600" : o.risk === "AT_RISK" ? "text-orange-500" : "text-gray-700"}`}
+            >
+              {o.dueDate}
+            </span>
+          </div>
+          <div
+            className={`text-right text-[10px] font-semibold ${o.risk === "OVERDUE" ? "text-red-500" : o.risk === "AT_RISK" ? "text-orange-400" : "text-gray-400"}`}
+          >
+            {daysLabel(o.dueDate)}
+          </div>
+          {!editMode && (
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() =>
+                  onEditOrder({
+                    orderId: o.id,
+                    name: o.name,
+                    quantity: String(o.quantity),
+                    status: o.status,
+                    dueDate: o.dueDate,
+                  })
+                }
+                className="text-[10px] font-semibold px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+              >
+                Edit
+              </button>
+            </div>
           )}
-          {riskDot(o.risk)}
+          {editMode && !pendingSplitByOrderId?.has(o.id) && (
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedSplitOrderId(
+                    expandedSplitOrderId === o.id ? null : o.id,
+                  );
+                  setDraftApplied(false);
+                  setDraftSplitCount(2);
+                  setDraftParts([]);
+                }}
+                className="text-[10px] font-semibold px-2 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+              >
+                Split
+              </button>
+            </div>
+          )}
         </div>
-        <div className="flex justify-between text-gray-500">
-          <span>Qty</span>
-          <span className="font-medium text-gray-700">
-            {o.quantity.toLocaleString()}
-          </span>
-        </div>
-        <div className="flex justify-between text-gray-500">
-          <span>Due</span>
-          <span
-            className={`font-medium ${o.risk === "OVERDUE" ? "text-red-600" : o.risk === "AT_RISK" ? "text-orange-500" : "text-gray-700"}`}
-          >
-            {o.dueDate}
-          </span>
-        </div>
-        <div
-          className={`text-right text-[10px] font-semibold ${o.risk === "OVERDUE" ? "text-red-500" : o.risk === "AT_RISK" ? "text-orange-400" : "text-gray-400"}`}
-        >
-          {daysLabel(o.dueDate)}
-        </div>
-        <div className="flex justify-end pt-1">
-          <button
-            type="button"
-            onClick={() =>
-              onEditOrder({
-                orderId: o.id,
-                name: o.name,
-                quantity: String(o.quantity),
-                status: o.status,
-                dueDate: o.dueDate,
-              })
-            }
-            className="text-[10px] font-semibold px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-          >
-            Edit
-          </button>
-        </div>
-      </div>
-    ));
+      );
+      if (editMode && pendingSplitByOrderId?.has(o.id)) {
+        const split = pendingSplitByOrderId.get(o.id)!;
+        return (
+          <div key={o.id} className="space-y-1.5">
+            <div className="bg-gray-100 rounded-lg p-3 text-xs space-y-1 opacity-60 border-l-4 border-l-gray-300">
+              <span className="font-medium text-gray-500">{o.name}</span>
+              <div className="flex justify-between text-gray-400">
+                <span>Qty</span>
+                <span className="font-medium text-gray-500">
+                  {o.quantity.toLocaleString()} (split ×{split.parts.length})
+                </span>
+              </div>
+            </div>
+            {split.parts.map((part, i) => {
+              if (pendingSplitPlacements?.has(part.splitId)) return null;
+              return (
+                <DraggableSplitChip
+                  key={part.splitId}
+                  splitId={part.splitId}
+                >
+                  <div className="bg-white rounded border border-indigo-200 px-2 py-1.5 text-xs flex items-center justify-between gap-2 shadow-sm">
+                    <span className="font-semibold text-indigo-700">
+                      #{i + 1}
+                    </span>
+                    <span className="text-gray-700">
+                      {part.quantity.toLocaleString()} · {o.dueDate}
+                    </span>
+                  </div>
+                </DraggableSplitChip>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => onUndoSplit?.(o.id)}
+              className="w-full text-[10px] font-semibold px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+            >
+              Undo Split
+            </button>
+          </div>
+        );
+      }
+
+      if (editMode && expandedSplitOrderId === o.id) {
+        return (
+          <div key={o.id} className="space-y-2">
+            {card}
+            <div className="bg-white rounded-lg border border-indigo-200 p-3 text-xs space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-600">Split into:</span>
+                <input
+                  type="number"
+                  min={2}
+                  max={10}
+                  value={draftSplitCount}
+                  onChange={(e) => {
+                    setDraftSplitCount(Number(e.target.value));
+                    setDraftApplied(false);
+                  }}
+                  className="w-14 border border-gray-200 rounded px-1.5 py-1 text-center"
+                />
+                <span className="text-gray-400">parts</span>
+                <button
+                  type="button"
+                  onClick={() => applyDraft(o)}
+                  className="px-2 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold hover:bg-indigo-100"
+                >
+                  Apply
+                </button>
+              </div>
+              {draftApplied &&
+                draftParts.map((part, i) => (
+                  <div
+                    key={part.splitId}
+                    className="flex items-center gap-2"
+                  >
+                    <span className="text-gray-500 w-6">#{i + 1}</span>
+                    <span className="text-gray-500">Qty:</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={part.quantity}
+                      onChange={(e) => {
+                        const val = Math.max(
+                          1,
+                          Number(e.target.value) || 0,
+                        );
+                        setDraftParts((prev) =>
+                          prev.map((p, j) =>
+                            j === i ? { ...p, quantity: val } : p,
+                          ),
+                        );
+                      }}
+                      className="w-20 border border-gray-200 rounded px-1.5 py-1 text-center"
+                    />
+                  </div>
+                ))}
+              {draftApplied && (
+                <>
+                  <div
+                    className={`text-right font-semibold ${
+                      draftTotal === o.quantity
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    Total: {draftTotal} / {o.quantity}{" "}
+                    {draftTotal === o.quantity ? "✓" : "✗"}
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedSplitOrderId(null);
+                        setDraftApplied(false);
+                      }}
+                      className="text-[10px] font-semibold px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => confirmSplit(o.id)}
+                      disabled={draftTotal !== o.quantity}
+                      className="text-[10px] font-semibold px-2 py-1 rounded border border-indigo-300 bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300 disabled:border-gray-300"
+                    >
+                      Confirm Split
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      return editMode ? (
+        <DraggablePendingOrderCard key={o.id} orderId={o.id}>
+          {card}
+        </DraggablePendingOrderCard>
+      ) : (
+        <React.Fragment key={o.id}>{card}</React.Fragment>
+      );
+    });
 
   return (
     <div className="flex-none w-64 border-r border-gray-200 bg-gray-50 flex flex-col overflow-hidden">
@@ -928,7 +1155,7 @@ function PendingSidebar({
           </label>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+      <div className={`flex-1 overflow-x-hidden p-3 space-y-4 ${isDragging ? "overflow-y-hidden" : "overflow-y-auto"}`}>
         {orders.length === 0 && (
           <p className="text-xs text-gray-400 text-center pt-4">
             No pending orders
@@ -1141,6 +1368,7 @@ function GanttCell({
   dropDisabledReason,
   columnHasInProduction = false,
   onToggleOrderFixed,
+  onClickItem,
   onClick,
 }: {
   cell: CellData;
@@ -1155,6 +1383,7 @@ function GanttCell({
   /** True when this column day has any IN_PRODUCTION assignment (column accent). */
   columnHasInProduction?: boolean;
   onToggleOrderFixed?: (orderId: string, next: boolean) => void;
+  onClickItem?: (item: TimelineItem) => void;
   onClick: () => void;
 }) {
   const { bg, barColor, fillRatio } = getCellStyle(cell);
@@ -1192,6 +1421,7 @@ function GanttCell({
                 isMoved={movedAssignmentIds.has(item.assignmentId)}
                 editMode={editMode}
                 onToggleOrderFixed={onToggleOrderFixed}
+                onClickItem={onClickItem}
               />
             ))}
           </div>
@@ -1311,6 +1541,17 @@ function GanttCell({
 // Main page
 // ---------------------------------------------------------------------------
 
+type PendingSplit = {
+  orderId: string;
+  originalQuantity: number;
+  parts: SplitPart[];
+};
+
+type SplitPart = {
+  splitId: string;
+  quantity: number;
+};
+
 type FetchError = { status: number; message: string };
 type ScheduleStatus = "idle" | "running" | "success" | "conflict" | "error";
 
@@ -1375,6 +1616,28 @@ export default function SchedulePage() {
   >(() => new Map());
   const [draggingAssignment, setDraggingAssignment] =
     useState<TimelineItem | null>(null);
+  const [pendingPlaceByOrderId, setPendingPlaceByOrderId] = useState<
+    Map<string, { factoryId: string; productionDate: string }>
+  >(() => new Map());
+  const [pendingSplitByOrderId, setPendingSplitByOrderId] = useState<
+    Map<string, PendingSplit>
+  >(() => new Map());
+  const [pendingSplitPlacements, setPendingSplitPlacements] = useState<
+    Map<
+      string,
+      {
+        orderId: string;
+        factoryId: string;
+        productionDate: string;
+        quantity: number;
+      }
+    >
+  >(() => new Map());
+  const [draggingSplitOrderId, setDraggingSplitOrderId] = useState<
+    string | null
+  >(null);
+  const [draggingPendingOrder, setDraggingPendingOrder] =
+    useState<PendingOrderInfo | null>(null);
   const [saveStatus, setSaveStatus] = useState<
     "idle" | "saving" | "success" | "error"
   >("idle");
@@ -1606,6 +1869,10 @@ export default function SchedulePage() {
     setEditMode(true);
     setPendingMoves(new Map());
     setPendingIsFixedByOrderId(new Map());
+    setPendingPlaceByOrderId(new Map());
+    setPendingSplitByOrderId(new Map());
+    setPendingSplitPlacements(new Map());
+    setDraggingPendingOrder(null);
     setSaveStatus("idle");
     setSelectedCell(null);
     setPreviewData(null);
@@ -1616,6 +1883,10 @@ export default function SchedulePage() {
     setEditMode(false);
     setPendingMoves(new Map());
     setPendingIsFixedByOrderId(new Map());
+    setPendingPlaceByOrderId(new Map());
+    setPendingSplitByOrderId(new Map());
+    setPendingSplitPlacements(new Map());
+    setDraggingPendingOrder(null);
     setSaveStatus("idle");
   };
 
@@ -1633,6 +1904,36 @@ export default function SchedulePage() {
     },
     [data],
   );
+
+  const handleConfirmSplit = useCallback(
+    (orderId: string, parts: SplitPart[]) => {
+      const order = data?.adminContext?.pendingOrders.find(
+        (o) => o.id === orderId,
+      );
+      if (!order) return;
+      setPendingSplitByOrderId((prev) => {
+        const next = new Map(prev);
+        next.set(orderId, { orderId, originalQuantity: order.quantity, parts });
+        return next;
+      });
+    },
+    [data],
+  );
+
+  const handleUndoSplit = useCallback((orderId: string) => {
+    setPendingSplitByOrderId((prev) => {
+      const next = new Map(prev);
+      next.delete(orderId);
+      return next;
+    });
+    setPendingSplitPlacements((prev) => {
+      const next = new Map(prev);
+      for (const [splitId, p] of prev) {
+        if (p.orderId === orderId) next.delete(splitId);
+      }
+      return next;
+    });
+  }, []);
 
   const handleSaveEdits = async () => {
     if (!data) return;
@@ -1654,7 +1955,27 @@ export default function SchedulePage() {
       return;
     }
 
-    if (cellMoveEntries.length === 0 && pendingIsFixedByOrderId.size === 0) {
+    // Validate all split parts are placed
+    for (const [orderId, split] of pendingSplitByOrderId) {
+      const placedSplitIds = new Set(
+        Array.from(pendingSplitPlacements.entries())
+          .filter(([, p]) => p.orderId === orderId)
+          .map(([splitId]) => splitId),
+      );
+      const unplaced = split.parts.filter(
+        (p) => !placedSplitIds.has(p.splitId),
+      );
+      if (unplaced.length > 0) {
+        setSaveStatus("error");
+        setSaveErrorMsg(
+          `Order "${data?.adminContext?.pendingOrders.find((o) => o.id === orderId)?.name ?? orderId}" has ${unplaced.length} unplaced split part(s). Place all parts or undo the split.`,
+        );
+        setTimeout(() => setSaveStatus("idle"), 6000);
+        return;
+      }
+    }
+
+    if (cellMoveEntries.length === 0 && pendingIsFixedByOrderId.size === 0 && pendingPlaceByOrderId.size === 0 && pendingSplitPlacements.size === 0) {
       setEditMode(false);
       return;
     }
@@ -1693,12 +2014,31 @@ export default function SchedulePage() {
         }
       }
 
-      if (cellMoveEntries.length > 0) {
-        const moves = cellMoveEntries.map(([id, m]) => ({
-          assignmentId: id,
-          factoryId: m.factoryId,
-          productionDate: m.productionDate,
-        }));
+      const pendingPlaceEntries = Array.from(pendingPlaceByOrderId.entries());
+      const splitPlaceEntries = Array.from(pendingSplitPlacements.entries());
+      if (
+        cellMoveEntries.length > 0 ||
+        pendingPlaceEntries.length > 0 ||
+        splitPlaceEntries.length > 0
+      ) {
+        const moves = [
+          ...cellMoveEntries.map(([id, m]) => ({
+            assignmentId: id,
+            factoryId: m.factoryId,
+            productionDate: m.productionDate,
+          })),
+          ...pendingPlaceEntries.map(([orderId, place]) => ({
+            orderId,
+            factoryId: place.factoryId,
+            productionDate: place.productionDate,
+          })),
+          ...splitPlaceEntries.map(([, place]) => ({
+            orderId: place.orderId,
+            factoryId: place.factoryId,
+            productionDate: place.productionDate,
+            quantity: place.quantity,
+          })),
+        ];
         const res = await fetch("/api/assignments/bulk", {
           method: "PATCH",
           credentials: "same-origin",
@@ -1708,7 +2048,12 @@ export default function SchedulePage() {
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
           setSaveStatus("error");
-          setSaveErrorMsg(body.message ?? `HTTP ${res.status}`);
+          const violations: { reason: string }[] =
+            Array.isArray(body.violations) ? body.violations : [];
+          const detail = violations.length > 0
+            ? violations.map((v) => v.reason).join("; ")
+            : (body.message ?? `HTTP ${res.status}`);
+          setSaveErrorMsg(`Save failed: ${detail}`);
           setTimeout(() => setSaveStatus("idle"), 6000);
           return;
         }
@@ -1749,6 +2094,10 @@ export default function SchedulePage() {
       setEditMode(false);
       setPendingMoves(new Map());
       setPendingIsFixedByOrderId(new Map());
+      setPendingPlaceByOrderId(new Map());
+      setPendingSplitByOrderId(new Map());
+      setPendingSplitPlacements(new Map());
+      setDraggingPendingOrder(null);
       setLoading(true);
       setRefreshKey((k) => k + 1);
       setTimeout(() => {
@@ -1763,7 +2112,43 @@ export default function SchedulePage() {
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    const assignmentId = String(event.active.id);
+    const activeId = String(event.active.id);
+
+    if (activeId.startsWith("pending-order:")) {
+      const orderId = activeId.slice("pending-order:".length);
+      const order = data?.adminContext?.pendingOrders.find(
+        (o) => o.id === orderId,
+      );
+      if (order) {
+        setDraggingPendingOrder(order);
+        setDraggingSplitOrderId(null);
+        setDraggingAssignment(null);
+      }
+      return;
+    }
+
+    if (activeId.startsWith("pending-split:")) {
+      const splitId = activeId.slice("pending-split:".length);
+      for (const [orderId, split] of pendingSplitByOrderId) {
+        const part = split.parts.find((p) => p.splitId === splitId);
+        if (part) {
+          const order = data?.adminContext?.pendingOrders.find(
+            (o) => o.id === orderId,
+          );
+          if (order) {
+            setDraggingPendingOrder({ ...order, quantity: part.quantity });
+            setDraggingSplitOrderId(orderId);
+            setDraggingAssignment(null);
+          }
+          break;
+        }
+      }
+      return;
+    }
+
+    setDraggingPendingOrder(null);
+    setDraggingSplitOrderId(null);
+    const assignmentId = activeId;
     const baseTimeline = data?.timeline ?? [];
     const item = baseTimeline.find((t) => t.assignmentId === assignmentId);
     if (!item) return;
@@ -1775,9 +2160,56 @@ export default function SchedulePage() {
 
   const handleDragEnd = (event: DragEndEvent) => {
     setDraggingAssignment(null);
+    setDraggingPendingOrder(null);
+    setDraggingSplitOrderId(null);
     if (!event.over) return;
-    const assignmentId = String(event.active.id);
+
+    const activeId = String(event.active.id);
     const overId = String(event.over.id);
+
+    if (activeId.startsWith("pending-order:")) {
+      const orderId = activeId.slice("pending-order:".length);
+      if (overId === EDIT_STAGING_DROP_ID) return;
+      const [factoryId, date] = overId.split("|");
+      if (!factoryId || !date) return;
+      setPendingPlaceByOrderId((prev) => {
+        const next = new Map(prev);
+        next.set(orderId, { factoryId, productionDate: date });
+        return next;
+      });
+      return;
+    }
+
+    if (activeId.startsWith("pending-split:")) {
+      const splitId = activeId.slice("pending-split:".length);
+      if (overId === EDIT_STAGING_DROP_ID) return;
+      const [factoryId, date] = overId.split("|");
+      if (!factoryId || !date) return;
+      let splitOrderId = "";
+      let splitQty = 0;
+      for (const [orderId, split] of pendingSplitByOrderId) {
+        const part = split.parts.find((p) => p.splitId === splitId);
+        if (part) {
+          splitOrderId = orderId;
+          splitQty = part.quantity;
+          break;
+        }
+      }
+      if (!splitOrderId) return;
+      setPendingSplitPlacements((prev) => {
+        const next = new Map(prev);
+        next.set(splitId, {
+          orderId: splitOrderId,
+          factoryId,
+          productionDate: date,
+          quantity: splitQty,
+        });
+        return next;
+      });
+      return;
+    }
+
+    const assignmentId = activeId;
     const item = data?.timeline.find((t) => t.assignmentId === assignmentId);
     if (!item) return;
 
@@ -1867,7 +2299,7 @@ export default function SchedulePage() {
     }
     if (!data) return null;
 
-    if (editMode && pendingMoves.size > 0) {
+    if (editMode && (pendingMoves.size > 0 || pendingPlaceByOrderId.size > 0 || pendingSplitPlacements.size > 0)) {
       const movedTimeline: TimelineItem[] = [];
       for (const t of data.timeline) {
         const move = pendingMoves.get(t.assignmentId);
@@ -1881,6 +2313,40 @@ export default function SchedulePage() {
           factoryId: move.factoryId,
           productionDate: move.productionDate,
         });
+      }
+      for (const [orderId, place] of pendingPlaceByOrderId) {
+        const order = data.adminContext?.pendingOrders.find(
+          (o) => o.id === orderId,
+        );
+        if (!order) continue;
+        movedTimeline.push({
+          assignmentId: `__pending-place-${orderId}`,
+          orderId,
+          orderName: order.name,
+          factoryId: place.factoryId,
+          productionDate: place.productionDate,
+          dueDate: order.dueDate,
+          assignedQuantity: order.quantity,
+          status: "SCHEDULED",
+          isFixed: false,
+        } as TimelineItem);
+      }
+      for (const [splitId, place] of pendingSplitPlacements) {
+        const order = data.adminContext?.pendingOrders.find(
+          (o) => o.id === place.orderId,
+        );
+        if (!order) continue;
+        movedTimeline.push({
+          assignmentId: `__pending-split-${splitId}`,
+          orderId: place.orderId,
+          orderName: order.name,
+          factoryId: place.factoryId,
+          productionDate: place.productionDate,
+          dueDate: order.dueDate,
+          assignedQuantity: place.quantity,
+          status: "SCHEDULED",
+          isFixed: false,
+        } as TimelineItem);
       }
       const timelineWithFixed = applyPendingIsFixedByOrder(
         movedTimeline,
@@ -1980,7 +2446,7 @@ export default function SchedulePage() {
       conflicts: data.conflicts,
       diffs: data.diffs,
     };
-  }, [data, previewData, editMode, pendingMoves, pendingIsFixedByOrderId]);
+  }, [data, previewData, editMode, pendingMoves, pendingIsFixedByOrderId, pendingPlaceByOrderId, pendingSplitPlacements]);
   const handleCreateOrder = async (values: OrderEditorValues) => {
     if (!values.name) {
       throw new Error("Name is required.");
@@ -2308,8 +2774,8 @@ export default function SchedulePage() {
   );
 
   const pendingEditCount = useMemo(
-    () => pendingMoves.size + pendingIsFixedByOrderId.size,
-    [pendingMoves, pendingIsFixedByOrderId],
+    () => pendingMoves.size + pendingIsFixedByOrderId.size + pendingPlaceByOrderId.size + pendingSplitPlacements.size,
+    [pendingMoves, pendingIsFixedByOrderId, pendingPlaceByOrderId, pendingSplitPlacements],
   );
 
   /** Timeline rows held in the edit-mode staging strip (off the Gantt grid). */
@@ -2845,65 +3311,43 @@ export default function SchedulePage() {
 
       {/* Gantt body */}
       <div className="flex-1 overflow-hidden flex">
-        {/* Pending sidebar — SALES: read-only listing of their own orders */}
-        {isSales && data?.salesContext && !loading && !fetchError && (
-          <PendingSidebar
-            orders={data.salesContext.pendingOrders}
-            today={data.today}
-            onEditOrder={(order) => setEditOrder(order)}
-            onCreate={() => setCreateOpen(true)}
-          />
-        )}
-        {/* Pending sidebar — ADMIN/SUPERADMIN: multi-select for targeted preview (T4A-C / T8) */}
-        {!isSales && data?.adminContext && !loading && !fetchError && (
-          <PendingSidebar
-            orders={data.adminContext.pendingOrders}
-            today={data.today}
-            onEditOrder={(order) => setEditOrder(order)}
-            selectedOrderIds={selectedOrderIds}
-            setSelectedOrderIds={setSelectedOrderIds}
-            onPreviewSelected={(targetOrderIds) =>
-              handlePreviewSchedule(targetOrderIds)
+        {!loading && !fetchError && data ? (
+          <DndContext
+            sensors={sensors}
+            onDragStart={editMode ? handleDragStart : undefined}
+            onDragEnd={
+              editMode ? handleDragEnd : () => setDraggingAssignment(null)
             }
-            previewLoading={previewLoading}
-          />
-        )}
-
-        <div className="flex-1 overflow-auto">
-          {loading && (
-            <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-              Loading…
-            </div>
-          )}
-
-          {!loading && fetchError && (
-            <div className="flex flex-col items-center justify-center h-full gap-2">
-              <span className="text-2xl">
-                {fetchError.status === 403 ? "🔒" : "⚠️"}
-              </span>
-              <p className="text-sm font-medium text-gray-700">
-                {fetchError.status === 401 &&
-                  "Unauthorized — invalid or missing token"}
-                {fetchError.status === 403 &&
-                  "Forbidden — this role cannot view the schedule"}
-                {fetchError.status === 0 &&
-                  "Network error — is the server running?"}
-                {fetchError.status > 0 &&
-                  fetchError.status !== 401 &&
-                  fetchError.status !== 403 &&
-                  `Error ${fetchError.status}: ${fetchError.message}`}
-              </p>
-            </div>
-          )}
-
-          {!loading && !fetchError && data && (
-            <DndContext
-              sensors={sensors}
-              onDragStart={editMode ? handleDragStart : undefined}
-              onDragEnd={
-                editMode ? handleDragEnd : () => setDraggingAssignment(null)
-              }
-            >
+          >
+            {isSales && data.salesContext && (
+              <PendingSidebar
+                orders={data.salesContext.pendingOrders}
+                today={data.today}
+                onEditOrder={(order) => setEditOrder(order)}
+                onCreate={() => setCreateOpen(true)}
+              />
+            )}
+            {!isSales && data.adminContext && (
+              <PendingSidebar
+                orders={data.adminContext.pendingOrders}
+                today={data.today}
+                onEditOrder={(order) => setEditOrder(order)}
+                selectedOrderIds={selectedOrderIds}
+                setSelectedOrderIds={setSelectedOrderIds}
+                onPreviewSelected={(targetOrderIds) =>
+                  handlePreviewSchedule(targetOrderIds)
+                }
+                previewLoading={previewLoading}
+                editMode={editMode}
+                pendingPlaceOrderIds={new Set(pendingPlaceByOrderId.keys())}
+                isDragging={draggingPendingOrder !== null || draggingAssignment !== null}
+                pendingSplitByOrderId={pendingSplitByOrderId}
+                pendingSplitPlacements={pendingSplitPlacements}
+                onConfirmSplit={handleConfirmSplit}
+                onUndoSplit={handleUndoSplit}
+              />
+            )}
+            <div className="flex-1 overflow-auto">
               {editMode && (
                 <div className="px-4 py-2 border-b border-amber-200 bg-amber-50/90">
                   <div className="text-[11px] font-semibold text-amber-950">
@@ -3035,9 +3479,9 @@ export default function SchedulePage() {
                                 factory.id === currFactoryId &&
                                 date === currDate;
                               if (!isCurrentCell) {
-                                if (date > draggingAssignment.dueDate) {
+                                if (date >= draggingAssignment.dueDate) {
                                   dropDisabled = true;
-                                  dropDisabledReason = `After due date ${draggingAssignment.dueDate}`;
+                                  dropDisabledReason = `On or after due date ${draggingAssignment.dueDate} (needs production time)`;
                                 } else if (
                                   cell.usedCapacity +
                                     draggingAssignment.assignedQuantity >
@@ -3049,6 +3493,38 @@ export default function SchedulePage() {
                                   );
                                   dropDisabled = true;
                                   dropDisabledReason = `Insufficient capacity (remaining ${remaining.toLocaleString()} / need ${draggingAssignment.assignedQuantity.toLocaleString()})`;
+                                }
+                              }
+                            }
+                            if (editMode && draggingPendingOrder) {
+                              if (date >= draggingPendingOrder.dueDate) {
+                                dropDisabled = true;
+                                dropDisabledReason = `On or after due date ${draggingPendingOrder.dueDate} (needs production time)`;
+                              } else if (
+                                cell.usedCapacity +
+                                  draggingPendingOrder.quantity >
+                                cell.maxCapacity
+                              ) {
+                                const remaining = Math.max(
+                                  0,
+                                  cell.maxCapacity - cell.usedCapacity,
+                                );
+                                dropDisabled = true;
+                                dropDisabledReason = `Insufficient capacity (remaining ${remaining.toLocaleString()} / need ${draggingPendingOrder.quantity.toLocaleString()})`;
+                              }
+                              if (!dropDisabled && draggingSplitOrderId) {
+                                const sameOrderInCell = Array.from(
+                                  pendingSplitPlacements.entries(),
+                                ).some(
+                                  ([, p]) =>
+                                    p.orderId === draggingSplitOrderId &&
+                                    p.factoryId === factory.id &&
+                                    p.productionDate === date,
+                                );
+                                if (sameOrderInCell) {
+                                  dropDisabled = true;
+                                  dropDisabledReason =
+                                    "Same order's split parts must be placed in different cells";
                                 }
                               }
                             }
@@ -3069,6 +3545,20 @@ export default function SchedulePage() {
                                   date,
                                 )}
                                 onToggleOrderFixed={handleToggleOrderFixed}
+                                onClickItem={
+                                  editMode
+                                    ? (item) =>
+                                        setEditOrder({
+                                          orderId: item.orderId,
+                                          name: item.orderName,
+                                          quantity: String(
+                                            item.assignedQuantity,
+                                          ),
+                                          status: item.status,
+                                          dueDate: item.dueDate,
+                                        })
+                                    : undefined
+                                }
                                 onClick={() =>
                                   setSelectedCell({
                                     factoryId: factory.id,
@@ -3095,10 +3585,47 @@ export default function SchedulePage() {
                     </span>
                   </div>
                 )}
+                {draggingPendingOrder && (
+                  <div className="text-[9px] leading-tight rounded px-1 py-0.5 bg-indigo-100 border border-indigo-400 text-indigo-800 shadow-lg">
+                    <span className="font-semibold truncate block max-w-[80px]">
+                      {draggingPendingOrder.name}
+                    </span>
+                    <span className="text-[8px] opacity-70">
+                      ×{draggingPendingOrder.quantity}
+                    </span>
+                  </div>
+                )}
               </DragOverlay>
-            </DndContext>
-          )}
-        </div>
+            </div>
+          </DndContext>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            {loading && (
+              <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                Loading…
+              </div>
+            )}
+            {!loading && fetchError && (
+              <div className="flex flex-col items-center justify-center h-full gap-2">
+                <span className="text-2xl">
+                  {fetchError.status === 403 ? "🔒" : "⚠️"}
+                </span>
+                <p className="text-sm font-medium text-gray-700">
+                  {fetchError.status === 401 &&
+                    "Unauthorized — invalid or missing token"}
+                  {fetchError.status === 403 &&
+                    "Forbidden — this role cannot view the schedule"}
+                  {fetchError.status === 0 &&
+                    "Network error — is the server running?"}
+                  {fetchError.status > 0 &&
+                    fetchError.status !== 401 &&
+                    fetchError.status !== 403 &&
+                    `Error ${fetchError.status}: ${fetchError.message}`}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Detail panel overlay */}

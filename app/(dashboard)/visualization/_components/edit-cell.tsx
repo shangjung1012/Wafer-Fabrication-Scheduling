@@ -29,11 +29,13 @@ export function DraggableAssignmentChip({
   isMoved,
   editMode = false,
   onToggleOrderFixed,
+  onClickItem,
 }: {
   item: TimelineItem;
   isMoved: boolean;
   editMode?: boolean;
   onToggleOrderFixed?: (orderId: string, next: boolean) => void;
+  onClickItem?: (item: TimelineItem) => void;
 }) {
   const isLockedByStatus = item.status !== "SCHEDULED";
   const isFixed = item.isFixed;
@@ -58,7 +60,8 @@ export function DraggableAssignmentChip({
   if (isLockedByStatus) {
     return (
       <div
-        className={`text-[9px] leading-tight rounded px-1 py-0.5 select-none border cursor-not-allowed ${assignmentChipToneClasses(item.status, false)}`}
+        onClick={onClickItem ? () => onClickItem(item) : undefined}
+        className={`text-[9px] leading-tight rounded px-1 py-0.5 select-none border ${onClickItem ? "cursor-pointer" : "cursor-not-allowed"} ${assignmentChipToneClasses(item.status, false)}`}
         title={`${item.orderName} · qty ${item.assignedQuantity} · ${item.status} (locked)`}
       >
         <span className="font-semibold truncate block max-w-[64px]">
@@ -83,6 +86,7 @@ export function DraggableAssignmentChip({
       ref={setNodeRef}
       style={style}
       {...(dragDisabled ? {} : { ...listeners, ...attributes })}
+      onClick={onClickItem && !isDragging ? () => onClickItem(item) : undefined}
       className={`text-[9px] leading-tight rounded px-1 py-0.5 select-none border ${cursorClass} ${tone}`}
       title={
         isFixed
@@ -142,6 +146,62 @@ export function DroppableCell({
             ? "ring-2 ring-blue-500 ring-inset bg-blue-100/40"
             : ""
       }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function DraggableSplitChip({
+  splitId,
+  children,
+}: {
+  splitId: string;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: `pending-split:${splitId}` });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className="cursor-grab active:cursor-grabbing"
+    >
+      {children}
+    </div>
+  );
+}
+
+export function DraggablePendingOrderCard({
+  orderId,
+  children,
+}: {
+  orderId: string;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: `pending-order:${orderId}` });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className="cursor-grab active:cursor-grabbing"
     >
       {children}
     </div>
