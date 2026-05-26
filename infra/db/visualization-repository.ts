@@ -21,6 +21,7 @@ export type AssignmentWithOrderRow = {
   orderName: string;
   orderDueDate: string; // YYYY-MM-DD
   orderIsFixed: boolean;
+  orderIsPrioritized: boolean;
   applicantId: string;
   lastModifiedById: string | null;
 };
@@ -52,6 +53,7 @@ export type PendingOrderRow = {
   quantity: number;
   dueDate: string; // YYYY-MM-DD
   createdAt: string; // YYYY-MM-DD
+  isPrioritized: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -109,6 +111,7 @@ export async function findAssignmentsForVisualization(
           name: true,
           dueDate: true,
           isFixed: true,
+          isPrioritized: true,
           applicantId: true,
           lastModifiedById: true,
         },
@@ -127,6 +130,7 @@ export async function findAssignmentsForVisualization(
     orderName: r.order.name,
     orderDueDate: format(r.order.dueDate, "yyyy-MM-dd"),
     orderIsFixed: r.order.isFixed,
+    orderIsPrioritized: r.order.isPrioritized,
     applicantId: r.order.applicantId,
     lastModifiedById: r.order.lastModifiedById,
   }));
@@ -199,6 +203,7 @@ export async function findPendingOrdersForSales(
       quantity: true,
       dueDate: true,
       createdAt: true,
+      isPrioritized: true,
     },
     orderBy: { dueDate: "asc" },
   });
@@ -210,6 +215,7 @@ export async function findPendingOrdersForSales(
     quantity: r.quantity,
     dueDate: format(r.dueDate, "yyyy-MM-dd"),
     createdAt: format(r.createdAt, "yyyy-MM-dd"),
+    isPrioritized: r.isPrioritized,
   }));
 }
 
@@ -241,6 +247,7 @@ export async function findPendingOrdersForAdmin(
       quantity: true,
       dueDate: true,
       createdAt: true,
+      isPrioritized: true,
     },
     orderBy: { dueDate: "asc" },
   });
@@ -252,6 +259,7 @@ export async function findPendingOrdersForAdmin(
     quantity: r.quantity,
     dueDate: format(r.dueDate, "yyyy-MM-dd"),
     createdAt: format(r.createdAt, "yyyy-MM-dd"),
+    isPrioritized: r.isPrioritized,
   }));
 }
 

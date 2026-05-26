@@ -25,6 +25,7 @@ export type AssignmentMove = {
   orderId?: string;
   factoryId: string;
   productionDate: string; // YYYY-MM-DD
+  quantity?: number;
 };
 
 export type ManualEditViolation = {
@@ -97,6 +98,7 @@ export async function applyAssignmentMoves(
 
   // 2. Pass 1: Accumulate & Validate non-capacity constraints
   const movesIntoSlot = new Map<string, string[]>();
+  const orderOriginalQtyMap = new Map<string, number>();
 
   for (const move of moves) {
     const targetDate = toMidnight(move.productionDate);
@@ -177,10 +179,11 @@ export async function applyAssignmentMoves(
         continue;
       }
       orderId = order.id;
-      qty = order.quantity;
+      qty = move.quantity ?? order.quantity;
       orderType = order.type;
       dueDate = order.dueDate;
       actionType = "SCHEDULE_PENDING";
+      orderOriginalQtyMap.set(orderId, order.quantity);
     } else {
       continue;
     }
@@ -234,6 +237,40 @@ export async function applyAssignmentMoves(
       oldDate,
       oldCompletionDate,
     });
+  }
+
+  // Split-order validation: same orderId with multiple SCHEDULE_PENDING moves
+  const pendingQtyByOrderId = new Map<
+    string,
+    { total: number; slots: Set<string> }
+  >();
+  for (const action of validActions) {
+    if (action.type !== "SCHEDULE_PENDING") continue;
+    const entry = pendingQtyByOrderId.get(action.orderId) ?? {
+      total: 0,
+      slots: new Set<string>(),
+    };
+    entry.total += action.qty;
+    const slot = `${action.move.factoryId}_${action.move.productionDate}`;
+    if (entry.slots.has(slot)) {
+      violations.push({
+        targetId: action.orderId,
+        code: "INVALID_STATE",
+        reason: `Duplicate slot ${action.move.factoryId} on ${action.move.productionDate} for the same order`,
+      });
+    }
+    entry.slots.add(slot);
+    pendingQtyByOrderId.set(action.orderId, entry);
+  }
+  for (const [orderId, entry] of pendingQtyByOrderId) {
+    const originalQty = orderOriginalQtyMap.get(orderId) ?? 0;
+    if (entry.total !== originalQty) {
+      violations.push({
+        targetId: orderId,
+        code: "INVALID_STATE",
+        reason: `Split quantities sum to ${entry.total} but order quantity is ${originalQty}`,
+      });
+    }
   }
 
   // Pass 2: Assert Net Capacity

@@ -17,6 +17,7 @@ const MoveSchema = z
     orderId: z.string().optional(),
     factoryId: z.string().min(1),
     productionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+    quantity: z.number().int().positive().optional(),
   })
   .refine((data) => data.assignmentId || data.orderId, {
     message: "Must provide either assignmentId or orderId",
