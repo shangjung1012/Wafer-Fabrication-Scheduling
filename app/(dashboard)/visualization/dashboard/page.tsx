@@ -417,7 +417,7 @@ export default function DashboardPage() {
   const dateColumns = useMemo(() => {
     const today = timelineData?.today ?? format(new Date(), "yyyy-MM-dd");
     return Array.from({ length: 7 }, (_, index) =>
-      format(addDays(parseISO(today), index), "yyyy-MM-dd"),
+      format(addDays(parseISO(today), index - 2), "yyyy-MM-dd"),
     );
   }, [timelineData]);
 
