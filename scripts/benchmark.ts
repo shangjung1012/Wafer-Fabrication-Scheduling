@@ -584,7 +584,7 @@ for (const policy of policyNames) {
       ...phase1Scheduled.map((o) => ({
         ...o,
         assignments: (phase1Asgn.get(o.id) || []).map((a) => ({
-          status: AssignmentStatus.SCHEDULED as const,
+          status: AssignmentStatus.SCHEDULED,
           assignedQuantity: a.assignedQuantity,
           factoryId: a.factoryId,
           productionDate: a.productionDate,
