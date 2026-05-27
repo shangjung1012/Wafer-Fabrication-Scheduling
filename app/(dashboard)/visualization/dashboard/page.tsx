@@ -384,6 +384,19 @@ export default function DashboardPage() {
     return map;
   }, [timelineData]);
 
+  /** Status cards + FAILED banner: scope to the same orders the user may see (defense in depth vs API). */
+  const ordersForStatusCounts = useMemo(() => {
+    if (!session?.user) return orders;
+    if (session.user.role === "SALES") {
+      return orders.filter((o) => o.applicantId === session.user.id);
+    }
+    if (session.user.role === "ADMIN" || session.user.role === "SUPERADMIN") {
+      const g = session.user.group;
+      if (g) return orders.filter((o) => o.type === g);
+    }
+    return orders;
+  }, [orders, session]);
+
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       PENDING: 0,
@@ -393,13 +406,13 @@ export default function DashboardPage() {
       CANCELLED: 0,
       FAILED: 0,
     };
-    for (const order of orders) {
+    for (const order of ordersForStatusCounts) {
       if (order.status in counts) {
         counts[order.status]++;
       }
     }
     return counts;
-  }, [orders]);
+  }, [ordersForStatusCounts]);
 
   const dateColumns = useMemo(() => {
     const today = timelineData?.today ?? format(new Date(), "yyyy-MM-dd");
