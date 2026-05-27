@@ -23,8 +23,6 @@ import {
 import { getOrder, updateOrderService } from "@/modules/order/order-service";
 import { OrderStatus } from "@/infra/db/order-repository";
 import { prisma } from "@/lib/prisma";
-import { getTime } from "@/lib/get-time";
-import { format } from "date-fns";
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -99,13 +97,6 @@ export async function PUT(
     const hasField = Object.values(data).some((v) => v !== undefined);
     if (!hasField) {
       return badRequestResponse("At least one field is required.");
-    }
-
-    if (data.dueDate) {
-      const todayStr = format(await getTime(), "yyyy-MM-dd");
-      if (format(new Date(data.dueDate), "yyyy-MM-dd") < todayStr) {
-        return badRequestResponse("Due date cannot be in the past.");
-      }
     }
 
     const order = await updateOrderService(ctx, prisma, id, {

@@ -3,14 +3,11 @@
 import { Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  logoutClientAuthSession,
   persistClientAuthSession,
   type ClientAuthSession,
 } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
-import { DashboardShell } from "@/components/dashboard/DashboardShell";
-
-type Role = ClientAuthSession["user"]["role"];
+import { AppHeader } from "@/components/dashboard/AppHeader";
 
 function apiFetch(path: string, options: RequestInit = {}) {
   return fetch(path, {
@@ -23,92 +20,33 @@ function apiFetch(path: string, options: RequestInit = {}) {
   });
 }
 
-const pageShellStyle: React.CSSProperties = {
-  maxWidth: 1000,
-  margin: "0 auto",
-  padding: "20px 16px",
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  color: "#0f172a",
-};
-
-const panelStyle: React.CSSProperties = {
+const cardStyle: React.CSSProperties = {
   border: "1px solid #dbe3ef",
   borderRadius: 8,
-  padding: 16,
-  marginBottom: 16,
+  padding: 20,
+  marginBottom: 20,
   background: "#ffffff",
   boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 };
 
-const sectionHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  marginBottom: 14,
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 15,
-  fontWeight: 750,
-};
-
-const sectionMetaStyle: React.CSSProperties = {
-  margin: "4px 0 0",
-  color: "#475569",
-  fontSize: 12,
-};
-
 const labelStyle: React.CSSProperties = {
+  display: "block",
+  marginBottom: 6,
+  fontSize: 13,
   color: "#334155",
-  fontSize: 12,
-  fontWeight: 700,
+  fontWeight: 650,
 };
 
 const inputStyle: React.CSSProperties = {
+  display: "block",
   width: "100%",
-  boxSizing: "border-box",
-  border: "1px solid #cbd5e1",
-  borderRadius: 6,
-  padding: "8px 10px",
-  fontSize: 14,
-  color: "#0f172a",
-  background: "#fff",
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
-  border: "1px solid #2563eb",
-  borderRadius: 6,
-  padding: "8px 12px",
-  background: "#2563eb",
-  color: "#fff",
-  fontSize: 13,
-  fontWeight: 750,
-  cursor: "pointer",
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  minHeight: 32,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 7,
-  border: "1px solid #cbd5e1",
-  borderRadius: 6,
   padding: "6px 10px",
-  background: "#fff",
-  color: "#1e293b",
+  marginTop: 2,
+  border: "1px solid #cbd5e1",
+  borderRadius: 6,
   fontSize: 13,
-  fontWeight: 700,
-  cursor: "pointer",
+  boxSizing: "border-box",
 };
-
 
 const EMAIL_ERROR_MESSAGES: Record<string, string> = {
   missing_token: "Verification link is invalid (missing token).",
@@ -118,19 +56,6 @@ const EMAIL_ERROR_MESSAGES: Record<string, string> = {
   email_taken:
     "That email address was taken by another account before you could confirm. Please try again.",
 };
-
-function roleBadge(role: Role): React.CSSProperties {
-  return {
-    fontSize: 12,
-    fontWeight: 700,
-    padding: "3px 10px",
-    borderRadius: 99,
-    background:
-      role === "SALES" ? "#dcfce7" : role === "ADMIN" ? "#dbeafe" : "#f3e8ff",
-    color:
-      role === "SALES" ? "#166534" : role === "ADMIN" ? "#1e40af" : "#6b21a8",
-  };
-}
 
 export default function ProfilePage() {
   return (
@@ -283,229 +208,169 @@ function ProfilePageInner() {
     }
   }, [emailConfirmToken]);
 
-  const handleLogout = useCallback(async () => {
-    await logoutClientAuthSession();
-    router.replace("/login");
-  }, [router]);
-
-  if (session === undefined)
-    return <div style={pageShellStyle}>Loading...</div>;
-  if (session === null) return <div style={pageShellStyle}>Redirecting...</div>;
+  if (!session)
+    return (
+      <div className="p-10 text-center text-sm text-gray-400">Loading…</div>
+    );
 
   const { user } = session;
 
   return (
-    <DashboardShell
-      title="Profile"
-      subtitle="Manage your account and email."
-      leftSectionSurfaceClassName="flex flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
-      leftSection={
-        <>
-          <section style={panelStyle}>
-            <div style={sectionHeaderStyle}>
-              <div>
-                <h2 style={sectionTitleStyle}>Current User</h2>
-                <p style={sectionMetaStyle}>Signed-in account details.</p>
-              </div>
-            </div>
+    <div className="flex flex-col min-h-screen bg-gray-50 font-sans">
+      <AppHeader title="Profile" subtitle="Manage your account settings" />
+      <div
+        style={{ maxWidth: 800, margin: "0 auto", width: "100%", padding: 24 }}
+      >
+        {/* Change Email */}
+        <div style={cardStyle}>
+          <h2 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700 }}>
+            Change Email
+          </h2>
+          <p style={{ fontSize: 13, color: "#475569", margin: "0 0 14px" }}>
+            Current email: <strong>{user.email}</strong>
+          </p>
 
+          {emailConfirmToken ? (
             <div
               style={{
-                display: "grid",
-                gap: 8,
-                padding: 12,
-                borderRadius: 8,
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
                 fontSize: 13,
+                color: "#0f172a",
+                background: "#f8fafc",
+                padding: "10px 14px",
+                border: "1px solid #cbd5e1",
+                borderRadius: 6,
               }}
             >
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <span
-                  style={{ minWidth: 72, color: "#64748b", fontWeight: 700 }}
-                >
-                  Name:
-                </span>
-                <strong style={{ color: "#0f172a" }}>{user.username}</strong>
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <span
-                  style={{ minWidth: 72, color: "#64748b", fontWeight: 700 }}
-                >
-                  Email:
-                </span>
-                <span style={{ color: "#0f172a" }}>{user.email}</span>
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <span
-                  style={{ minWidth: 72, color: "#64748b", fontWeight: 700 }}
-                >
-                  Role:
-                </span>
-                <span style={roleBadge(user.role)}>{user.role}</span>
-              </div>
-              {user.group && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <span
-                    style={{ minWidth: 72, color: "#64748b", fontWeight: 700 }}
-                  >
-                    Group:
-                  </span>
-                  <span style={{ color: "#0f172a" }}>Group {user.group}</span>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section style={panelStyle}>
-            <div style={sectionHeaderStyle}>
-              <div>
-                <h2 style={sectionTitleStyle}>Change Email</h2>
-                <p style={sectionMetaStyle}>
-                  Current email: <strong>{user.email}</strong>
-                </p>
-              </div>
-            </div>
-
-            {emailConfirmToken ? (
-              <div
-                style={{
-                  fontSize: 13,
-                  color: "#0f172a",
-                  background: "#f8fafc",
-                  padding: "10px 14px",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 6,
-                }}
-              >
-                <strong>Confirm email change</strong>
-                <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={handleConfirmEmailChange}
-                    disabled={emailConfirmLoading}
-                    style={
-                      emailConfirmLoading
-                        ? {
-                            ...primaryButtonStyle,
-                            background: "#94a3b8",
-                            borderColor: "#94a3b8",
-                            cursor: "not-allowed",
-                          }
-                        : primaryButtonStyle
-                    }
-                  >
-                    {emailConfirmLoading ? "Confirming..." : "Confirm"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEmailConfirmToken(null)}
-                    disabled={emailConfirmLoading}
-                    style={secondaryButtonStyle}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : pendingVerification ? (
-              <div
-                style={{
-                  fontSize: 13,
-                  color: "#1e40af",
-                  background: "#dbeafe",
-                  padding: "10px 14px",
-                  borderRadius: 6,
-                }}
-              >
-                <strong>Check your new inbox.</strong> We sent a verification
-                link to <strong>{newEmail || "your new address"}</strong>. The
-                link expires in <strong>3 minutes</strong>.{" "}
+              <strong>Confirm email change</strong>
+              <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setPendingVerification(false);
-                    setEmailStatus(null);
-                  }}
+                  onClick={handleConfirmEmailChange}
+                  disabled={emailConfirmLoading}
                   style={{
-                    background: "none",
-                    border: "none",
-                    color: "#1e40af",
-                    textDecoration: "underline",
-                    cursor: "pointer",
+                    padding: "6px 14px",
                     fontSize: 13,
-                    padding: 0,
+                    fontWeight: 600,
+                    borderRadius: 6,
+                    border: "none",
+                    background: emailConfirmLoading ? "#94a3b8" : "#2563eb",
+                    color: "#fff",
+                    cursor: emailConfirmLoading ? "not-allowed" : "pointer",
                   }}
                 >
-                  Request a new link
+                  {emailConfirmLoading ? "Confirming..." : "Confirm"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEmailConfirmToken(null)}
+                  disabled={emailConfirmLoading}
+                  style={{
+                    padding: "6px 14px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    borderRadius: 6,
+                    border: "1px solid #cbd5e1",
+                    background: "#fff",
+                    color: "#334155",
+                    cursor: emailConfirmLoading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Cancel
                 </button>
               </div>
-            ) : (
-              <form
-                onSubmit={handleEmailChange}
-                style={{ display: "grid", gap: 12 }}
-              >
-                <label style={{ display: "grid", gap: 6 }}>
-                  <span style={labelStyle}>New Email</span>
-                  <input
-                    style={inputStyle}
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="new@example.com"
-                    required
-                  />
-                </label>
-                <label style={{ display: "grid", gap: 6 }}>
-                  <span style={labelStyle}>Current Password</span>
-                  <input
-                    style={inputStyle}
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="your current password"
-                    required
-                  />
-                </label>
-                <div>
-                  <button
-                    type="submit"
-                    disabled={emailLoading}
-                    style={
-                      emailLoading
-                        ? {
-                            ...primaryButtonStyle,
-                            background: "#94a3b8",
-                            borderColor: "#94a3b8",
-                            cursor: "not-allowed",
-                          }
-                        : primaryButtonStyle
-                    }
-                  >
-                    {emailLoading ? "Sending…" : "Request Email Change"}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {emailStatus && (
-              <p
+            </div>
+          ) : pendingVerification ? (
+            <div
+              style={{
+                fontSize: 13,
+                color: "#1e40af",
+                background: "#dbeafe",
+                padding: "10px 14px",
+                borderRadius: 6,
+              }}
+            >
+              <strong>Check your new inbox.</strong> We sent a verification link
+              to <strong>{newEmail || "your new address"}</strong>. The link
+              expires in <strong>3 minutes</strong>.{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingVerification(false);
+                  setEmailStatus(null);
+                }}
                 style={{
-                  marginTop: 12,
+                  background: "none",
+                  border: "none",
+                  color: "#1e40af",
+                  textDecoration: "underline",
+                  cursor: "pointer",
                   fontSize: 13,
-                  color: emailStatus.ok ? "#166534" : "#991b1b",
-                  background: emailStatus.ok ? "#dcfce7" : "#fee2e2",
-                  padding: "6px 10px",
-                  borderRadius: 6,
+                  padding: 0,
                 }}
               >
-                {emailStatus.message}
-              </p>
-            )}
-          </section>
-        </>
-      }
-      onBack={handleLogout}
-      hideRightSection
-    />
+                Request a new link
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleEmailChange}>
+              <label style={labelStyle}>
+                New Email
+                <input
+                  style={inputStyle}
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="new@example.com"
+                  required
+                />
+              </label>
+              <label style={{ ...labelStyle, marginTop: 10 }}>
+                Current Password
+                <input
+                  style={inputStyle}
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="your current password"
+                  required
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={emailLoading}
+                style={{
+                  marginTop: 14,
+                  padding: "7px 18px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: "none",
+                  background: emailLoading ? "#94a3b8" : "#2563eb",
+                  color: "#fff",
+                  cursor: emailLoading ? "not-allowed" : "pointer",
+                }}
+              >
+                {emailLoading ? "Sending…" : "Request Email Change"}
+              </button>
+            </form>
+          )}
+
+          {emailStatus && (
+            <p
+              style={{
+                marginTop: 12,
+                fontSize: 13,
+                color: emailStatus.ok ? "#166534" : "#991b1b",
+                background: emailStatus.ok ? "#dcfce7" : "#fee2e2",
+                padding: "6px 10px",
+                borderRadius: 6,
+              }}
+            >
+              {emailStatus.message}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

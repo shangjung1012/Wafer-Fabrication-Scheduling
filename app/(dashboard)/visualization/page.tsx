@@ -8,7 +8,6 @@ import React, {
   useCallback,
 } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 import {
   format,
@@ -37,7 +36,7 @@ import type {
   SchedulePreviewResponse,
   DailyCapacityInfo,
 } from "@/modules/visualization/types";
-import { logoutClientAuthSession } from "@/modules/auth/client-session";
+import { AppHeader } from "@/components/dashboard/AppHeader";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 import {
   DraggableAssignmentChip,
@@ -45,21 +44,6 @@ import {
   DraggableSplitChip,
   DroppableCell,
 } from "./_components/edit-cell";
-import {
-  AlertTriangle,
-  ArrowDownUp,
-  Check,
-  Clock,
-  Crown,
-  Lock,
-  Pencil,
-  Play,
-  Plus,
-  Save,
-  Search,
-  X,
-  Zap,
-} from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Date helpers
@@ -346,20 +330,6 @@ type CellData = {
   conflicts: ConflictInfo[];
 };
 
-/** First row wins per assignmentId (timeline should not duplicate; avoids duplicate React keys in cells). */
-function dedupeTimelineItemsByAssignmentId(
-  items: TimelineItem[],
-): TimelineItem[] {
-  const seen = new Set<string>();
-  const out: TimelineItem[] = [];
-  for (const t of items) {
-    if (seen.has(t.assignmentId)) continue;
-    seen.add(t.assignmentId);
-    out.push(t);
-  }
-  return out;
-}
-
 function buildCellMap(
   data: TimelineResponse,
   dates: string[],
@@ -384,10 +354,8 @@ function buildCellMap(
   for (const factory of data.factories) {
     for (const date of dates) {
       const key = `${factory.id}__${date}`;
-      const items = dedupeTimelineItemsByAssignmentId(
-        data.timeline.filter(
-          (t) => t.factoryId === factory.id && t.productionDate === date,
-        ),
+      const items = data.timeline.filter(
+        (t) => t.factoryId === factory.id && t.productionDate === date,
       );
       const cap = capacityLookup.get(key);
       map.set(key, {
@@ -557,11 +525,9 @@ function DetailPanel({
         </div>
         <button
           onClick={onClose}
-          type="button"
-          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-          aria-label="Close panel"
+          className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none"
         >
-          <X className="h-5 w-5" strokeWidth={2} />
+          ✕
         </button>
       </div>
 
@@ -628,21 +594,13 @@ function DetailPanel({
             >
               <div className="flex items-start justify-between gap-2 mb-1.5">
                 <span
-                  className={`text-sm font-medium inline-flex items-center gap-1 min-w-0 ${item.status === "COMPLETED" ? "text-neutral-800" : "text-gray-900"}`}
+                  className={`text-sm font-medium ${item.status === "COMPLETED" ? "text-neutral-800" : "text-gray-900"}`}
                 >
-                  {item.status === "SCHEDULED" && item.isFixed ? (
-                    <Lock
-                      className="h-3.5 w-3.5 shrink-0 text-gray-600"
-                      aria-hidden
-                    />
-                  ) : null}
-                  {item.status === "SCHEDULED" && item.isPrioritized ? (
-                    <Crown
-                      className="h-3.5 w-3.5 shrink-0 text-amber-600"
-                      aria-hidden
-                    />
-                  ) : null}
-                  <span className="truncate">{item.orderName}</span>
+                  {item.status === "SCHEDULED" && item.isFixed ? "🔒 " : ""}
+                  {item.status === "SCHEDULED" && item.isPrioritized
+                    ? "👑 "
+                    : ""}
+                  {item.orderName}
                 </span>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={item.status} />
@@ -680,12 +638,7 @@ function DetailPanel({
                     className={`font-medium ${item.dueDate < item.productionDate ? "text-red-600" : "text-gray-700"}`}
                   >
                     {item.dueDate}
-                    {item.dueDate < item.productionDate ? (
-                      <AlertTriangle
-                        className="inline h-3.5 w-3.5 ml-1 align-[-2px] text-red-500"
-                        aria-hidden
-                      />
-                    ) : null}
+                    {item.dueDate < item.productionDate && " ⚠️"}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -730,9 +683,8 @@ function DetailPanel({
                       className="flex items-center justify-between gap-2 pt-1 cursor-pointer"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <span className="text-[10px] text-amber-600 leading-snug inline-flex items-center gap-1">
-                        <Crown className="h-3 w-3 shrink-0" aria-hidden />
-                        Prioritize (scheduled first in auto-schedule)
+                      <span className="text-[10px] text-amber-600 leading-snug">
+                        👑 Prioritize (scheduled first in auto-schedule)
                       </span>
                       <input
                         type="checkbox"
@@ -799,25 +751,9 @@ function DetailPanel({
                     {item.orderName}
                   </span>
                   <span
-                    className={`text-[10px] font-semibold inline-flex items-center gap-1 ${isOverdue ? "text-red-500" : "text-green-600"}`}
+                    className={`text-[10px] font-semibold ${isOverdue ? "text-red-500" : "text-green-600"}`}
                   >
-                    {isOverdue ? (
-                      <>
-                        <AlertTriangle
-                          className="h-3 w-3 shrink-0"
-                          aria-hidden
-                        />
-                        At-risk
-                      </>
-                    ) : (
-                      <>
-                        <span
-                          className="h-2 w-2 shrink-0 rounded-full bg-green-500"
-                          aria-hidden
-                        />
-                        On-track
-                      </>
-                    )}
+                    {isOverdue ? "⚠ At-risk" : "● On-track"}
                   </span>
                 </div>
                 <div className="flex justify-between text-gray-500">
@@ -838,7 +774,7 @@ function DetailPanel({
 }
 
 // ---------------------------------------------------------------------------
-// Pending orders sidebar (SALES: "My …"; ADMIN / SUPERADMIN: "Pending …")
+// Pending orders sidebar (SALES only)
 // ---------------------------------------------------------------------------
 
 function PendingSidebar({
@@ -857,7 +793,6 @@ function PendingSidebar({
   pendingSplitPlacements,
   onConfirmSplit,
   onUndoSplit,
-  pendingOrdersTitle = "My Pending Orders",
 }: {
   orders: PendingOrderInfo[];
   today: string;
@@ -882,8 +817,6 @@ function PendingSidebar({
   >;
   onConfirmSplit?: (orderId: string, parts: SplitPart[]) => void;
   onUndoSplit?: (orderId: string) => void;
-  /** SALES: default "My Pending Orders"; ADMIN / SUPERADMIN: "Pending Orders". */
-  pendingOrdersTitle?: string;
 }) {
   const multiSelectEnabled =
     !editMode && Boolean(setSelectedOrderIds && onPreviewSelected);
@@ -968,25 +901,10 @@ function PendingSidebar({
 
   const riskDot = (risk: OrderRisk) => {
     if (risk === "OVERDUE")
-      return (
-        <span
-          className="inline-block h-2 w-2 shrink-0 rounded-full bg-red-500"
-          aria-hidden
-        />
-      );
+      return <span className="text-red-500 text-[10px]">●</span>;
     if (risk === "AT_RISK")
-      return (
-        <span
-          className="inline-block h-2 w-2 shrink-0 rounded-full bg-orange-400"
-          aria-hidden
-        />
-      );
-    return (
-      <span
-        className="inline-block h-2 w-2 shrink-0 rounded-full bg-green-500"
-        aria-hidden
-      />
-    );
+      return <span className="text-orange-400 text-[10px]">●</span>;
+    return <span className="text-green-500 text-[10px]">●</span>;
   };
 
   const borderColor = (risk: OrderRisk) => {
@@ -1029,8 +947,11 @@ function PendingSidebar({
             )}
             <div className="flex items-center gap-1 shrink-0">
               {o.isPrioritized && (
-                <span title="Prioritized">
-                  <Crown className="h-3.5 w-3.5 text-amber-500" aria-hidden />
+                <span
+                  className="text-sm leading-none text-amber-500"
+                  title="Prioritized"
+                >
+                  👑
                 </span>
               )}
               {riskDot(o.risk)}
@@ -1193,17 +1114,7 @@ function PendingSidebar({
                     }`}
                   >
                     Total: {draftTotal} / {o.quantity}{" "}
-                    {draftTotal === o.quantity ? (
-                      <Check
-                        className="inline h-3.5 w-3.5 text-green-600"
-                        aria-hidden
-                      />
-                    ) : (
-                      <X
-                        className="inline h-3.5 w-3.5 text-red-600"
-                        aria-hidden
-                      />
-                    )}
+                    {draftTotal === o.quantity ? "✓" : "✗"}
                   </div>
                   <div className="flex items-center justify-end gap-2 pt-1">
                     <button
@@ -1247,7 +1158,7 @@ function PendingSidebar({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-700">
-              {pendingOrdersTitle}
+              My Pending Orders
             </p>
             <p className="text-[10px] text-gray-400">
               {orders.length} unscheduled
@@ -1259,7 +1170,7 @@ function PendingSidebar({
               onClick={onCreate}
               className="flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
             >
-              <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="text-sm leading-none">+</span>
               New Order
             </button>
           )}
@@ -1277,16 +1188,11 @@ function PendingSidebar({
                 : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
             }`}
           >
-            {previewLoading ? (
-              "Previewing…"
-            ) : selectedCount === 0 ? (
-              "Preview Selected"
-            ) : (
-              <span className="inline-flex items-center gap-1">
-                <Search className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                {`Preview Selected (${selectedCount})`}
-              </span>
-            )}
+            {previewLoading
+              ? "Previewing…"
+              : selectedCount === 0
+                ? "Preview Selected"
+                : `🔍 Preview Selected (${selectedCount})`}
           </button>
           <label className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
             <input
@@ -1314,7 +1220,7 @@ function PendingSidebar({
         {pending.length > 0 && (
           <div className="space-y-2">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              {pendingOrdersTitle}
+              My Pending Orders
             </p>
             {renderOrders(pending)}
           </div>
@@ -1343,7 +1249,6 @@ function OrderFormModal({
   mode,
   initialValues,
   canEditPrioritized = false,
-  today,
   onClose,
   onSubmit,
 }: {
@@ -1351,7 +1256,6 @@ function OrderFormModal({
   mode: "create" | "edit";
   initialValues: OrderEditorValues;
   canEditPrioritized?: boolean;
-  today?: string;
   onClose: () => void;
   onSubmit: (values: OrderEditorValues) => Promise<void>;
 }) {
@@ -1406,10 +1310,9 @@ function OrderFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-            aria-label="Close"
+            className="text-xl leading-none text-gray-400 hover:text-gray-600"
           >
-            <X className="h-5 w-5" strokeWidth={2} />
+            ✕
           </button>
         </div>
 
@@ -1473,7 +1376,6 @@ function OrderFormModal({
             <input
               type="date"
               value={dueDate}
-              min={today}
               onChange={(e) => setDueDate(e.target.value)}
               className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             />
@@ -1499,12 +1401,8 @@ function OrderFormModal({
                 onChange={(e) => setIsPrioritized(e.target.checked)}
                 className="h-4 w-4 rounded border-gray-300 accent-amber-500"
               />
-              <span className="text-sm font-medium text-gray-700 inline-flex items-center gap-1.5">
-                <Crown
-                  className="h-4 w-4 text-amber-600 shrink-0"
-                  aria-hidden
-                />
-                Prioritize (scheduled first in auto-schedule)
+              <span className="text-sm font-medium text-gray-700">
+                👑 Prioritize (scheduled first in auto-schedule)
               </span>
             </label>
           )}
@@ -1593,12 +1491,8 @@ function GanttCell({
           invalidReason={dropDisabledReason}
         >
           {hasConflict && (
-            <span className="absolute top-0.5 right-0.5 z-10 text-amber-600">
-              <AlertTriangle
-                className="h-2.5 w-2.5"
-                strokeWidth={2.5}
-                aria-hidden
-              />
+            <span className="absolute top-0.5 right-0.5 text-[9px] leading-none z-10">
+              ⚠️
             </span>
           )}
           <div className="flex flex-col gap-0.5 p-0.5">
@@ -1650,45 +1544,33 @@ function GanttCell({
       >
         {/* Conflict marker */}
         {hasConflict && (
-          <span className="absolute top-1 right-1 text-amber-600">
-            <AlertTriangle
-              className="h-2.5 w-2.5"
-              strokeWidth={2.5}
-              aria-hidden
-            />
+          <span className="absolute top-1 right-1 text-[9px] leading-none">
+            ⚠️
           </span>
         )}
 
         {/* Rescheduled marker */}
         {hasRescheduled && !hasConflict && (
-          <span className="absolute top-1 right-1 text-purple-500">
-            <ArrowDownUp
-              className="h-2.5 w-2.5"
-              strokeWidth={2.5}
-              aria-hidden
-            />
+          <span className="absolute top-1 right-1 text-[9px] leading-none text-purple-500 font-bold">
+            ↕
           </span>
         )}
         {hasRescheduled && hasConflict && (
-          <span className="absolute top-1 right-4 text-purple-500">
-            <ArrowDownUp
-              className="h-2.5 w-2.5"
-              strokeWidth={2.5}
-              aria-hidden
-            />
+          <span className="absolute top-1 right-4 text-[9px] leading-none text-purple-500 font-bold">
+            ↕
           </span>
         )}
 
         {/* Newly placed (preview) marker */}
         {hasNewlyPlaced && (
           <span
-            className={`absolute ${hasRescheduled || hasConflict ? "top-1 right-7" : "top-1 right-1"} text-emerald-600`}
+            className={`absolute ${hasRescheduled || hasConflict ? "top-1 right-7" : "top-1 right-1"} text-[10px] leading-none text-emerald-600 font-bold`}
           >
-            <Plus className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
+            +
           </span>
         )}
 
-        {/* Assignment counts: total ×N (lock ×M, crown ×K) */}
+        {/* Assignment counts: total ×N (🔒×M 👑×K) */}
         {cell.items.length > 0 && (
           <span
             className="absolute top-1 left-1 text-[9px] font-bold text-gray-500 inline-flex flex-wrap items-center gap-x-1 gap-y-0 max-w-[68px] leading-tight"
@@ -1700,7 +1582,7 @@ function GanttCell({
                 <span>(</span>
                 {fixedScheduledCount > 0 && (
                   <span className="text-gray-700 inline-flex items-center gap-px">
-                    <Lock className="h-2 w-2" aria-hidden />
+                    <span aria-hidden>🔒</span>
                     <span>×{fixedScheduledCount}</span>
                   </span>
                 )}
@@ -1709,7 +1591,7 @@ function GanttCell({
                 )}
                 {prioritizedScheduledCount > 0 && (
                   <span className="text-amber-600 inline-flex items-center gap-px">
-                    <Crown className="h-2 w-2" aria-hidden />
+                    <span aria-hidden>👑</span>
                     <span>×{prioritizedScheduledCount}</span>
                   </span>
                 )}
@@ -1718,10 +1600,11 @@ function GanttCell({
             )}
             {isMyOrder && (
               <span
-                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600"
+                className="text-[8px] leading-none text-blue-600"
                 title="Includes my order"
-                aria-hidden
-              />
+              >
+                ●
+              </span>
             )}
           </span>
         )}
@@ -1779,84 +1662,11 @@ type AssignmentMove =
     };
 type OrderEditorState = OrderEditorValues & { orderId?: string };
 
-function NavLinks({
-  pathname,
-  isSuperAdmin,
-}: {
-  pathname: string;
-  isSuperAdmin: boolean;
-}) {
-  const isVisDashboard = pathname.startsWith("/visualization/dashboard");
-  const isVisualization = pathname.startsWith("/visualization");
-
-  return (
-    <>
-      <Link
-        href="/visualization"
-        className={`text-sm font-medium px-3 py-2 ${
-          isVisualization && !isVisDashboard
-            ? "text-blue-700 border-b-2 border-blue-700"
-            : "text-gray-600 hover:text-gray-900 border-b-2 border-transparent"
-        }`}
-      >
-        Schedule
-      </Link>
-
-      <Link
-        href="/visualization/dashboard"
-        className={`text-sm font-medium px-3 py-2 ${
-          isVisDashboard
-            ? "text-blue-700 border-b-2 border-blue-700"
-            : "text-gray-600 hover:text-gray-900 border-b-2 border-transparent"
-        }`}
-      >
-        Dashboard
-      </Link>
-
-      <Link
-        href="/conflict-issues"
-        className={`text-sm font-medium px-3 py-2 ${
-          pathname.startsWith("/conflict-issues")
-            ? "text-blue-700 border-b-2 border-blue-700"
-            : "text-gray-600 hover:text-gray-900 border-b-2 border-transparent"
-        }`}
-      >
-        Issues
-      </Link>
-
-      {isSuperAdmin && (
-        <Link
-          href="/permissions"
-          className={`text-sm font-medium px-3 py-2 ${
-            pathname.startsWith("/permissions")
-              ? "text-blue-700 border-b-2 border-blue-700"
-              : "text-gray-600 hover:text-gray-900 border-b-2 border-transparent"
-          }`}
-        >
-          Permissions
-        </Link>
-      )}
-
-      <Link
-        href="/profile"
-        className={`text-sm font-medium px-3 py-2 ${
-          pathname.startsWith("/profile")
-            ? "text-blue-700 border-b-2 border-blue-700"
-            : "text-gray-600 hover:text-gray-900 border-b-2 border-transparent"
-        }`}
-      >
-        Profile
-      </Link>
-    </>
-  );
-}
-
 export default function SchedulePage() {
   const router = useRouter();
   const session = useClientAuthSession();
   const isSales = session?.user.role === "SALES";
   const productionType = session?.user.group ?? "";
-  const pathname = usePathname();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [data, setData] = useState<TimelineResponse | null>(null);
@@ -2621,11 +2431,6 @@ export default function SchedulePage() {
     });
   };
 
-  const handleLogout = async () => {
-    await logoutClientAuthSession();
-    router.replace("/login");
-  };
-
   // Effective timeline/capacities/conflicts/factories/diffs:
   // - previewData wins
   // - else if editMode + pendingMoves, apply moves locally
@@ -2865,7 +2670,7 @@ export default function SchedulePage() {
     if (values.dueDate) {
       body.dueDate = new Date(values.dueDate).toISOString();
     }
-    if (values.isPrioritized !== undefined && !isSales) {
+    if (values.isPrioritized !== undefined) {
       body.isPrioritized = values.isPrioritized;
     }
 
@@ -3227,73 +3032,150 @@ export default function SchedulePage() {
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans">
       {/* Top bar */}
-      <div className="flex-none bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="w-80 flex-shrink-0 overflow-hidden">
-            <h1 className="text-xl font-bold text-gray-900 truncate">
-              Production Schedule
-            </h1>
-            <p className="text-sm text-gray-500 mt-1 truncate">
-              Factory gantt — click a cell to inspect orders
-            </p>
-          </div>
+      <AppHeader
+        title="Production Schedule"
+        subtitle="Factory gantt — click a cell to inspect orders"
+      />
 
-          <div className="flex-1 flex items-center justify-center">
-            <nav
-              className="flex items-center gap-2 flex-wrap"
-              aria-label="Dashboard navigation"
+      {/* Schedule controls (admin/superadmin only) */}
+      {!isSales && (
+        <div className="flex-none bg-white border-b border-gray-100 px-6 py-2 flex items-center gap-2 flex-wrap">
+          {/* Reschedule policy dropdown */}
+          <label className="flex items-center gap-1 text-xs text-gray-600">
+            <span className="text-gray-500">Policy</span>
+            <select
+              value={reschedulePolicy}
+              onChange={(e) =>
+                setReschedulePolicy(
+                  e.target.value as
+                    | "GLOBAL_OPTIMIZE"
+                    | "PRIORITY_RETAIN"
+                    | "GAP_FILLING",
+                )
+              }
+              disabled={editMode || previewLoading}
+              className="text-xs border border-gray-200 rounded px-2 py-1 bg-white disabled:bg-gray-100 disabled:text-gray-400"
             >
-              {/* determine active link */}
-              {/* path-aware checks */}
-              {/* We'll compute pathname inside component render below */}
-              <NavLinks
-                pathname={pathname ?? ""}
-                isSuperAdmin={session?.user.role === "SUPERADMIN"}
-              />
-            </nav>
-          </div>
+              <option value="GAP_FILLING">Gap filling (GAP_FILLING)</option>
+              <option value="PRIORITY_RETAIN">
+                Retain priority placement (PRIORITY_RETAIN)
+              </option>
+              <option value="GLOBAL_OPTIMIZE">
+                Global optimize (GLOBAL_OPTIMIZE)
+              </option>
+            </select>
+          </label>
 
-          <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
-            <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
-              Signed in as:
-            </span>
-            <span className="text-xs font-semibold text-gray-800">
-              {session.user.username}
-            </span>
-            <span className="text-xs text-gray-500">
-              ({session.user.email})
-            </span>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-              {session.user.role}
-            </span>
+          <button
+            onClick={() => handlePreviewSchedule()}
+            disabled={
+              previewLoading || editMode || scheduleStatus === "running"
+            }
+            className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
+              previewLoading || editMode
+                ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
+                : "bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50"
+            }`}
+          >
+            {previewLoading ? "Previewing…" : "🔍 Preview"}
+          </button>
+
+          <button
+            onClick={() => handleRunSchedule()}
+            disabled={
+              scheduleStatus === "running" || editMode || previewLoading
+            }
+            className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
+              scheduleStatus === "running" || editMode
+                ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
+                : "bg-green-700 text-white border-green-700 hover:bg-green-800"
+            }`}
+          >
+            {scheduleStatus === "running"
+              ? "Running…"
+              : `▶ Run (Type ${productionType || "-"})`}
+          </button>
+
+          {!editMode && !previewData && (
             <button
-              type="button"
-              onClick={handleLogout}
-              className="text-xs font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+              onClick={handleEnterEditMode}
+              className="text-xs font-medium px-3 py-1.5 rounded border bg-white text-purple-700 border-purple-300 hover:bg-purple-50"
             >
-              Logout
+              ✏️ Edit
             </button>
-          </div>
+          )}
+
+          {scheduleStatus === "success" && (
+            <span className="text-xs text-green-600 font-medium">
+              Scheduled ✓
+            </span>
+          )}
+          {scheduleStatus === "conflict" && (
+            <span className="text-xs text-yellow-600 font-medium">
+              Already running
+            </span>
+          )}
+          {scheduleStatus === "error" && (
+            <span className="text-xs text-red-600 font-medium">Failed</span>
+          )}
+          {saveStatus === "success" && (
+            <span className="text-xs text-green-600 font-medium">
+              {saveErrorMsg ? `Saved ✓ (${saveErrorMsg})` : "Saved ✓"}
+            </span>
+          )}
+          {saveStatus === "error" && (
+            <span
+              className="text-xs text-red-600 font-medium"
+              title={saveErrorMsg ?? ""}
+            >
+              Save failed: {saveErrorMsg ?? "unknown"}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Date range + summary bar */}
+      <div className="flex-none bg-white border-b border-gray-100 px-6 py-2 flex items-center gap-4 flex-wrap">
+        {/* Date range */}
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => {
+              setStartDate(e.target.value);
+              setLoading(true);
+              setFetchError(null);
+            }}
+            className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <span className="text-gray-400 text-sm">→</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => {
+              setEndDate(e.target.value);
+              setLoading(true);
+              setFetchError(null);
+            }}
+            className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
         </div>
 
         {/* Summary badges */}
         <div className="flex items-center gap-2 text-xs">
           {capacityConflicts > 0 && (
             <span className="flex items-center gap-1 bg-red-50 text-red-700 border border-red-200 rounded px-2 py-1 font-medium">
-              <Zap className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              {capacityConflicts} capacity
+              ⚡ {capacityConflicts} capacity
             </span>
           )}
           {dueDateConflicts > 0 && (
             <span className="flex items-center gap-1 bg-orange-50 text-orange-700 border border-orange-200 rounded px-2 py-1 font-medium">
-              <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              {dueDateConflicts} due date
+              ⏰ {dueDateConflicts} due date
             </span>
           )}
           {rescheduledCount > 0 && (
             <span className="flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded px-2 py-1 font-medium">
-              <ArrowDownUp className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              {rescheduledCount} rescheduled
+              ↕ {rescheduledCount} rescheduled
             </span>
           )}
         </div>
@@ -3334,6 +3216,14 @@ export default function SchedulePage() {
         </div>
         {simMode && (
           <>
+            <button
+              type="button"
+              onClick={() => stepSimDate(-1)}
+              disabled={simLoading}
+              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium"
+            >
+              ← -1d
+            </button>
             <input
               type="date"
               value={simDate}
@@ -3347,7 +3237,7 @@ export default function SchedulePage() {
               disabled={simLoading}
               className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium"
             >
-              +1 day
+              +1d →
             </button>
             <button
               type="button"
@@ -3355,7 +3245,7 @@ export default function SchedulePage() {
               disabled={simLoading}
               className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium ml-1"
             >
-              +2 hours
+              +2h
             </button>
             <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
               Custom:{" "}
@@ -3366,166 +3256,17 @@ export default function SchedulePage() {
           </>
         )}
         {!simMode && (
-          <span className="inline-flex items-center gap-1.5 text-green-700 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
-            <span
-              className="h-2 w-2 shrink-0 rounded-full bg-green-600"
-              aria-hidden
-            />
-            Real-time
+          <span className="text-green-700 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
+            ● Real-time
           </span>
         )}
-      </div>
-
-      {/* Date range + schedule controls */}
-      <div className="flex-none px-6 py-3 border-b border-gray-100 bg-white">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setLoading(true);
-                setFetchError(null);
-              }}
-              className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
-            />
-            <span className="text-gray-400 text-sm">→</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setLoading(true);
-                setFetchError(null);
-              }}
-              className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
-            />
-          </div>
-
-          {!isSales && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <label className="flex items-center gap-1 text-xs text-gray-600">
-                <span className="text-gray-500">Policy</span>
-                <select
-                  value={reschedulePolicy}
-                  onChange={(e) =>
-                    setReschedulePolicy(
-                      e.target.value as
-                        | "GLOBAL_OPTIMIZE"
-                        | "PRIORITY_RETAIN"
-                        | "GAP_FILLING",
-                    )
-                  }
-                  disabled={editMode || previewLoading}
-                  className="text-xs border border-gray-200 rounded px-2 py-1 bg-white disabled:bg-gray-100 disabled:text-gray-400"
-                >
-                  <option value="GAP_FILLING">Gap filling (GAP_FILLING)</option>
-                  <option value="PRIORITY_RETAIN">
-                    Retain priority placement (PRIORITY_RETAIN)
-                  </option>
-                  <option value="GLOBAL_OPTIMIZE">
-                    Global optimize (GLOBAL_OPTIMIZE)
-                  </option>
-                </select>
-              </label>
-
-              <button
-                type="button"
-                onClick={() => handlePreviewSchedule()}
-                disabled={
-                  previewLoading || editMode || scheduleStatus === "running"
-                }
-                className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
-                  previewLoading || editMode
-                    ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
-                    : "bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50"
-                }`}
-              >
-                {previewLoading ? (
-                  "Previewing…"
-                ) : (
-                  <span className="inline-flex items-center gap-1">
-                    <Search className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Preview
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleRunSchedule()}
-                disabled={
-                  scheduleStatus === "running" || editMode || previewLoading
-                }
-                className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
-                  scheduleStatus === "running" || editMode
-                    ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed"
-                    : "bg-green-700 text-white border-green-700 hover:bg-green-800"
-                }`}
-              >
-                {scheduleStatus === "running" ? (
-                  "Running…"
-                ) : (
-                  <span className="inline-flex items-center gap-1">
-                    <Play className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    {`Run (Type ${productionType || "-"})`}
-                  </span>
-                )}
-              </button>
-
-              {!editMode && !previewData && (
-                <button
-                  type="button"
-                  onClick={handleEnterEditMode}
-                  className="text-xs font-medium px-3 py-1.5 rounded border bg-white text-purple-700 border-purple-300 hover:bg-purple-50"
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Edit
-                  </span>
-                </button>
-              )}
-
-              {scheduleStatus === "success" && (
-                <span className="text-xs text-green-600 font-medium inline-flex items-center gap-1">
-                  <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Scheduled
-                </span>
-              )}
-              {scheduleStatus === "conflict" && (
-                <span className="text-xs text-yellow-600 font-medium">
-                  Already running
-                </span>
-              )}
-              {scheduleStatus === "error" && (
-                <span className="text-xs text-red-600 font-medium">Failed</span>
-              )}
-              {saveStatus === "success" && (
-                <span className="text-xs text-green-600 font-medium inline-flex items-center gap-1">
-                  <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  {saveErrorMsg ? `Saved (${saveErrorMsg})` : "Saved"}
-                </span>
-              )}
-              {saveStatus === "error" && (
-                <span
-                  className="text-xs text-red-600 font-medium"
-                  title={saveErrorMsg ?? ""}
-                >
-                  Save failed: {saveErrorMsg ?? "unknown"}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Preview banner */}
       {previewData && (
         <div className="flex-none px-6 py-2 bg-indigo-50 border-b border-indigo-200 flex items-center gap-3">
-          <span className="text-xs font-semibold text-indigo-700 shrink-0 inline-flex items-center gap-1">
-            <Search className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Preview · {previewData.algorithm}
+          <span className="text-xs font-semibold text-indigo-700 shrink-0">
+            🔍 Preview · {previewData.algorithm}
           </span>
           <span className="text-xs text-indigo-700">
             {previewData.diffs.length} order(s) would be rescheduled
@@ -3550,14 +3291,7 @@ export default function SchedulePage() {
               }
               className="text-xs font-medium px-3 py-1.5 rounded border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:border-gray-300"
             >
-              {applying ? (
-                "Applying…"
-              ) : (
-                <span className="inline-flex items-center gap-1">
-                  <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Apply
-                </span>
-              )}
+              {applying ? "Applying…" : "✓ Apply"}
             </button>
             <button
               onClick={handleDiscardPreview}
@@ -3573,12 +3307,10 @@ export default function SchedulePage() {
         <div className="flex-none px-6 py-2 bg-red-50 border-b border-red-200 text-xs text-red-700">
           Preview failed: {previewError}
           <button
-            type="button"
             onClick={() => setPreviewError(null)}
-            className="ml-2 inline-flex rounded p-0.5 text-red-500 hover:bg-red-100 hover:text-red-700"
-            aria-label="Dismiss error"
+            className="ml-2 text-red-400 hover:text-red-600"
           >
-            <X className="h-4 w-4" strokeWidth={2} />
+            ✕
           </button>
         </div>
       )}
@@ -3586,9 +3318,8 @@ export default function SchedulePage() {
       {/* Edit-mode banner */}
       {editMode && (
         <div className="flex-none px-6 py-2 bg-purple-50 border-b border-purple-200 flex items-center gap-3">
-          <span className="text-xs font-semibold text-purple-700 shrink-0 inline-flex items-center gap-1">
-            <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Edit mode
+          <span className="text-xs font-semibold text-purple-700 shrink-0">
+            ✏️ Edit mode
           </span>
           <span className="text-xs text-purple-700">
             Drag chips between cells, or into the staging area below to pull an
@@ -3613,14 +3344,7 @@ export default function SchedulePage() {
               }
               className="text-xs font-medium px-3 py-1.5 rounded border bg-purple-600 text-white border-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:border-gray-300"
             >
-              {saveStatus === "saving" ? (
-                "Saving…"
-              ) : (
-                <span className="inline-flex items-center gap-1">
-                  <Save className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Save Changes
-                </span>
-              )}
+              {saveStatus === "saving" ? "Saving…" : "💾 Save Changes"}
             </button>
             <button
               onClick={handleDiscardEdits}
@@ -3643,23 +3367,17 @@ export default function SchedulePage() {
       {/* Post-apply conflict notice — persistent until dismissed */}
       {applyConflictNotice && (
         <div className="flex-none px-6 py-2 bg-amber-100 border-b border-amber-300 flex items-center justify-between gap-3 text-xs text-amber-900">
-          <span className="inline-flex items-start gap-2">
-            <AlertTriangle
-              className="h-4 w-4 shrink-0 text-amber-700 mt-0.5"
-              aria-hidden
-            />
-            <span>
-              Schedule applied, but {applyConflictNotice.failedCount} order(s)
-              could not be placed. ConflictIssue records were created
-              automatically. Open the{" "}
-              <Link
-                href="/conflict-issues"
-                className="font-semibold underline hover:text-amber-700"
-              >
-                order issues
-              </Link>{" "}
-              page to review and resolve.
-            </span>
+          <span>
+            ⚠️ Schedule applied, but {applyConflictNotice.failedCount} order(s)
+            could not be placed. ConflictIssue records were created
+            automatically. Open the{" "}
+            <Link
+              href="/conflict-issues"
+              className="font-semibold underline hover:text-amber-700"
+            >
+              order issues
+            </Link>{" "}
+            page to review and resolve.
           </span>
           <button
             type="button"
@@ -3692,21 +3410,14 @@ export default function SchedulePage() {
           Capacity exceeded
         </span>
         <span className="flex items-center gap-1.5">
-          <AlertTriangle
-            className="h-3 w-3 shrink-0 text-amber-600"
-            aria-hidden
-          />
-          Conflict
+          <span className="text-[10px]">⚠️</span> Conflict
         </span>
         <span className="flex items-center gap-1.5">
-          <ArrowDownUp
-            className="h-3 w-3 shrink-0 text-purple-500"
-            aria-hidden
-          />
+          <span className="text-[10px] font-bold text-purple-500">↕</span>{" "}
           Rescheduled
         </span>
         <span className="flex items-center gap-1.5">
-          <Plus className="h-3 w-3 shrink-0 text-emerald-600" aria-hidden />
+          <span className="text-[10px] font-bold text-emerald-600">+</span>{" "}
           Newly placed
         </span>
         <span className="flex items-center gap-1.5">
@@ -3714,11 +3425,15 @@ export default function SchedulePage() {
           count
         </span>
         <span className="flex items-center gap-1.5">
-          <Lock className="h-3 w-3 shrink-0 text-gray-600" aria-hidden />
+          <span className="text-[10px] leading-none" aria-hidden>
+            🔒
+          </span>
           Fixed
         </span>
         <span className="flex items-center gap-1.5">
-          <Crown className="h-3 w-3 shrink-0 text-amber-600" aria-hidden />
+          <span className="text-[10px] leading-none" aria-hidden>
+            👑
+          </span>
           Prioritized
         </span>
       </div>
@@ -3746,7 +3461,6 @@ export default function SchedulePage() {
                 orders={data.adminContext.pendingOrders}
                 today={data.today}
                 onEditOrder={(order) => setEditOrder(order)}
-                pendingOrdersTitle="Pending Orders"
                 selectedOrderIds={selectedOrderIds}
                 setSelectedOrderIds={setSelectedOrderIds}
                 onPreviewSelected={(targetOrderIds) =>
@@ -4031,20 +3745,8 @@ export default function SchedulePage() {
             )}
             {!loading && fetchError && (
               <div className="flex flex-col items-center justify-center h-full gap-2">
-                <span className="text-2xl text-gray-500">
-                  {fetchError.status === 403 ? (
-                    <Lock
-                      className="h-8 w-8 mx-auto"
-                      strokeWidth={1.75}
-                      aria-hidden
-                    />
-                  ) : (
-                    <AlertTriangle
-                      className="h-8 w-8 mx-auto text-amber-500"
-                      strokeWidth={1.75}
-                      aria-hidden
-                    />
-                  )}
+                <span className="text-2xl">
+                  {fetchError.status === 403 ? "🔒" : "⚠️"}
                 </span>
                 <p className="text-sm font-medium text-gray-700">
                   {fetchError.status === 401 &&
@@ -4096,7 +3798,6 @@ export default function SchedulePage() {
             type: "A",
             dueDate: "2026-12-31",
           }}
-          today={data?.today}
           onClose={() => setCreateOpen(false)}
           onSubmit={handleCreateOrder}
         />
@@ -4117,7 +3818,6 @@ export default function SchedulePage() {
             isPrioritized: editOrder.isPrioritized,
           }}
           canEditPrioritized={!isSales}
-          today={data?.today}
           onClose={() => setEditOrder(null)}
           onSubmit={handleUpdateOrder}
         />

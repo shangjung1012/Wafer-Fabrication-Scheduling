@@ -1,25 +1,22 @@
 import { advanceOrderStatuses } from "@/modules/schedule/daily-execution";
 import { triggerAutoSchedule } from "@/modules/schedule/auto-scheduler";
-import { upsertSystemState } from "@/infra/db/system-state-repository";
-import { prisma } from "@/lib/prisma";
 
 export async function handleSimulationTimeAdvance(
   oldTime: Date | null | undefined,
   newTime: Date,
-  patch?: { isSimulationMode?: boolean; simulationDate?: Date | null },
 ) {
-  const crossedMidnight = oldTime
-    ? oldTime.getUTCFullYear() !== newTime.getUTCFullYear() ||
+  if (oldTime) {
+    const crossedMidnight =
+      oldTime.getUTCFullYear() !== newTime.getUTCFullYear() ||
       oldTime.getUTCMonth() !== newTime.getUTCMonth() ||
-      oldTime.getUTCDate() !== newTime.getUTCDate()
-    : true;
+      oldTime.getUTCDate() !== newTime.getUTCDate();
 
-  if (crossedMidnight) {
-    await advanceOrderStatuses(newTime, patch);
-  } else {
-    if (patch) {
-      await upsertSystemState(prisma, patch);
+    if (crossedMidnight) {
+      await advanceOrderStatuses(newTime);
+    } else {
+      await triggerAutoSchedule(newTime);
     }
-    await triggerAutoSchedule(newTime);
+  } else {
+    await advanceOrderStatuses(newTime);
   }
 }

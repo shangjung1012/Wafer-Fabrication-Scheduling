@@ -35,7 +35,7 @@ export const cancelRequestTemplate: MailTemplate<CancelRequestMailData> = {
     const displayName = data.recipientUsername ?? data.recipientEmail;
     const requester = data.requesterUsername ?? "A sales user";
     const appUrl = process.env.APP_BASE_URL ?? "";
-    const issueUrl = `${appUrl}/conflict-issues?issue=${data.issueNumber}`;
+    const issueUrl = `${appUrl}/conflict-issues/${data.issueNumber}`;
 
     const safeDisplayName = escapeHtml(displayName);
     const safeRequester = escapeHtml(requester);
