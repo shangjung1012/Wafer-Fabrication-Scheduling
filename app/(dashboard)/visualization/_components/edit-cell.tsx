@@ -3,6 +3,7 @@
 import React from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { Crown, Lock } from "lucide-react";
 import type { TimelineItem } from "@/modules/visualization/types";
 
 /** Visual tone for assignment chips on the Gantt (edit mode). */
@@ -68,9 +69,15 @@ export function DraggableAssignmentChip({
         className={`text-[9px] leading-tight rounded px-1 py-0.5 select-none border ${onClickItem ? "cursor-pointer" : "cursor-not-allowed"} ${assignmentChipToneClasses(item.status, false)}`}
         title={`${item.orderName} · qty ${item.assignedQuantity} · ${item.status} (locked)`}
       >
-        <span className="font-semibold truncate block max-w-[64px]">
-          🔒 {item.isPrioritized ? "👑 " : ""}
-          {item.orderName}
+        <span className="font-semibold truncate flex items-center gap-0.5 max-w-[64px]">
+          <Lock className="h-2.5 w-2.5 shrink-0 opacity-80" aria-hidden />
+          {item.isPrioritized ? (
+            <Crown
+              className="h-2.5 w-2.5 shrink-0 text-amber-600"
+              aria-hidden
+            />
+          ) : null}
+          <span className="truncate">{item.orderName}</span>
         </span>
         <span className="text-[8px] opacity-70">
           ×{item.assignedQuantity} · {item.status}
@@ -99,10 +106,14 @@ export function DraggableAssignmentChip({
           : `${item.orderName} · qty ${item.assignedQuantity}`
       }
     >
-      <span className="font-semibold truncate block max-w-[64px]">
-        {isFixed ? "🔒 " : ""}
-        {item.isPrioritized ? "👑 " : ""}
-        {item.orderName}
+      <span className="font-semibold truncate flex items-center gap-0.5 max-w-[64px]">
+        {isFixed ? (
+          <Lock className="h-2.5 w-2.5 shrink-0 opacity-80" aria-hidden />
+        ) : null}
+        {item.isPrioritized ? (
+          <Crown className="h-2.5 w-2.5 shrink-0 text-amber-600" aria-hidden />
+        ) : null}
+        <span className="truncate">{item.orderName}</span>
       </span>
       <span className="text-[8px] opacity-70 block">
         ×{item.assignedQuantity}
@@ -143,7 +154,9 @@ export function DraggableAssignmentChip({
                 }
                 className="h-2.5 w-2.5 rounded border-gray-400 shrink-0"
               />
-              <span className="text-[7px] text-amber-600 leading-none">👑</span>
+              <span className="text-[7px] text-amber-600 leading-none inline-flex items-center">
+                <Crown className="h-2 w-2" aria-hidden />
+              </span>
             </label>
           )}
         </div>

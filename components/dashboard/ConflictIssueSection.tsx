@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { CheckCircle2, Circle } from "lucide-react";
 
 type IssueRow = {
   id: string;
@@ -67,6 +68,7 @@ function timeAgo(dateStr: string): string {
 
 function apiFetch(path: string) {
   return fetch(path, {
+    cache: "no-store",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
   });
@@ -85,29 +87,22 @@ export function ConflictIssueSection() {
       setLoading(true);
       setError(null);
 
-      const urls =
+      const url =
         activeTab === "open"
-          ? [
-              "/api/conflict-issues?status=OPEN",
-              "/api/conflict-issues?status=IN_DISCUSSION",
-            ]
-          : [
-              "/api/conflict-issues?status=RESOLVED",
-              "/api/conflict-issues?status=CLOSED",
-            ];
+          ? "/api/conflict-issues?statuses=OPEN,IN_DISCUSSION"
+          : "/api/conflict-issues?statuses=RESOLVED,CLOSED";
 
       try {
-        const [res1, res2] = await Promise.all(urls.map((u) => apiFetch(u)));
+        const res = await apiFetch(url);
         if (cancelled) return;
-        if (!res1.ok || !res2.ok) {
+        if (!res.ok) {
           setError("Failed to load conflict issues.");
           setIssues([]);
           return;
         }
-        const a = (await res1.json()) as IssueRow[];
-        const b = (await res2.json()) as IssueRow[];
+        const issuesData = (await res.json()) as IssueRow[];
         setIssues(
-          [...a, ...b].sort(
+          issuesData.sort(
             (x, y) =>
               new Date(y.updatedAt).getTime() - new Date(x.updatedAt).getTime(),
           ),
@@ -144,13 +139,23 @@ export function ConflictIssueSection() {
             key={tab}
             type="button"
             onClick={() => setActiveTab(tab)}
-            className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px ${
+            className={`inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold border-b-2 -mb-px ${
               activeTab === tab
                 ? "text-blue-700 border-blue-700"
                 : "text-gray-500 border-transparent hover:text-gray-700"
             }`}
           >
-            {tab === "open" ? "● Open" : "✓ Closed"}
+            {tab === "open" ? (
+              <>
+                <Circle className="h-3 w-3" strokeWidth={2.5} />
+                Open
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-3 w-3" strokeWidth={2.25} />
+                Closed
+              </>
+            )}
           </button>
         ))}
       </div>
@@ -167,7 +172,11 @@ export function ConflictIssueSection() {
         {!loading && !error && issues.length === 0 && (
           <div className="flex-1 flex items-center justify-center p-5">
             <div className="text-center">
-              <div className="text-4xl mb-2">✓</div>
+              <CheckCircle2
+                className="mx-auto mb-2 h-10 w-10 text-gray-300"
+                strokeWidth={1.5}
+                aria-hidden
+              />
               <p className="text-sm text-gray-400">
                 No {activeTab === "open" ? "open" : "closed"} order issues
               </p>
@@ -183,7 +192,7 @@ export function ConflictIssueSection() {
                 className={`border-l-4 ${issueKind(issue.title) === "cancel" ? "border-l-red-400" : "border-l-amber-400"}`}
               >
                 <Link
-                  href={`/conflict-issues/${issue.number}`}
+                  href={`/conflict-issues?issue=${issue.number}`}
                   className="block px-5 py-3 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-start gap-2">
