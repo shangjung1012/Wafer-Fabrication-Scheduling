@@ -346,6 +346,18 @@ type CellData = {
   conflicts: ConflictInfo[];
 };
 
+/** First row wins per assignmentId (timeline should not duplicate; avoids duplicate React keys in cells). */
+function dedupeTimelineItemsByAssignmentId(items: TimelineItem[]): TimelineItem[] {
+  const seen = new Set<string>();
+  const out: TimelineItem[] = [];
+  for (const t of items) {
+    if (seen.has(t.assignmentId)) continue;
+    seen.add(t.assignmentId);
+    out.push(t);
+  }
+  return out;
+}
+
 function buildCellMap(
   data: TimelineResponse,
   dates: string[],
@@ -370,8 +382,10 @@ function buildCellMap(
   for (const factory of data.factories) {
     for (const date of dates) {
       const key = `${factory.id}__${date}`;
-      const items = data.timeline.filter(
-        (t) => t.factoryId === factory.id && t.productionDate === date,
+      const items = dedupeTimelineItemsByAssignmentId(
+        data.timeline.filter(
+          (t) => t.factoryId === factory.id && t.productionDate === date,
+        ),
       );
       const cap = capacityLookup.get(key);
       map.set(key, {
