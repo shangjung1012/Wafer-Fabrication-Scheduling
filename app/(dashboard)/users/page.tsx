@@ -277,10 +277,10 @@ export default function UsersPage() {
             Orders
           </a>
           <Link href="/conflict-issues" style={navLinkStyle}>
-            Conflicts
+            Issues
           </Link>
           <a href="/visualization" style={navLinkStyle}>
-            Visualization
+            Schedule
           </a>
           <a href="/users" style={{ ...navLinkStyle, ...activeNavLinkStyle }}>
             Users

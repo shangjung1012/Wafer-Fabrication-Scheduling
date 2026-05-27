@@ -36,7 +36,7 @@ export const issueCreatedTemplate: MailTemplate<IssueCreatedMailData> = {
   build(data: IssueCreatedMailData): SendMailInput {
     const displayName = data.recipientUsername ?? data.recipientEmail;
     const appUrl = process.env.APP_BASE_URL ?? "";
-    const issueUrl = `${appUrl}/conflict-issues/${data.issueNumber}`;
+    const issueUrl = `${appUrl}/conflict-issues?issue=${data.issueNumber}`;
 
     const safeDisplayName = escapeHtml(displayName);
     const safeOrderName = escapeHtml(data.orderName);

@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 import { logoutClientAuthSession } from "@/modules/auth/client-session";
 
@@ -11,6 +12,10 @@ export function DashboardShell({
   topSection,
   leftSection,
   rightSection,
+  leftSectionClassName,
+  rightSectionClassName,
+  leftSectionSurfaceClassName,
+  rightSectionSurfaceClassName,
   onBack,
   hideTopBar,
   hideRightSection,
@@ -20,62 +25,97 @@ export function DashboardShell({
   topSection?: React.ReactNode;
   leftSection: React.ReactNode;
   rightSection?: React.ReactNode;
+  leftSectionClassName?: string;
+  rightSectionClassName?: string;
+  leftSectionSurfaceClassName?: string;
+  rightSectionSurfaceClassName?: string;
   onBack: () => void;
   hideTopBar?: boolean;
   hideRightSection?: boolean;
 }) {
   const session = useClientAuthSession();
+  const pathname = usePathname();
   const hideTop = !!hideTopBar;
   const hideRight = !!hideRightSection;
+  const isVisDashboard = pathname?.startsWith("/visualization/dashboard");
+  const isVisualization = pathname?.startsWith("/visualization");
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans">
       {/* Top bar */}
       {!hideTop && (
         <div className="flex-none bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-              <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+            <div className="w-80 flex-shrink-0 overflow-hidden">
+              <h1 className="text-xl font-bold text-gray-900 truncate">
+                {title}
+              </h1>
+              <p className="text-sm text-gray-500 mt-1 truncate">{subtitle}</p>
             </div>
-
-            {/* Navigation + session (match visualization bar) */}
-            <nav
-              className="flex items-center gap-2 flex-wrap"
-              aria-label="Dashboard navigation"
-            >
-              <Link
-                href="/conflict-issues"
-                className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+            {/* Navigation + session (underline-style tabs) */}
+            <div className="flex-1 flex items-center justify-center">
+              <nav
+                className="flex items-center gap-2 flex-wrap"
+                aria-label="Dashboard navigation"
               >
-                Issues
-              </Link>
-              <Link
-                href="/visualization"
-                className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-              >
-                Visualization
-              </Link>
-              <Link
-                href="/visualization/dashboard"
-                className="text-xs font-medium px-2.5 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700"
-              >
-                Dashboard
-              </Link>
-              {session && session.user.role === "SUPERADMIN" && (
+                {/* Order: Schedule, Dashboard, Issues, Permissions (superadmin), Profile */}
                 <Link
-                  href="/permissions"
-                  className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
+                  href="/visualization"
+                  className={`text-sm font-medium px-3 py-2 ${
+                    isVisualization && !isVisDashboard
+                      ? "text-blue-700 border-b-2 border-blue-700"
+                      : "text-gray-600 hover:text-gray-900 border-b-2 border-transparent"
+                  }`}
                 >
-                  Permissions
+                  Schedule
                 </Link>
-              )}
-              <Link
-                href="/profile"
-                className="text-xs font-medium px-2.5 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
-              >
-                Profile
-              </Link>
-            </nav>
+
+                <Link
+                  href="/visualization/dashboard"
+                  className={`text-sm font-medium px-3 py-2 ${
+                    isVisDashboard
+                      ? "text-blue-700 border-b-2 border-blue-700"
+                      : "text-gray-600 hover:text-gray-900 border-b-2 border-transparent"
+                  }`}
+                >
+                  Dashboard
+                </Link>
+
+                <Link
+                  href="/conflict-issues"
+                  className={`text-sm font-medium px-3 py-2 ${
+                    pathname?.startsWith("/conflict-issues")
+                      ? "text-blue-700 border-b-2 border-blue-700"
+                      : "text-gray-600 hover:text-gray-900 border-b-2 border-transparent"
+                  }`}
+                >
+                  Issues
+                </Link>
+
+                {session && session.user.role === "SUPERADMIN" && (
+                  <Link
+                    href="/permissions"
+                    className={`text-sm font-medium px-3 py-2 ${
+                      pathname?.startsWith("/permissions")
+                        ? "text-blue-700 border-b-2 border-blue-700"
+                        : "text-gray-600 hover:text-gray-900 border-b-2 border-transparent"
+                    }`}
+                  >
+                    Permissions
+                  </Link>
+                )}
+
+                <Link
+                  href="/profile"
+                  className={`text-sm font-medium px-3 py-2 ${
+                    pathname?.startsWith("/profile")
+                      ? "text-blue-700 border-b-2 border-blue-700"
+                      : "text-gray-600 hover:text-gray-900 border-b-2 border-transparent"
+                  }`}
+                >
+                  Profile
+                </Link>
+              </nav>
+            </div>
 
             <SessionBox onBack={onBack} />
           </div>
@@ -93,14 +133,16 @@ export function DashboardShell({
         <div className="flex flex-1 gap-6 min-h-0">
           {/* Left section: wide when right hidden, otherwise 2/3 width */}
           <div
-            className={`${hideRight ? "flex-1" : "flex-[2]"} flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden`}
+            className={`${leftSectionClassName ?? (hideRight ? "flex-1" : "flex-[2]")} ${leftSectionSurfaceClassName ?? "flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"}`}
           >
             {leftSection}
           </div>
 
           {/* Right section: render only when not hidden */}
           {!hideRight && (
-            <div className="flex-1 flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+            <div
+              className={`${rightSectionClassName ?? "flex-1"} ${rightSectionSurfaceClassName ?? "flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"}`}
+            >
               {rightSection}
             </div>
           )}

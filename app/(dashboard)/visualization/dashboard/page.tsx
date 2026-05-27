@@ -9,6 +9,7 @@ import { DashboardSummary } from "@/components/dashboard/DashboardSummary";
 import { AdminPendingSection } from "../../../../components/dashboard/AdminPendingSection";
 import { SalesOrdersSection } from "@/components/dashboard/SalesOrdersSection";
 import { ConflictIssueSection } from "@/components/dashboard/ConflictIssueSection";
+import { X } from "lucide-react";
 
 // Types
 type TimelineResponse = {
@@ -25,6 +26,12 @@ type TimelineResponse = {
     label: string;
     productionType: string;
     maxCapacity?: number;
+  }[];
+  dailyCapacities?: {
+    factoryId: string;
+    date: string;
+    maxCapacity: number;
+    usedCapacity: number;
   }[];
   timeline?: {
     orderId: string;
@@ -140,9 +147,10 @@ function OrderEditorModal({
           <button
             type="button"
             onClick={onClose}
-            className="text-xl leading-none text-gray-400 hover:text-gray-600"
+            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            aria-label="Close"
           >
-            ✕
+            <X className="h-5 w-5" strokeWidth={2} />
           </button>
         </div>
 
@@ -331,6 +339,7 @@ export default function DashboardPage() {
       IN_PRODUCTION: 0,
       COMPLETED: 0,
       CANCELLED: 0,
+      FAILED: 0,
     };
     for (const order of orders) {
       if (order.status in counts) {
@@ -350,6 +359,15 @@ export default function DashboardPage() {
   const factoryMatrix = useMemo(() => {
     const factories = timelineData?.factories ?? [];
     const dateSet = new Set(dateColumns);
+
+    const maxCapacityByFactoryAndDate = new Map<string, number>();
+    for (const dc of timelineData?.dailyCapacities ?? []) {
+      if (!dateSet.has(dc.date)) continue;
+      maxCapacityByFactoryAndDate.set(
+        `${dc.factoryId}__${dc.date}`,
+        dc.maxCapacity,
+      );
+    }
 
     const rows = new Map<string, FactoryMatrixRow>(
       factories.map((factory) => [
@@ -401,13 +419,15 @@ export default function DashboardPage() {
 
     for (const row of rows.values()) {
       row.totalOrders = orderIdsByFactory.get(row.factoryId)?.size ?? 0;
+      const factoryBaselineMax =
+        factories.find((f) => f.id === row.factoryId)?.maxCapacity ?? 0;
       for (const cell of row.cells) {
         const cellKey = `${row.factoryId}__${cell.date}`;
         cell.orderCount = orderIdsByFactoryAndDate.get(cellKey)?.size ?? 0;
+        const maxForDay =
+          maxCapacityByFactoryAndDate.get(cellKey) ?? factoryBaselineMax;
         cell.percent =
-          row.totalQuantity > 0
-            ? (cell.totalQuantity / row.totalQuantity) * 100
-            : 0;
+          maxForDay > 0 ? (cell.totalQuantity / maxForDay) * 100 : 0;
       }
     }
 
@@ -519,8 +539,6 @@ export default function DashboardPage() {
     );
   }
 
-  const conflicts = timelineData?.conflicts ?? [];
-
   const leftSection =
     isSales && !isAdmin ? (
       <SalesOrdersSection
@@ -560,11 +578,11 @@ export default function DashboardPage() {
             ? "Manage your orders and approvals"
             : "Review next 7 days factory load and production status"
         }
-        topSection={
-          <DashboardSummary conflicts={conflicts} statusCounts={statusCounts} />
-        }
+        topSection={<DashboardSummary statusCounts={statusCounts} />}
         leftSection={leftSection}
         rightSection={rightSection}
+        leftSectionClassName="flex-[5]"
+        rightSectionClassName="flex-[3]"
         onBack={() => router.push("/visualization")}
       />
 

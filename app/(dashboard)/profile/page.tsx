@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense, useState, useCallback, useEffect, useRef } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   logoutClientAuthSession,
@@ -9,6 +8,7 @@ import {
   type ClientAuthSession,
 } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 
 type Role = ClientAuthSession["user"]["role"];
 
@@ -24,54 +24,102 @@ function apiFetch(path: string, options: RequestInit = {}) {
 }
 
 const pageShellStyle: React.CSSProperties = {
-  fontFamily: "system-ui, sans-serif",
-  maxWidth: 800,
-  minHeight: "100vh",
+  maxWidth: 1000,
   margin: "0 auto",
-  padding: 24,
+  padding: "20px 16px",
+  fontFamily:
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   color: "#0f172a",
-  background: "#f8fafc",
-  boxShadow: "0 0 0 100vmax #f8fafc",
-  clipPath: "inset(0 -100vmax)",
 };
 
-const navLinkStyle: React.CSSProperties = {
-  border: "1px solid #cbd5e1",
-  borderRadius: 6,
-  padding: "7px 11px",
-  color: "#334155",
-  background: "#fff",
-  textDecoration: "none",
-  fontSize: 13,
-  fontWeight: 650,
-};
-
-const cardStyle: React.CSSProperties = {
+const panelStyle: React.CSSProperties = {
   border: "1px solid #dbe3ef",
   borderRadius: 8,
-  padding: 20,
-  marginBottom: 20,
+  padding: 16,
+  marginBottom: 16,
   background: "#ffffff",
   boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 };
 
+const sectionHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  marginBottom: 14,
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 15,
+  fontWeight: 750,
+};
+
+const sectionMetaStyle: React.CSSProperties = {
+  margin: "4px 0 0",
+  color: "#475569",
+  fontSize: 12,
+};
+
 const labelStyle: React.CSSProperties = {
-  display: "block",
-  marginBottom: 6,
-  fontSize: 13,
   color: "#334155",
-  fontWeight: 650,
+  fontSize: 12,
+  fontWeight: 700,
 };
 
 const inputStyle: React.CSSProperties = {
-  display: "block",
   width: "100%",
-  padding: "6px 10px",
-  marginTop: 2,
+  boxSizing: "border-box",
   border: "1px solid #cbd5e1",
   borderRadius: 6,
+  padding: "8px 10px",
+  fontSize: 14,
+  color: "#0f172a",
+  background: "#fff",
+};
+
+const primaryButtonStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  border: "1px solid #2563eb",
+  borderRadius: 6,
+  padding: "8px 12px",
+  background: "#2563eb",
+  color: "#fff",
   fontSize: 13,
-  boxSizing: "border-box",
+  fontWeight: 750,
+  cursor: "pointer",
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  minHeight: 32,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 7,
+  border: "1px solid #cbd5e1",
+  borderRadius: 6,
+  padding: "6px 10px",
+  background: "#fff",
+  color: "#1e293b",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const warningStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  border: "1px solid #fed7aa",
+  background: "#fff7ed",
+  color: "#9a3412",
+  borderRadius: 8,
+  padding: 12,
+  marginBottom: 16,
+  fontSize: 13,
 };
 
 const EMAIL_ERROR_MESSAGES: Record<string, string> = {
@@ -259,232 +307,217 @@ function ProfilePageInner() {
   const { user } = session;
 
   return (
-    <div style={pageShellStyle}>
-      <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-        WOMS — Profile
-      </h1>
-
-      <nav
-        aria-label="Dashboard navigation"
-        style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          margin: "12px 0 18px",
-        }}
-      >
-        <a href="/orders" style={navLinkStyle}>
-          Orders
-        </a>
-        <Link href="/conflict-issues" style={navLinkStyle}>
-          Conflicts
-        </Link>
-        <a href="/visualization" style={navLinkStyle}>
-          Visualization
-        </a>
-        <a href="/users" style={navLinkStyle}>
-          Users
-        </a>
-        <a
-          href="/profile"
-          style={{
-            ...navLinkStyle,
-            background: "#f0f4ff",
-            borderColor: "#93c5fd",
-          }}
-        >
-          Profile
-        </a>
-      </nav>
-
-      {/* Current user info */}
-      <div
-        style={{
-          marginBottom: 24,
-          padding: 12,
-          background: "#f0f4ff",
-          borderRadius: 8,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Signed in as:</span>
-        <strong style={{ fontSize: 13 }}>{user.username}</strong>
-        <span style={{ fontSize: 12, color: "#334155" }}>({user.email})</span>
-        <span style={roleBadge(user.role)}>{user.role}</span>
-        {user.group && (
-          <span style={{ fontSize: 12, color: "#334155" }}>
-            Group {user.group}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={handleLogout}
-          style={{
-            marginLeft: "auto",
-            padding: "5px 10px",
-            fontSize: 13,
-            borderRadius: 4,
-            border: "1px solid #cbd5e1",
-            background: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Logout
-        </button>
-      </div>
-
-      {/* Change Email */}
-      <div style={cardStyle}>
-        <h2 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700 }}>
-          Change Email
-        </h2>
-        <p style={{ fontSize: 13, color: "#475569", margin: "0 0 14px" }}>
-          Current email: <strong>{user.email}</strong>
-        </p>
-
-        {emailConfirmToken ? (
-          <div
-            style={{
-              fontSize: 13,
-              color: "#0f172a",
-              background: "#f8fafc",
-              padding: "10px 14px",
-              border: "1px solid #cbd5e1",
-              borderRadius: 6,
-            }}
-          >
-            <strong>Confirm email change</strong>
-            <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                onClick={handleConfirmEmailChange}
-                disabled={emailConfirmLoading}
-                style={{
-                  padding: "6px 14px",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  borderRadius: 6,
-                  border: "none",
-                  background: emailConfirmLoading ? "#94a3b8" : "#2563eb",
-                  color: "#fff",
-                  cursor: emailConfirmLoading ? "not-allowed" : "pointer",
-                }}
-              >
-                {emailConfirmLoading ? "Confirming..." : "Confirm"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEmailConfirmToken(null)}
-                disabled={emailConfirmLoading}
-                style={{
-                  padding: "6px 14px",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  background: "#fff",
-                  color: "#334155",
-                  cursor: emailConfirmLoading ? "not-allowed" : "pointer",
-                }}
-              >
-                Cancel
-              </button>
+    <DashboardShell
+      title="Profile"
+      subtitle="Manage your account and email."
+      leftSectionSurfaceClassName="flex flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
+      leftSection={
+        <>
+          <section style={panelStyle}>
+            <div style={sectionHeaderStyle}>
+              <div>
+                <h2 style={sectionTitleStyle}>Current User</h2>
+                <p style={sectionMetaStyle}>Signed-in account details.</p>
+              </div>
             </div>
-          </div>
-        ) : pendingVerification ? (
-          <div
-            style={{
-              fontSize: 13,
-              color: "#1e40af",
-              background: "#dbeafe",
-              padding: "10px 14px",
-              borderRadius: 6,
-            }}
-          >
-            <strong>Check your new inbox.</strong> We sent a verification link
-            to <strong>{newEmail || "your new address"}</strong>. The link
-            expires in <strong>3 minutes</strong>.{" "}
-            <button
-              type="button"
-              onClick={() => {
-                setPendingVerification(false);
-                setEmailStatus(null);
-              }}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#1e40af",
-                textDecoration: "underline",
-                cursor: "pointer",
-                fontSize: 13,
-                padding: 0,
-              }}
-            >
-              Request a new link
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleEmailChange}>
-            <label style={labelStyle}>
-              New Email
-              <input
-                style={inputStyle}
-                type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="new@example.com"
-                required
-              />
-            </label>
-            <label style={{ ...labelStyle, marginTop: 10 }}>
-              Current Password
-              <input
-                style={inputStyle}
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="your current password"
-                required
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={emailLoading}
-              style={{
-                marginTop: 14,
-                padding: "7px 18px",
-                fontSize: 13,
-                fontWeight: 600,
-                borderRadius: 6,
-                border: "none",
-                background: emailLoading ? "#94a3b8" : "#2563eb",
-                color: "#fff",
-                cursor: emailLoading ? "not-allowed" : "pointer",
-              }}
-            >
-              {emailLoading ? "Sending…" : "Request Email Change"}
-            </button>
-          </form>
-        )}
 
-        {emailStatus && (
-          <p
-            style={{
-              marginTop: 12,
-              fontSize: 13,
-              color: emailStatus.ok ? "#166534" : "#991b1b",
-              background: emailStatus.ok ? "#dcfce7" : "#fee2e2",
-              padding: "6px 10px",
-              borderRadius: 6,
-            }}
-          >
-            {emailStatus.message}
-          </p>
-        )}
-      </div>
-    </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                padding: 12,
+                borderRadius: 8,
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                fontSize: 13,
+              }}
+            >
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span
+                  style={{ minWidth: 72, color: "#64748b", fontWeight: 700 }}
+                >
+                  Name:
+                </span>
+                <strong style={{ color: "#0f172a" }}>{user.username}</strong>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span
+                  style={{ minWidth: 72, color: "#64748b", fontWeight: 700 }}
+                >
+                  Email:
+                </span>
+                <span style={{ color: "#0f172a" }}>{user.email}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span
+                  style={{ minWidth: 72, color: "#64748b", fontWeight: 700 }}
+                >
+                  Role:
+                </span>
+                <span style={roleBadge(user.role)}>{user.role}</span>
+              </div>
+              {user.group && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <span
+                    style={{ minWidth: 72, color: "#64748b", fontWeight: 700 }}
+                  >
+                    Group:
+                  </span>
+                  <span style={{ color: "#0f172a" }}>Group {user.group}</span>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section style={panelStyle}>
+            <div style={sectionHeaderStyle}>
+              <div>
+                <h2 style={sectionTitleStyle}>Change Email</h2>
+                <p style={sectionMetaStyle}>
+                  Current email: <strong>{user.email}</strong>
+                </p>
+              </div>
+            </div>
+
+            {emailConfirmToken ? (
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "#0f172a",
+                  background: "#f8fafc",
+                  padding: "10px 14px",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 6,
+                }}
+              >
+                <strong>Confirm email change</strong>
+                <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={handleConfirmEmailChange}
+                    disabled={emailConfirmLoading}
+                    style={
+                      emailConfirmLoading
+                        ? {
+                            ...primaryButtonStyle,
+                            background: "#94a3b8",
+                            borderColor: "#94a3b8",
+                            cursor: "not-allowed",
+                          }
+                        : primaryButtonStyle
+                    }
+                  >
+                    {emailConfirmLoading ? "Confirming..." : "Confirm"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmailConfirmToken(null)}
+                    disabled={emailConfirmLoading}
+                    style={secondaryButtonStyle}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : pendingVerification ? (
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "#1e40af",
+                  background: "#dbeafe",
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                }}
+              >
+                <strong>Check your new inbox.</strong> We sent a verification
+                link to <strong>{newEmail || "your new address"}</strong>. The
+                link expires in <strong>3 minutes</strong>.{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingVerification(false);
+                    setEmailStatus(null);
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#1e40af",
+                    textDecoration: "underline",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    padding: 0,
+                  }}
+                >
+                  Request a new link
+                </button>
+              </div>
+            ) : (
+              <form
+                onSubmit={handleEmailChange}
+                style={{ display: "grid", gap: 12 }}
+              >
+                <label style={{ display: "grid", gap: 6 }}>
+                  <span style={labelStyle}>New Email</span>
+                  <input
+                    style={inputStyle}
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="new@example.com"
+                    required
+                  />
+                </label>
+                <label style={{ display: "grid", gap: 6 }}>
+                  <span style={labelStyle}>Current Password</span>
+                  <input
+                    style={inputStyle}
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="your current password"
+                    required
+                  />
+                </label>
+                <div>
+                  <button
+                    type="submit"
+                    disabled={emailLoading}
+                    style={
+                      emailLoading
+                        ? {
+                            ...primaryButtonStyle,
+                            background: "#94a3b8",
+                            borderColor: "#94a3b8",
+                            cursor: "not-allowed",
+                          }
+                        : primaryButtonStyle
+                    }
+                  >
+                    {emailLoading ? "Sending…" : "Request Email Change"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {emailStatus && (
+              <p
+                style={{
+                  marginTop: 12,
+                  fontSize: 13,
+                  color: emailStatus.ok ? "#166534" : "#991b1b",
+                  background: emailStatus.ok ? "#dcfce7" : "#fee2e2",
+                  padding: "6px 10px",
+                  borderRadius: 6,
+                }}
+              >
+                {emailStatus.message}
+              </p>
+            )}
+          </section>
+        </>
+      }
+      onBack={handleLogout}
+      hideRightSection
+    />
   );
 }
