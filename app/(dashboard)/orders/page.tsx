@@ -1,14 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import {
-  logoutClientAuthSession,
-  type ClientAuthSession,
-} from "@/modules/auth/client-session";
+import { type ClientAuthSession } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
+import { AppHeader } from "@/components/dashboard/AppHeader";
 
 type Role = ClientAuthSession["user"]["role"];
 
@@ -469,357 +466,249 @@ export default function OrdersPage() {
     setImportStatus(`${res.status}`);
   }, [csvFile]);
 
-  const handleLogout = useCallback(async () => {
-    await logoutClientAuthSession();
-    router.replace("/login");
-  }, [router]);
-
-  // ---------------------------------------------------------------------------
-  // Role badge colour
-  // ---------------------------------------------------------------------------
-
-  const roleBadgeStyle: React.CSSProperties = {
-    fontSize: 12,
-    fontWeight: 700,
-    padding: "3px 10px",
-    borderRadius: 99,
-    background: isSales ? "#dcfce7" : isAdmin ? "#dbeafe" : "#f3e8ff",
-    color: isSales ? "#166534" : isAdmin ? "#1e40af" : "#6b21a8",
-  };
-
-  const navLinkStyle: React.CSSProperties = {
-    border: "1px solid #cbd5e1",
-    borderRadius: 6,
-    padding: "7px 11px",
-    color: "#334155",
-    background: "#fff",
-    textDecoration: "none",
-    fontSize: 13,
-    fontWeight: 650,
-  };
-
-  const pageShellStyle: React.CSSProperties = {
-    fontFamily: "system-ui, sans-serif",
-    maxWidth: 800,
-    minHeight: "100vh",
-    margin: "0 auto",
-    padding: 24,
-    color: "#0f172a",
-    background: "#f8fafc",
-    boxShadow: "0 0 0 100vmax #f8fafc",
-    clipPath: "inset(0 -100vmax)",
-  };
-
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
-  if (session === undefined) {
-    return <div style={pageShellStyle}>Loading session...</div>;
-  }
-
-  if (session === null) {
-    return <div style={pageShellStyle}>Redirecting to login...</div>;
+  if (!session) {
+    return (
+      <div className="p-10 text-center text-sm text-gray-400">Loading…</div>
+    );
   }
 
   return (
-    <div style={pageShellStyle}>
-      <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-        WOMS — API Test UI
-      </h1>
-      <nav
-        aria-label="Dashboard navigation"
-        style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          margin: "12px 0 18px",
-        }}
-      >
-        <a href="/orders" style={navLinkStyle}>
-          Orders
-        </a>
-        <Link href="/conflict-issues" style={navLinkStyle}>
-          Issues
-        </Link>
-        <a href="/visualization" style={navLinkStyle}>
-          Schedule
-        </a>
-        <a href="/users" style={navLinkStyle}>
-          Users
-        </a>
-        <a href="/profile" style={navLinkStyle}>
-          Profile
-        </a>
-      </nav>
-
-      <div
-        style={{
-          marginBottom: 24,
-          padding: 12,
-          background: "#f0f4ff",
-          color: "#1e293b",
-          borderRadius: 8,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Signed in as:</span>
-        <strong style={{ fontSize: 13 }}>{session.user.username}</strong>
-        <span style={{ fontSize: 12, color: "#334155" }}>
-          ({session.user.email})
-        </span>
-        <span style={roleBadgeStyle}>{role}</span>
-        {session.user.group && (
-          <span style={{ fontSize: 12, color: "#334155" }}>
-            Group {session.user.group}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={handleLogout}
+    <div className="flex flex-col min-h-screen bg-gray-50 font-sans">
+      <AppHeader title="Orders" subtitle="Create and manage your orders" />
+      <div className="max-w-3xl mx-auto w-full px-4 py-5">
+        {/* Role capability summary */}
+        <div
           style={{
-            marginLeft: "auto",
-            padding: "5px 10px",
+            marginBottom: 24,
+            padding: 12,
+            background: "#fffbeb",
+            borderRadius: 8,
+            border: "1px solid #fde68a",
+            color: "#713f12",
             fontSize: 13,
-            borderRadius: 4,
-            border: "1px solid #cbd5e1",
-            background: "#fff",
-            cursor: "pointer",
           }}
         >
-          Logout
-        </button>
-      </div>
-
-      {/* Role capability summary */}
-      <div
-        style={{
-          marginBottom: 24,
-          padding: 12,
-          background: "#fffbeb",
-          borderRadius: 8,
-          border: "1px solid #fde68a",
-          color: "#713f12",
-          fontSize: 13,
-        }}
-      >
-        {isSales && (
-          <span>
-            As <strong>SALES</strong>: view orders, create &amp; edit your own
-            orders.
-          </span>
-        )}
-        {isAdmin && (
-          <span>
-            As <strong>ADMIN</strong>: view orders in your group, update order
-            status, delete orders, import CSV.
-          </span>
-        )}
-        {isSuperAdmin && (
-          <span>
-            As <strong>SUPERADMIN</strong>: view all orders in your production
-            type, import CSV.
-          </span>
-        )}
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Orders section                                                      */}
-      {/* ------------------------------------------------------------------ */}
-      <SectionHeading>Orders</SectionHeading>
-
-      {/* 1. List Orders — all roles */}
-      <Section title="List Orders — GET /api/orders">
-        <Input
-          label="Keyword (optional)"
-          value={listKeyword}
-          onChange={(e) => setListKeyword(e.target.value)}
-          placeholder="search name/type"
-        />
-        <Btn onClick={doListOrders}>Send</Btn>
-        {listStatus && (
-          <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
-            HTTP {listStatus}
-          </span>
-        )}
-        <OrderTable data={listResult} />
-      </Section>
-
-      {/* 2. Get Order — all roles */}
-      <Section title="Get Order — GET /api/orders/:id">
-        <Input
-          label="Order ID"
-          value={getOrderId}
-          onChange={(e) => setGetOrderId(e.target.value)}
-          placeholder="order id"
-        />
-        <Btn onClick={doGetOrder}>Send</Btn>
-        {getStatus && (
-          <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
-            HTTP {getStatus}
-          </span>
-        )}
-        <Result data={getResult} />
-      </Section>
-
-      {/* 3. Create Order — SALES only */}
-      {isSales && (
-        <Section title="Create Order — POST /api/orders" badge="SALES">
-          <Input
-            label="Name"
-            value={createName}
-            onChange={(e) => setCreateName(e.target.value)}
-            placeholder="Order name"
-          />
-          <Input
-            label="Type (production group: A/B/C)"
-            value={createType}
-            onChange={(e) => setCreateType(e.target.value)}
-            placeholder="A"
-          />
-          <Input
-            label="Due Date"
-            type="date"
-            value={createDueDate}
-            onChange={(e) => setCreateDueDate(e.target.value)}
-          />
-          <Input
-            label="Quantity"
-            type="number"
-            value={createQty}
-            onChange={(e) => setCreateQty(e.target.value)}
-          />
-          <Btn onClick={doCreateOrder}>Send</Btn>
-          {createStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
-              HTTP {createStatus}
+          {isSales && (
+            <span>
+              As <strong>SALES</strong>: view orders, create &amp; edit your own
+              orders.
             </span>
           )}
-          <Result data={createResult} />
-        </Section>
-      )}
+          {isAdmin && (
+            <span>
+              As <strong>ADMIN</strong>: view orders in your group, update order
+              status, delete orders, import CSV.
+            </span>
+          )}
+          {isSuperAdmin && (
+            <span>
+              As <strong>SUPERADMIN</strong>: view all orders in your production
+              type, import CSV.
+            </span>
+          )}
+        </div>
 
-      {/* 4. Update Order — SALES (no status) or ADMIN (with status) */}
-      {(isSales || isAdmin) && (
-        <Section
-          title="Update Order — PUT /api/orders/:id"
-          badge={isSales ? "SALES" : "ADMIN"}
-        >
+        {/* ------------------------------------------------------------------ */}
+        {/* Orders section                                                      */}
+        {/* ------------------------------------------------------------------ */}
+        <SectionHeading>Orders</SectionHeading>
+
+        {/* 1. List Orders — all roles */}
+        <Section title="List Orders — GET /api/orders">
+          <Input
+            label="Keyword (optional)"
+            value={listKeyword}
+            onChange={(e) => setListKeyword(e.target.value)}
+            placeholder="search name/type"
+          />
+          <Btn onClick={doListOrders}>Send</Btn>
+          {listStatus && (
+            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
+              HTTP {listStatus}
+            </span>
+          )}
+          <OrderTable data={listResult} />
+        </Section>
+
+        {/* 2. Get Order — all roles */}
+        <Section title="Get Order — GET /api/orders/:id">
           <Input
             label="Order ID"
-            value={updateId}
-            onChange={(e) => setUpdateId(e.target.value)}
+            value={getOrderId}
+            onChange={(e) => setGetOrderId(e.target.value)}
             placeholder="order id"
           />
-          <Input
-            label="Name"
-            value={updateName}
-            onChange={(e) => setUpdateName(e.target.value)}
-            placeholder="new name (optional)"
-          />
-          <Input
-            label="Quantity"
-            type="number"
-            value={updateQty}
-            onChange={(e) => setUpdateQty(e.target.value)}
-            placeholder="new quantity (optional)"
-          />
-          <Input
-            label="Due Date"
-            type="date"
-            value={updateDueDate}
-            onChange={(e) => setUpdateDueDate(e.target.value)}
-          />
-          {isAdmin && (
-            <label style={{ display: "block", marginBottom: 6, fontSize: 13 }}>
-              Status (ADMIN only)
-              <select
-                value={updateStatus2}
-                onChange={(e) => setUpdateStatus2(e.target.value)}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  padding: "4px 8px",
-                  marginTop: 2,
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 4,
-                  fontSize: 13,
-                }}
+          <Btn onClick={doGetOrder}>Send</Btn>
+          {getStatus && (
+            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
+              HTTP {getStatus}
+            </span>
+          )}
+          <Result data={getResult} />
+        </Section>
+
+        {/* 3. Create Order — SALES only */}
+        {isSales && (
+          <Section title="Create Order — POST /api/orders" badge="SALES">
+            <Input
+              label="Name"
+              value={createName}
+              onChange={(e) => setCreateName(e.target.value)}
+              placeholder="Order name"
+            />
+            <Input
+              label="Type (production group: A/B/C)"
+              value={createType}
+              onChange={(e) => setCreateType(e.target.value)}
+              placeholder="A"
+            />
+            <Input
+              label="Due Date"
+              type="date"
+              value={createDueDate}
+              onChange={(e) => setCreateDueDate(e.target.value)}
+            />
+            <Input
+              label="Quantity"
+              type="number"
+              value={createQty}
+              onChange={(e) => setCreateQty(e.target.value)}
+            />
+            <Btn onClick={doCreateOrder}>Send</Btn>
+            {createStatus && (
+              <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
+                HTTP {createStatus}
+              </span>
+            )}
+            <Result data={createResult} />
+          </Section>
+        )}
+
+        {/* 4. Update Order — SALES (no status) or ADMIN (with status) */}
+        {(isSales || isAdmin) && (
+          <Section
+            title="Update Order — PUT /api/orders/:id"
+            badge={isSales ? "SALES" : "ADMIN"}
+          >
+            <Input
+              label="Order ID"
+              value={updateId}
+              onChange={(e) => setUpdateId(e.target.value)}
+              placeholder="order id"
+            />
+            <Input
+              label="Name"
+              value={updateName}
+              onChange={(e) => setUpdateName(e.target.value)}
+              placeholder="new name (optional)"
+            />
+            <Input
+              label="Quantity"
+              type="number"
+              value={updateQty}
+              onChange={(e) => setUpdateQty(e.target.value)}
+              placeholder="new quantity (optional)"
+            />
+            <Input
+              label="Due Date"
+              type="date"
+              value={updateDueDate}
+              onChange={(e) => setUpdateDueDate(e.target.value)}
+            />
+            {isAdmin && (
+              <label
+                style={{ display: "block", marginBottom: 6, fontSize: 13 }}
               >
-                <option value="">(leave unchanged)</option>
-                <option value="PENDING">PENDING</option>
-                <option value="SCHEDULED">SCHEDULED</option>
-                <option value="IN_PRODUCTION">IN_PRODUCTION</option>
-                <option value="COMPLETED">COMPLETED</option>
-                <option value="CANCELLED">CANCELLED</option>
-              </select>
-            </label>
-          )}
-          {isSales && (
-            <p style={{ fontSize: 12, color: "#475569", margin: "4px 0 0" }}>
-              Only works on your own PENDING orders. Status cannot be changed by
-              SALES.
+                Status (ADMIN only)
+                <select
+                  value={updateStatus2}
+                  onChange={(e) => setUpdateStatus2(e.target.value)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "4px 8px",
+                    marginTop: 2,
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 4,
+                    fontSize: 13,
+                  }}
+                >
+                  <option value="">(leave unchanged)</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="SCHEDULED">SCHEDULED</option>
+                  <option value="IN_PRODUCTION">IN_PRODUCTION</option>
+                  <option value="COMPLETED">COMPLETED</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+              </label>
+            )}
+            {isSales && (
+              <p style={{ fontSize: 12, color: "#475569", margin: "4px 0 0" }}>
+                Only works on your own PENDING orders. Status cannot be changed
+                by SALES.
+              </p>
+            )}
+            <Btn onClick={doUpdateOrder}>Send</Btn>
+            {updateHttpStatus && (
+              <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
+                HTTP {updateHttpStatus}
+              </span>
+            )}
+            <Result data={updateResult} />
+          </Section>
+        )}
+
+        {/* 5. Delete Orders — ADMIN only */}
+        {isAdmin && (
+          <Section title="Delete Orders — DELETE /api/orders" badge="ADMIN">
+            <p style={{ fontSize: 12, color: "#475569", margin: "0 0 8px" }}>
+              Soft-deletes (sets status = CANCELLED).
             </p>
-          )}
-          <Btn onClick={doUpdateOrder}>Send</Btn>
-          {updateHttpStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
-              HTTP {updateHttpStatus}
-            </span>
-          )}
-          <Result data={updateResult} />
-        </Section>
-      )}
+            <Input
+              label="Order IDs (comma-separated)"
+              value={deleteIds}
+              onChange={(e) => setDeleteIds(e.target.value)}
+              placeholder="id1, id2, id3"
+            />
+            <Btn onClick={doDeleteOrders}>Send</Btn>
+            {deleteStatus && (
+              <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
+                HTTP {deleteStatus}
+              </span>
+            )}
+            <Result data={deleteResult} />
+          </Section>
+        )}
 
-      {/* 5. Delete Orders — ADMIN only */}
-      {isAdmin && (
-        <Section title="Delete Orders — DELETE /api/orders" badge="ADMIN">
-          <p style={{ fontSize: 12, color: "#475569", margin: "0 0 8px" }}>
-            Soft-deletes (sets status = CANCELLED).
-          </p>
-          <Input
-            label="Order IDs (comma-separated)"
-            value={deleteIds}
-            onChange={(e) => setDeleteIds(e.target.value)}
-            placeholder="id1, id2, id3"
-          />
-          <Btn onClick={doDeleteOrders}>Send</Btn>
-          {deleteStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
-              HTTP {deleteStatus}
-            </span>
-          )}
-          <Result data={deleteResult} />
-        </Section>
-      )}
-
-      {/* 6. Import CSV — ADMIN + SUPERADMIN */}
-      {isAdminOrSuper && (
-        <Section
-          title="Import CSV — POST /api/orders/import"
-          badge={isAdmin ? "ADMIN" : "SUPERADMIN"}
-        >
-          <p style={{ fontSize: 12, color: "#334155", margin: "0 0 8px" }}>
-            CSV columns: <code>name,type,dueDate,quantity</code>
-          </p>
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
-            style={{ fontSize: 13 }}
-          />
-          <Btn onClick={doImport}>Send</Btn>
-          {importStatus && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
-              HTTP {importStatus}
-            </span>
-          )}
-          <Result data={importResult} />
-        </Section>
-      )}
+        {/* 6. Import CSV — ADMIN + SUPERADMIN */}
+        {isAdminOrSuper && (
+          <Section
+            title="Import CSV — POST /api/orders/import"
+            badge={isAdmin ? "ADMIN" : "SUPERADMIN"}
+          >
+            <p style={{ fontSize: 12, color: "#334155", margin: "0 0 8px" }}>
+              CSV columns: <code>name,type,dueDate,quantity</code>
+            </p>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
+              style={{ fontSize: 13 }}
+            />
+            <Btn onClick={doImport}>Send</Btn>
+            {importStatus && (
+              <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
+                HTTP {importStatus}
+              </span>
+            )}
+            <Result data={importResult} />
+          </Section>
+        )}
+      </div>
     </div>
   );
 }

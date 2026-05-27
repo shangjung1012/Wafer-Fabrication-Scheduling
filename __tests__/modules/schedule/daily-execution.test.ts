@@ -42,9 +42,6 @@ describe("Daily Execution Engine", () => {
       ["Type A", "Type B"],
       expect.any(Function),
     );
-    expect(executeDailyStateAdvancement).toHaveBeenCalledWith(
-      currentDate,
-      undefined,
-    );
+    expect(executeDailyStateAdvancement).toHaveBeenCalledWith(currentDate);
   });
 });

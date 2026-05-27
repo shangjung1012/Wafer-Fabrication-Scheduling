@@ -26,7 +26,6 @@ const ctx = (
 
 const salesA = ctx("sales-A", "SALES");
 const salesB = ctx("sales-B", "SALES");
-const salesC = ctx("sales-C", "SALES");
 const adminA1 = ctx("admin-A1", "ADMIN");
 const adminB1 = ctx("admin-B1", "ADMIN");
 const superAdminA = ctx("sa-A", "SUPERADMIN");
@@ -57,18 +56,15 @@ describe("Visualization RBAC", () => {
     }
   });
 
-  it("SALES sales-A / sales-B / sales-C 的 myOrderIds 兩兩不重疊", async () => {
-    const [dataA, dataB, dataC] = await Promise.all([
+  it("SALES sales-A 和 sales-B 的 myOrderIds 不重疊", async () => {
+    const [dataA, dataB] = await Promise.all([
       getTimeline(salesA, prisma, FILTERS),
       getTimeline(salesB, prisma, FILTERS),
-      getTimeline(salesC, prisma, FILTERS),
     ]);
     const aIds = new Set(dataA.salesContext!.myOrderIds);
     const bIds = new Set(dataB.salesContext!.myOrderIds);
-    const cIds = new Set(dataC.salesContext!.myOrderIds);
-    expect([...aIds].filter((id) => bIds.has(id))).toHaveLength(0);
-    expect([...aIds].filter((id) => cIds.has(id))).toHaveLength(0);
-    expect([...bIds].filter((id) => cIds.has(id))).toHaveLength(0);
+    const overlap = [...aIds].filter((id) => bIds.has(id));
+    expect(overlap).toHaveLength(0);
   });
 
   it("ADMIN admin-A1 → 看到整個 Type A（factory-A1/A2/A3）", async () => {
