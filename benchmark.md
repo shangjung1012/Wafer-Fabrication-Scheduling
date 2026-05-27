@@ -18,11 +18,11 @@ pnpm benchmark
 
 | 項目 | 設定 |
 |------|------|
-| 可變訂單 | 10,000 筆 `PENDING`，`isFixed = false` |
-| 固定訂單 | 50 筆 `isFixed = true`，預先帶 `SCHEDULED` 派工（模擬鎖定產能） |
+| 可變訂單 | **10,000** 筆 `PENDING`，`isFixed = false`；`quantity` 100–2000、`dueDate` 在視窗內隨機（種子固定則可重現） |
+| 固定訂單 | 50 筆 `isFixed = true`，預先帶 `SCHEDULED` 派工（模擬鎖定產能）；工廠與生產日由種子隨機自 20 廠中選取 |
 | `isPrioritized` | 可變訂單與 Phase 2 新單均以約 **5%** 機率為 `true`（`PRIORITIZED_PROB = 0.05`，由種子決定） |
-| 工廠 | 50 間，每日 `maxCapacity` 隨機 |
-| 產能視窗 | 每廠 180 天 × 50 廠 = 9,000 筆初始 `DailyCapacity` |
+| 工廠 | **20** 間；每廠 `maxCapacity` 在 **1000–5000** 間隨機（腳本不區分產品型別，所有廠皆可服務所有訂單） |
+| 產能視窗 | 每廠 180 天 × 20 廠 = **3,600** 筆初始 `DailyCapacity` |
 | Phase 2 | 在 Phase 1（`GAP_FILLING`）baseline 後再注入 2,000 筆 `NEW_*` 訂單，分別以三種 `reschedulePolicy` 重跑 |
 
 ---
@@ -54,6 +54,8 @@ pnpm benchmark
 | 7 | **Prioritized 處理順序** | 見下一節 |
 
 **Metric：** Invariant Pass Rate = 通過項數 / 7，目標 **7/7**。
+
+> 若未來在合成資料加入 `order.type` / `factory.type`，應在腳本中補上與 `strategy.ts` 一致的 **型別—工廠** 檢查，並將 `totalInvariants` 一併調整。
 
 ---
 
@@ -126,19 +128,38 @@ pnpm benchmark
           │  失敗合理性    │  FAILED 能否被容量／時間解釋
           │  目標: 100%   │
           ├───────────────┤
-          │  Invariant    │  含 Prioritized 順序等 7 項
+          │  Invariant    │  含 Prioritized 等 7 項
           │  目標: 7/7    │
           └───────────────┘
 ```
 
-範例填表（請改為你的實跑數字）：
+### 最近一次實跑（`SEED = 42`，本機 `pnpm benchmark`，工廠 20）
 
-| 項目 | 範例欄位 |
-|------|----------|
-| 規模 | 10,050 訂單 × 50 工廠 × 180 天 |
+**Phase 1（單次 `GAP_FILLING`）**
+
+| 項目 | 數值 |
+|------|------|
+| 規模 | 10,050 訂單（10,000 可變 + 50 固定）× 20 工廠 × 180 天 |
+| 執行時間 | ~3180 ms |
+| 排程結果 | 9,510 `SCHEDULED`（含 50 筆固定）、540 `FAILED` |
 | Invariant | 7/7 |
-| Failure justification | 100% |
-| Success rate / Utilization / 執行時間 | 依終端輸出 |
+| Failure justification | 100%（Window 121 / Capacity exhausted 419 / Greedy trade-off 0） |
+| 可變單成功率 | 94.6%（9,460 / 10,000） |
+| 容量利用率 | 91.6%；對理論上界 94.9% |
+
+**Phase 2（+2,000 新單，三種 policy）**
+
+| 指標 | GAP_FILLING | GLOBAL_OPTIMIZE | PRIORITY_RETAIN |
+|------|-------------|-----------------|-----------------|
+| Total scheduled | 9,681 | 9,090 | 9,700 |
+| Total failed | 2,369 | 2,960 | 2,350 |
+| New scheduled (/2000) | 171 | 1,518 | 248 |
+| Retained (/9460) | 9,460 | 7,522 | 9,402 |
+| Displaced | 0 | 1,938 | 58 |
+| Stability | 100.0% | 79.5% | 99.4% |
+| Execution (ms) | ~796 | ~4018 | ~3832 |
+
+簡報填表時請以你當次終端輸出為準（機器與 Node 版本會影響 wall time）。
 
 ---
 
@@ -172,4 +193,4 @@ Phase 2 在相同 baseline 下比較：
 | 單元／整合測試 | `__tests__/modules/schedule/strategy.test.ts` 等（含 `isPrioritized` 排序案例） |
 | 大規模回歸／簡報數字 | `pnpm benchmark` → `scripts/benchmark.ts` |
 
-Benchmark 用於 **壓力下的不變量與失敗分類**，補足單測無法涵蓋的規模與組合；第 7 項則把 **急單排序契約** 固定成可機械檢查的條件。
+Benchmark 用於 **壓力下的不變量與失敗分類**，補足單測無法涵蓋的規模與組合；第 7 項把 **急單排序契約** 固定成可機械檢查的條件。帶 `order.type` 的場景請以 `__tests__/modules/schedule/strategy.test.ts` 與 README 為準；合成腳本目前未模擬多型別工廠。

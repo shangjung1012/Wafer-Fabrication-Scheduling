@@ -990,6 +990,7 @@ export async function createIssuesForFailedOrders(input: {
           const factoryInputs = factories.map((f) => ({
             id: f.id,
             maxCapacity: f.maxCapacity,
+            type: f.productionType,
           }));
 
           const totalAvailableInWindow = computeTotalAvailableCapacity(
@@ -997,6 +998,7 @@ export async function createIssuesForFailedOrders(input: {
             windowEnd,
             factoryInputs,
             capacityMap,
+            order.type,
           );
 
           const requiredQuantity = order.quantity;

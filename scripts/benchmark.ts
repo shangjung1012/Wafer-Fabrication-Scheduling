@@ -73,7 +73,7 @@ console.log(`   Seed: ${SEED} (deterministic)\n`);
 
 const NUM_ORDERS = 10000;
 const NUM_FIXED_ORDERS = 50;
-const NUM_FACTORIES = 50;
+const NUM_FACTORIES = 20;
 const DAYS_OF_CAPACITY = 180;
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
