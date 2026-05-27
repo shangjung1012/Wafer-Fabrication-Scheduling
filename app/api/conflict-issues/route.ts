@@ -21,22 +21,26 @@ import { listConflictIssues } from "@/modules/order/conflict-issue-service";
 import { ConflictIssueStatus } from "@/infra/db/conflict-issue-repository";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const ctx = await requireAuth(req);
 
     const { searchParams } = new URL(req.url);
-    const statusParam = searchParams.get("status");
-    const status =
-      statusParam &&
-      Object.values(ConflictIssueStatus).includes(
-        statusParam as ConflictIssueStatus,
-      )
-        ? (statusParam as ConflictIssueStatus)
-        : undefined;
+    const statusesParam = searchParams.get("statuses");
+    const statuses = statusesParam
+      ? (statusesParam
+          .split(",")
+          .filter((s) =>
+            Object.values(ConflictIssueStatus).includes(
+              s as ConflictIssueStatus,
+            ),
+          ) as ConflictIssueStatus[])
+      : undefined;
 
     const issues = await listConflictIssues(ctx, prisma, {
-      status,
+      statuses,
     });
     return NextResponse.json(issues);
   } catch (err) {
