@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   acceptProposal,
   createIssuesForFailedOrders,
+  listConflictIssues,
 } from "@/modules/order/conflict-issue-service";
 import * as orderRepo from "@/infra/db/order-repository";
 import * as conflictRepo from "@/infra/db/conflict-issue-repository";
@@ -333,6 +334,85 @@ describe("createIssuesForFailedOrders", () => {
     expect(conflictRepo.createConflictIssueEvent).not.toHaveBeenCalled();
     expect(mailTemplate.renderAndSend).not.toHaveBeenCalled();
     expect(conflictRepo.findOpenIssueByOrderId).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listConflictIssues — role-scoped filters merged with IssueFilters
+// ---------------------------------------------------------------------------
+
+describe("listConflictIssues", () => {
+  let findIssuesSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    findIssuesSpy = vi
+      .spyOn(conflictRepo, "findConflictIssues")
+      .mockResolvedValue([]);
+    vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
+      role: "ADMIN",
+      userId: "ADMIN1",
+      factoryIds: ["F1"],
+      productionType: "Type A",
+      group: "Type A",
+    });
+  });
+
+  afterEach(() => {
+    findIssuesSpy.mockRestore();
+  });
+
+  it("SALES: passes assigneeId plus caller-supplied statuses to the repository", async () => {
+    const salesCtx: RequestContext = {
+      user: { id: "SALES1", role: "SALES", username: "sales-A" },
+      requestId: "req-s",
+    };
+    await listConflictIssues(salesCtx, prisma, {
+      statuses: [conflictRepo.ConflictIssueStatus.OPEN],
+    });
+    expect(findIssuesSpy).toHaveBeenCalledWith(prisma, {
+      assigneeId: "SALES1",
+      statuses: [conflictRepo.ConflictIssueStatus.OPEN],
+    });
+    expect(scopeModule.resolveActorScope).not.toHaveBeenCalled();
+  });
+
+  it("ADMIN: passes orderType from scope plus caller-supplied statuses", async () => {
+    vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
+      role: "ADMIN",
+      userId: "ADMIN1",
+      factoryIds: ["F1"],
+      productionType: "Type B",
+      group: "Type B",
+    });
+    const adminCtx: RequestContext = {
+      user: { id: "ADMIN1", role: "ADMIN", username: "admin-A" },
+      requestId: "req-a",
+    };
+    await listConflictIssues(adminCtx, prisma, {
+      statuses: [
+        conflictRepo.ConflictIssueStatus.OPEN,
+        conflictRepo.ConflictIssueStatus.IN_DISCUSSION,
+      ],
+    });
+    expect(findIssuesSpy).toHaveBeenCalledWith(prisma, {
+      orderType: "Type B",
+      statuses: [
+        conflictRepo.ConflictIssueStatus.OPEN,
+        conflictRepo.ConflictIssueStatus.IN_DISCUSSION,
+      ],
+    });
+  });
+
+  it("ADMIN: forwards empty statuses array (repository treats like no status filter)", async () => {
+    const adminCtx: RequestContext = {
+      user: { id: "ADMIN1", role: "ADMIN", username: "admin-A" },
+      requestId: "req-a",
+    };
+    await listConflictIssues(adminCtx, prisma, { statuses: [] });
+    expect(findIssuesSpy).toHaveBeenCalledWith(prisma, {
+      orderType: "Type A",
+      statuses: [],
+    });
   });
 });
 
