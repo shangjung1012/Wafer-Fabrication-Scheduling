@@ -1225,6 +1225,7 @@ export function IssueDetailPanel({
 
   useEffect(() => {
     if (session === undefined || session === null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetchIssue sets loading/error state before the async fetch; this is intentional
     void fetchIssue();
   }, [session, issueNumber, fetchIssue]);
 

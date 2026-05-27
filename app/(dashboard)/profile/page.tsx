@@ -109,18 +109,6 @@ const secondaryButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const warningStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  border: "1px solid #fed7aa",
-  background: "#fff7ed",
-  color: "#9a3412",
-  borderRadius: 8,
-  padding: 12,
-  marginBottom: 16,
-  fontSize: 13,
-};
 
 const EMAIL_ERROR_MESSAGES: Record<string, string> = {
   missing_token: "Verification link is invalid (missing token).",
