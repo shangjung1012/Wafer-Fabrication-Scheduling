@@ -347,7 +347,9 @@ type CellData = {
 };
 
 /** First row wins per assignmentId (timeline should not duplicate; avoids duplicate React keys in cells). */
-function dedupeTimelineItemsByAssignmentId(items: TimelineItem[]): TimelineItem[] {
+function dedupeTimelineItemsByAssignmentId(
+  items: TimelineItem[],
+): TimelineItem[] {
   const seen = new Set<string>();
   const out: TimelineItem[] = [];
   for (const t of items) {
@@ -1341,6 +1343,7 @@ function OrderFormModal({
   mode,
   initialValues,
   canEditPrioritized = false,
+  today,
   onClose,
   onSubmit,
 }: {
@@ -1348,6 +1351,7 @@ function OrderFormModal({
   mode: "create" | "edit";
   initialValues: OrderEditorValues;
   canEditPrioritized?: boolean;
+  today?: string;
   onClose: () => void;
   onSubmit: (values: OrderEditorValues) => Promise<void>;
 }) {
@@ -1469,6 +1473,7 @@ function OrderFormModal({
             <input
               type="date"
               value={dueDate}
+              min={today}
               onChange={(e) => setDueDate(e.target.value)}
               className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             />
@@ -2860,7 +2865,7 @@ export default function SchedulePage() {
     if (values.dueDate) {
       body.dueDate = new Date(values.dueDate).toISOString();
     }
-    if (values.isPrioritized !== undefined) {
+    if (values.isPrioritized !== undefined && !isSales) {
       body.isPrioritized = values.isPrioritized;
     }
 
@@ -3329,14 +3334,6 @@ export default function SchedulePage() {
         </div>
         {simMode && (
           <>
-            <button
-              type="button"
-              onClick={() => stepSimDate(-1)}
-              disabled={simLoading}
-              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium"
-            >
-              ← -1d
-            </button>
             <input
               type="date"
               value={simDate}
@@ -3350,7 +3347,7 @@ export default function SchedulePage() {
               disabled={simLoading}
               className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium"
             >
-              +1d →
+              +1 day
             </button>
             <button
               type="button"
@@ -3358,7 +3355,7 @@ export default function SchedulePage() {
               disabled={simLoading}
               className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium ml-1"
             >
-              +2h
+              +2 hours
             </button>
             <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
               Custom:{" "}
@@ -4099,6 +4096,7 @@ export default function SchedulePage() {
             type: "A",
             dueDate: "2026-12-31",
           }}
+          today={data?.today}
           onClose={() => setCreateOpen(false)}
           onSubmit={handleCreateOrder}
         />
@@ -4119,6 +4117,7 @@ export default function SchedulePage() {
             isPrioritized: editOrder.isPrioritized,
           }}
           canEditPrioritized={!isSales}
+          today={data?.today}
           onClose={() => setEditOrder(null)}
           onSubmit={handleUpdateOrder}
         />

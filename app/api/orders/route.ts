@@ -28,6 +28,8 @@ import {
 } from "@/modules/order/order-service";
 import { OrderStatus } from "@/infra/db/order-repository";
 import { prisma } from "@/lib/prisma";
+import { getTime } from "@/lib/get-time";
+import { format } from "date-fns";
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -103,6 +105,11 @@ export async function POST(req: NextRequest) {
         "Invalid request body.",
         parsed.error.flatten().fieldErrors as Record<string, unknown>,
       );
+    }
+
+    const todayStr = format(await getTime(), "yyyy-MM-dd");
+    if (format(new Date(parsed.data.dueDate), "yyyy-MM-dd") < todayStr) {
+      return badRequestResponse("Due date cannot be in the past.");
     }
 
     const order = await createOrderService(ctx, prisma, {
