@@ -428,7 +428,7 @@ export default function LoginPage() {
                     Orders
                   </a>
                   <a href="/visualization" style={linkButtonStyle}>
-                    Visualization
+                    Schedule
                   </a>
                   <a href="/users" style={linkButtonStyle}>
                     Users

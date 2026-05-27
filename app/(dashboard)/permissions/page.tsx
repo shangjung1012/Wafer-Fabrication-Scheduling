@@ -318,6 +318,7 @@ export default function PermissionsPage() {
     <DashboardShell
       title="Permissions"
       subtitle="Manage user accounts and roles."
+      leftSectionSurfaceClassName="flex flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
       leftSection={
         <>
           <section style={panelStyle}>
