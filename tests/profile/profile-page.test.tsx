@@ -38,6 +38,7 @@ vi.mock("next/link", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace }),
   useSearchParams: () => new URLSearchParams(window.location.search),
+  usePathname: () => "/profile",
 }));
 
 vi.mock("@/modules/auth/use-client-auth-session", () => ({

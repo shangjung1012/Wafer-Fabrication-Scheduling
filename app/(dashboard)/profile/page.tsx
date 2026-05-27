@@ -9,8 +9,6 @@ import {
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 import { AppHeader } from "@/components/dashboard/AppHeader";
 
-type Role = ClientAuthSession["user"]["role"];
-
 function apiFetch(path: string, options: RequestInit = {}) {
   return fetch(path, {
     ...options,
@@ -58,19 +56,6 @@ const EMAIL_ERROR_MESSAGES: Record<string, string> = {
   email_taken:
     "That email address was taken by another account before you could confirm. Please try again.",
 };
-
-function roleBadge(role: Role): React.CSSProperties {
-  return {
-    fontSize: 12,
-    fontWeight: 700,
-    padding: "3px 10px",
-    borderRadius: 99,
-    background:
-      role === "SALES" ? "#dcfce7" : role === "ADMIN" ? "#dbeafe" : "#f3e8ff",
-    color:
-      role === "SALES" ? "#166534" : role === "ADMIN" ? "#1e40af" : "#6b21a8",
-  };
-}
 
 export default function ProfilePage() {
   return (
