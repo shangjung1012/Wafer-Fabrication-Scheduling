@@ -2,11 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { type ClientAuthSession } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 import { AppHeader } from "@/components/dashboard/AppHeader";
-
-type Role = ClientAuthSession["user"]["role"];
 
 function apiFetch(path: string, options: RequestInit = {}) {
   return fetch(path, {
@@ -86,7 +83,6 @@ function timeAgo(dateStr: string): string {
 export default function ConflictIssuesPage() {
   const router = useRouter();
   const session = useClientAuthSession();
-  const role: Role = session?.user.role ?? "SALES";
 
   useEffect(() => {
     if (session === null) router.replace("/login");

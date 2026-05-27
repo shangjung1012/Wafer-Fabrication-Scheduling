@@ -565,7 +565,6 @@ export default function DashboardPage() {
         }
         leftSection={leftSection}
         rightSection={rightSection}
-        onBack={() => router.push("/visualization")}
       />
 
       {/* Modals — mount only when open so form state resets without an effect */}
