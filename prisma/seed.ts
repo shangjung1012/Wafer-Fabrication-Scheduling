@@ -139,6 +139,9 @@ function buildFactories(): SeedFactory[] {
 function generateOrdersAndAssignments() {
   let orderCounter = 1;
   let asgnCounter = 1;
+  /** Every seeded order rotates applicant across these three SALES users (even split; not tied to order type). */
+  const SALES_APPLICANTS = ["sales-A", "sales-B", "sales-C"] as const;
+  let salesRoundRobin = 0;
   const orders: SeedOrder[] = [];
   const assignments: SeedAssignment[] = [];
 
@@ -160,7 +163,7 @@ function generateOrdersAndAssignments() {
       type,
       quantity,
       dueDate,
-      applicantId: `sales-${type}`,
+      applicantId: SALES_APPLICANTS[salesRoundRobin++ % 3],
       status,
       isFixed,
       isPrioritized,
@@ -533,10 +536,13 @@ async function main() {
     "  Running schedule engine should trigger exactly 2-3 failures per type.",
   );
   console.log("");
+  console.log(
+    "Seed orders: applicantId rotates sales-A → sales-B → sales-C (equal counts; order type is independent).",
+  );
   console.log("Login examples:");
   console.log("  username sa-A      password Password123!");
   console.log("  username admin-A1  password Password123!");
-  console.log("  username sales-A   password Password123!");
+  console.log("  username sales-A / sales-B / sales-C   password Password123!");
 }
 
 main()

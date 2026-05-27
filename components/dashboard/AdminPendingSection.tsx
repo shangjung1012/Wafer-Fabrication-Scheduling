@@ -36,7 +36,7 @@ export function AdminPendingSection({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
-              未來 7 天工廠總覽
+              Next 7 days — factory overview
             </h2>
             <p className="mt-1 text-xs text-gray-500">
               {dateRangeLabel || "Next 7 days"}
@@ -95,32 +95,51 @@ export function AdminPendingSection({
                         </span>
                       </div>
                     </td>
-                    {row.cells.map((cell) => (
-                      <td
-                        key={`${row.factoryId}__${cell.date}`}
-                        className="border-b border-gray-100 px-3 py-3 align-middle"
-                      >
-                        <div
-                          className="rounded-xl border border-gray-100 bg-gray-50 px-2 py-2 text-center shadow-sm transition-colors hover:border-blue-200"
-                          title={`${cell.orderCount} orders, ${cell.totalQuantity.toLocaleString()} qty`}
+                    {row.cells.map((cell) => {
+                      const usagePct = cell.percent;
+                      const isFullCapacity = usagePct >= 100;
+                      const barWidth = `${Math.min(100, usagePct)}%`;
+                      return (
+                        <td
+                          key={`${row.factoryId}__${cell.date}`}
+                          className="border-b border-gray-100 px-3 py-3 align-middle"
                         >
-                          <div className="text-sm font-semibold text-gray-900">
-                            {cell.orderCount.toLocaleString()}
-                          </div>
-                          <div className="mt-0.5 text-[10px] text-gray-500">
-                            {cell.percent.toFixed(0)}%
-                          </div>
-                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                          <div
+                            className={`rounded-xl border bg-gray-50 px-2 py-2 text-center shadow-sm transition-colors ${
+                              isFullCapacity
+                                ? "border-emerald-200/80 hover:border-emerald-300"
+                                : "border-gray-100 hover:border-blue-200"
+                            }`}
+                            title={`Capacity usage ${usagePct.toFixed(0)}% · ${cell.orderCount} orders · ${cell.totalQuantity.toLocaleString()} qty`}
+                          >
+                            <div className="text-sm font-semibold text-gray-900">
+                              {cell.orderCount.toLocaleString()}
+                            </div>
                             <div
-                              className="h-full rounded-full bg-blue-500"
-                              style={{
-                                width: `${Math.min(100, cell.percent)}%`,
-                              }}
-                            />
+                              className={`mt-0.5 text-[10px] font-semibold ${
+                                isFullCapacity
+                                  ? "text-emerald-700"
+                                  : "text-gray-500"
+                              }`}
+                            >
+                              {usagePct.toFixed(0)}%
+                            </div>
+                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                              <div
+                                className={`h-full rounded-full ${
+                                  isFullCapacity
+                                    ? "bg-emerald-600"
+                                    : "bg-blue-500"
+                                }`}
+                                style={{
+                                  width: barWidth,
+                                }}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                    ))}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>

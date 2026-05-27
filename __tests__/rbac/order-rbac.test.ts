@@ -1,5 +1,5 @@
 /**
- * tests/rbac/order-rbac.test.ts
+ * __tests__/rbac/order-rbac.test.ts
  *
  * Integration tests for Order RBAC.
  * Runs against the real dev DB — make sure `pnpm db:seed` has been run first.

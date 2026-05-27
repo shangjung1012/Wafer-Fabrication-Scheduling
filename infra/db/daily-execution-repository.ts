@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { OrderStatus, AssignmentStatus } from "@/lib/generated/prisma";
+import {
+  OrderStatus,
+  AssignmentStatus,
+  PrismaClient,
+} from "@/lib/generated/prisma";
+import { upsertSystemState } from "@/infra/db/system-state-repository";
 
 export async function getAffectedOrderTypes(
   currentDate: Date,
@@ -30,8 +35,13 @@ export async function getAffectedOrderTypes(
 
 export async function executeDailyStateAdvancement(
   currentDate: Date,
+  patch?: { isSimulationMode?: boolean; simulationDate?: Date | null },
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    if (patch) {
+      await upsertSystemState(tx as unknown as PrismaClient, patch);
+    }
+
     // 1. Fetch assignments to update with minimal payload
     const assignmentsToComplete = await tx.orderAssignment.findMany({
       where: {

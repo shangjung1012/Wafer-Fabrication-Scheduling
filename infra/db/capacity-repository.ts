@@ -72,3 +72,24 @@ export async function upsertDailyCapacityDelta(
     },
   });
 }
+
+export async function findDailyCapacitiesByDateRange(
+  db: PrismaClient,
+  factoryIds: string[],
+  startDate: Date,
+  endDate: Date,
+) {
+  if (factoryIds.length === 0) return [];
+  return db.dailyCapacity.findMany({
+    where: {
+      factoryId: { in: factoryIds },
+      date: { gte: startDate, lte: endDate },
+    },
+    select: {
+      factoryId: true,
+      date: true,
+      curCapacity: true,
+      maxCapacity: true,
+    },
+  });
+}
