@@ -9,6 +9,7 @@ import * as conflictRepo from "@/infra/db/conflict-issue-repository";
 import * as factoryRepo from "@/infra/db/factory-repository";
 import * as scopeModule from "@/modules/auth/scope";
 import * as mailTemplate from "@/modules/mail/mail-template";
+import * as userRepo from "@/infra/db/user-repository";
 import * as strategy from "@/modules/schedule/strategy";
 import type { PrismaClient } from "@/lib/generated/prisma";
 import type { RequestContext } from "@/modules/auth/request-context";
@@ -34,6 +35,9 @@ vi.mock("@/infra/db/conflict-issue-repository", async () => {
     ...actual,
     createConflictIssue: vi.fn(),
     createConflictIssueEvent: vi.fn(),
+    createManyConflictIssues: vi.fn(),
+    findConflictIssuesByOrderIds: vi.fn(),
+    createManyConflictIssueEvents: vi.fn(),
     findOpenIssueByOrderId: vi.fn(),
     findCommentById: vi.fn(),
     findConflictIssueById: vi.fn(),
@@ -42,6 +46,11 @@ vi.mock("@/infra/db/conflict-issue-repository", async () => {
     updateConflictIssue: vi.fn(),
   };
 });
+
+vi.mock("@/infra/db/user-repository", () => ({
+  findUserById: vi.fn(),
+  findUsers: vi.fn(),
+}));
 
 vi.mock("@/modules/auth/scope", async () => {
   const actual = await vi.importActual<typeof import("@/modules/auth/scope")>(
@@ -84,7 +93,9 @@ beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
-const prisma = {} as unknown as PrismaClient;
+const prisma = {
+  $transaction: vi.fn(async (cb) => cb(prisma)),
+} as unknown as PrismaClient;
 
 const baseConfig: SchedulingConfig = {
   startDate: new Date("2026-05-01T00:00:00Z"),
@@ -156,6 +167,24 @@ describe("createIssuesForFailedOrders", () => {
         ReturnType<typeof conflictRepo.createConflictIssueEvent>
       >,
     );
+    vi.mocked(conflictRepo.createManyConflictIssues).mockResolvedValue(
+      undefined,
+    );
+    vi.mocked(conflictRepo.createManyConflictIssueEvents).mockResolvedValue(
+      undefined,
+    );
+    vi.mocked(conflictRepo.findConflictIssuesByOrderIds).mockResolvedValue([
+      { id: "ISSUE1", orderId: "O1", number: 101 },
+    ]);
+    vi.mocked(userRepo.findUsers).mockResolvedValue([
+      {
+        id: "SUPERADMIN1",
+        email: "super@example.com",
+        username: "superadmin",
+        role: "SUPERADMIN",
+        group: null,
+      } as unknown as Awaited<ReturnType<typeof userRepo.findUsers>>[number],
+    ]);
     vi.mocked(mailTemplate.renderAndSend).mockResolvedValue(undefined);
   });
 
@@ -174,23 +203,21 @@ describe("createIssuesForFailedOrders", () => {
 
     expect(res).toEqual({ created: 1, skippedAsDuplicate: 0, failed: 0 });
 
-    expect(conflictRepo.createConflictIssue).toHaveBeenCalledTimes(1);
-    const issueArg = vi.mocked(conflictRepo.createConflictIssue).mock
+    expect(conflictRepo.createManyConflictIssues).toHaveBeenCalledTimes(1);
+    const issuesArg = vi.mocked(conflictRepo.createManyConflictIssues).mock
       .calls[0][1];
     // required: 1000, available: 400 → deficit 600
-    expect(issueArg.title).toBe(
+    expect(issuesArg[0].title).toBe(
       'Cannot schedule "Order One" — short by 600 units',
     );
-    expect(issueArg.assigneeId).toBe("SALES1");
-    expect(issueArg.createdById).toBe("ADMIN1");
+    expect(issuesArg[0].assigneeId).toBe("SALES1");
+    expect(issuesArg[0].createdById).toBe("ADMIN1");
 
     // OPENED event written
-    const eventCalls = vi.mocked(conflictRepo.createConflictIssueEvent).mock
-      .calls;
-    expect(eventCalls.length).toBeGreaterThanOrEqual(1);
-    expect(eventCalls[0][1].type).toBe(
-      conflictRepo.ConflictIssueEventType.OPENED,
-    );
+    const eventsArg = vi.mocked(conflictRepo.createManyConflictIssueEvents).mock
+      .calls[0][1];
+    expect(eventsArg.length).toBeGreaterThanOrEqual(1);
+    expect(eventsArg[0].type).toBe(conflictRepo.ConflictIssueEventType.OPENED);
 
     // Email sent — at least once
     expect(mailTemplate.renderAndSend).toHaveBeenCalled();
@@ -214,12 +241,13 @@ describe("createIssuesForFailedOrders", () => {
     });
 
     expect(res).toEqual({ created: 0, skippedAsDuplicate: 1, failed: 0 });
-    expect(conflictRepo.createConflictIssue).not.toHaveBeenCalled();
+    expect(conflictRepo.createManyConflictIssues).not.toHaveBeenCalled();
     expect(mailTemplate.renderAndSend).not.toHaveBeenCalled();
 
-    expect(conflictRepo.createConflictIssueEvent).toHaveBeenCalledTimes(1);
-    const eventCall = vi.mocked(conflictRepo.createConflictIssueEvent).mock
+    expect(conflictRepo.createManyConflictIssueEvents).toHaveBeenCalledTimes(1);
+    const eventsArg = vi.mocked(conflictRepo.createManyConflictIssueEvents).mock
       .calls[0][1];
+    const eventCall = eventsArg[0];
     // Service uses REPREVIEW_RAN with payload reason: "CAPACITY_CHANGED"
     expect(eventCall.type).toBe(
       conflictRepo.ConflictIssueEventType.REPREVIEW_RAN,
@@ -248,9 +276,9 @@ describe("createIssuesForFailedOrders", () => {
 
     expect(res).toEqual({ created: 1, skippedAsDuplicate: 0, failed: 0 });
 
-    const issueArg = vi.mocked(conflictRepo.createConflictIssue).mock
+    const issuesArg = vi.mocked(conflictRepo.createManyConflictIssues).mock
       .calls[0][1];
-    expect(issueArg.assigneeId).toBe("ADMIN1");
+    expect(issuesArg[0].assigneeId).toBe("ADMIN1");
   });
 
   it("propagates actorId as createdById on the new issue (system actor)", async () => {
@@ -266,14 +294,14 @@ describe("createIssuesForFailedOrders", () => {
       prisma,
     });
 
-    const issueArg = vi.mocked(conflictRepo.createConflictIssue).mock
+    const issuesArg = vi.mocked(conflictRepo.createManyConflictIssues).mock
       .calls[0][1];
-    expect(issueArg.createdById).toBe("SYSTEM_AUTOSCHEDULER");
+    expect(issuesArg[0].createdById).toBe("SYSTEM_AUTOSCHEDULER");
 
     // OPENED event also carries the system actor
-    const eventCall = vi.mocked(conflictRepo.createConflictIssueEvent).mock
+    const eventsArg = vi.mocked(conflictRepo.createManyConflictIssueEvents).mock
       .calls[0][1];
-    expect(eventCall.actorId).toBe("SYSTEM_AUTOSCHEDULER");
+    expect(eventsArg[0].actorId).toBe("SYSTEM_AUTOSCHEDULER");
   });
 
   it("returns created:1 even when renderAndSend rejects (email failure is swallowed)", async () => {
@@ -293,14 +321,14 @@ describe("createIssuesForFailedOrders", () => {
     });
 
     expect(res).toEqual({ created: 1, skippedAsDuplicate: 0, failed: 0 });
-    expect(conflictRepo.createConflictIssue).toHaveBeenCalledTimes(1);
+    expect(conflictRepo.createManyConflictIssues).toHaveBeenCalledTimes(1);
   });
 
   it("does not throw and increments failed when a per-order operation rejects unexpectedly", async () => {
     vi.mocked(orderRepo.findOrderForIssueCreation).mockResolvedValue(
       makeOrder(),
     );
-    vi.mocked(conflictRepo.createConflictIssue).mockRejectedValue(
+    vi.mocked(conflictRepo.createManyConflictIssues).mockRejectedValue(
       new Error("DB write failed"),
     );
 
@@ -330,8 +358,8 @@ describe("createIssuesForFailedOrders", () => {
     });
 
     expect(res).toEqual({ created: 0, skippedAsDuplicate: 0, failed: 0 });
-    expect(conflictRepo.createConflictIssue).not.toHaveBeenCalled();
-    expect(conflictRepo.createConflictIssueEvent).not.toHaveBeenCalled();
+    expect(conflictRepo.createManyConflictIssues).not.toHaveBeenCalled();
+    expect(conflictRepo.createManyConflictIssueEvents).not.toHaveBeenCalled();
     expect(mailTemplate.renderAndSend).not.toHaveBeenCalled();
     expect(conflictRepo.findOpenIssueByOrderId).not.toHaveBeenCalled();
   });
