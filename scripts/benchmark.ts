@@ -24,6 +24,9 @@ function mulberry32(seed: number) {
 const SEED = 42;
 const random = mulberry32(SEED);
 
+/** ~5% of mutable / new orders flagged isPrioritized (deterministic under SEED). */
+const PRIORITIZED_PROB = 0.05;
+
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
@@ -39,6 +42,28 @@ function toDateString(d: Date): string {
   const month = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * Strategy pushes all immutables first, then mutable orders in sort order (isPrioritized
+ * is sort key #1). Benchmark only uses isFixed as immutable — non-fixed entries in
+ * processedOrders are the greedy processing sequence.
+ */
+function checkPrioritizedProcessingOrder(
+  processedOrders: SchedulingOrderInput[],
+): { ok: true } | { ok: false; orderId: string } {
+  const mutableSeq = processedOrders.filter((o) => !o.isFixed);
+  let seenNonPrioritized = false;
+  for (const o of mutableSeq) {
+    if (o.isPrioritized) {
+      if (seenNonPrioritized) {
+        return { ok: false, orderId: o.id };
+      }
+    } else {
+      seenNonPrioritized = true;
+    }
+  }
+  return { ok: true };
 }
 
 // ============================================================
@@ -65,7 +90,7 @@ const config: SchedulingConfig = {
 
 console.log(`📦 Generating Mock Data:`);
 console.log(
-  `   ${NUM_ORDERS} Mutable Orders (~10% isPrioritized)`,
+  `   ${NUM_ORDERS} Mutable Orders (~${PRIORITIZED_PROB * 100}% isPrioritized)`,
 );
 console.log(
   `   ${NUM_FIXED_ORDERS} Fixed Orders (isFixed=true, pre-assigned)`,
@@ -110,7 +135,7 @@ for (let i = 1; i <= NUM_ORDERS; i++) {
     quantity: randomInt(100, 2000),
     createdAt: new Date(TODAY.getTime() - randomInt(0, 1000000000)),
     isFixed: false,
-    isPrioritized: random() < 0.1,
+    isPrioritized: random() < PRIORITIZED_PROB,
     assignments: [],
   });
 }
@@ -186,7 +211,7 @@ console.log(
 
 // ============================================================
 // SECTION 1: INVARIANT CHECKS (Constraint Satisfaction)
-//   6 properties that must ALWAYS hold regardless of input.
+//   7 properties that must ALWAYS hold regardless of input.
 //   Any violation = algorithm bug.
 // ============================================================
 console.log("\n" + "═".repeat(60));
@@ -194,7 +219,7 @@ console.log("  SECTION 1: INVARIANT CHECKS (Constraint Satisfaction)");
 console.log("═".repeat(60));
 
 let invariantsPassed = 0;
-const totalInvariants = 6;
+const totalInvariants = 7;
 
 // [1] Capacity Non-Negative — no factory-day overallocated
 let pass = true;
@@ -204,7 +229,7 @@ for (const cap of [
 ]) {
   if (cap.curCapacity < 0) {
     console.error(
-      `  ❌ [1/6] Capacity Non-Negative — ${cap.id ?? cap.factoryId} has curCapacity=${cap.curCapacity}`,
+      `  ❌ [1/7] Capacity Non-Negative — ${cap.id ?? cap.factoryId} has curCapacity=${cap.curCapacity}`,
     );
     pass = false;
     break;
@@ -212,7 +237,7 @@ for (const cap of [
 }
 if (pass) {
   invariantsPassed++;
-  console.log("  ✅ [1/6] Capacity Non-Negative");
+  console.log("  ✅ [1/7] Capacity Non-Negative");
 }
 
 // [2] Capacity Not Exceeding Max — rollback didn't over-restore
@@ -223,7 +248,7 @@ for (const cap of [
 ]) {
   if (cap.curCapacity > cap.maxCapacity) {
     console.error(
-      `  ❌ [2/6] Capacity ≤ Max — ${cap.id ?? cap.factoryId}: ${cap.curCapacity} > ${cap.maxCapacity}`,
+      `  ❌ [2/7] Capacity ≤ Max — ${cap.id ?? cap.factoryId}: ${cap.curCapacity} > ${cap.maxCapacity}`,
     );
     pass = false;
     break;
@@ -231,7 +256,7 @@ for (const cap of [
 }
 if (pass) {
   invariantsPassed++;
-  console.log("  ✅ [2/6] Capacity Not Exceeding Max");
+  console.log("  ✅ [2/7] Capacity Not Exceeding Max");
 }
 
 // [3] Quantity Conservation — SCHEDULED orders fully assigned, no more no less
@@ -247,7 +272,7 @@ for (const order of strategyResult.processedOrders) {
   );
   if (existingQty + newQty !== order.quantity) {
     console.error(
-      `  ❌ [3/6] Quantity Conservation — Order ${order.id}: expected ${order.quantity}, got ${existingQty + newQty}`,
+      `  ❌ [3/7] Quantity Conservation — Order ${order.id}: expected ${order.quantity}, got ${existingQty + newQty}`,
     );
     pass = false;
     break;
@@ -255,7 +280,7 @@ for (const order of strategyResult.processedOrders) {
 }
 if (pass) {
   invariantsPassed++;
-  console.log("  ✅ [3/6] Quantity Conservation");
+  console.log("  ✅ [3/7] Quantity Conservation");
 }
 
 // [4] Time Window Compliance — all assignments within [startDate, deadline]
@@ -279,10 +304,10 @@ for (const assignment of strategyResult.newAssignments) {
 }
 if (pass) {
   invariantsPassed++;
-  console.log("  ✅ [4/6] Time Window Compliance");
+  console.log("  ✅ [4/7] Time Window Compliance");
 } else {
   console.error(
-    `  ❌ [4/6] Time Window Compliance — ${windowViolations} violations`,
+    `  ❌ [4/7] Time Window Compliance — ${windowViolations} violations`,
   );
 }
 
@@ -293,10 +318,10 @@ const orphaned = strategyResult.newAssignments.filter((a) =>
 );
 if (orphaned.length === 0) {
   invariantsPassed++;
-  console.log("  ✅ [5/6] Rollback Completeness");
+  console.log("  ✅ [5/7] Rollback Completeness");
 } else {
   console.error(
-    `  ❌ [5/6] Rollback Completeness — ${orphaned.length} orphaned assignments for FAILED orders`,
+    `  ❌ [5/7] Rollback Completeness — ${orphaned.length} orphaned assignments for FAILED orders`,
   );
 }
 
@@ -308,21 +333,21 @@ for (const original of mockOrders.filter((o) => o.isFixed)) {
   );
   if (!processed) {
     console.error(
-      `  ❌ [6/6] Immutable Protection — Fixed order ${original.id} missing from results`,
+      `  ❌ [6/7] Immutable Protection — Fixed order ${original.id} missing from results`,
     );
     pass = false;
     break;
   }
   if (processed.status !== original.status) {
     console.error(
-      `  ❌ [6/6] Immutable Protection — Fixed order ${original.id}: ${original.status} → ${processed.status}`,
+      `  ❌ [6/7] Immutable Protection — Fixed order ${original.id}: ${original.status} → ${processed.status}`,
     );
     pass = false;
     break;
   }
   if (strategyResult.newAssignments.some((a) => a.orderId === original.id)) {
     console.error(
-      `  ❌ [6/6] Immutable Protection — Fixed order ${original.id} has unexpected new assignments`,
+      `  ❌ [6/7] Immutable Protection — Fixed order ${original.id} has unexpected new assignments`,
     );
     pass = false;
     break;
@@ -330,7 +355,20 @@ for (const original of mockOrders.filter((o) => o.isFixed)) {
 }
 if (pass) {
   invariantsPassed++;
-  console.log("  ✅ [6/6] Immutable Order Protection");
+  console.log("  ✅ [6/7] Immutable Order Protection");
+}
+
+// [7] Prioritized processing order — isPrioritized mutables must all precede non-prioritized
+const prioOrderCheck = checkPrioritizedProcessingOrder(
+  strategyResult.processedOrders,
+);
+if (prioOrderCheck.ok) {
+  invariantsPassed++;
+  console.log("  ✅ [7/7] Prioritized Processing Order");
+} else {
+  console.error(
+    `  ❌ [7/7] Prioritized Processing Order — order ${prioOrderCheck.orderId} is prioritized but appears after a non-prioritized mutable`,
+  );
 }
 
 console.log(
@@ -543,7 +581,7 @@ for (let i = 1; i <= NEW_ORDER_COUNT; i++) {
     quantity: randomInt(100, 2000),
     createdAt: new Date(TODAY.getTime() - randomInt(0, 1000000000)),
     isFixed: false,
-    isPrioritized: false,
+    isPrioritized: random() < PRIORITIZED_PROB,
     assignments: [],
   });
 }
@@ -622,6 +660,14 @@ for (const policy of policyNames) {
   );
   const t1 = performance.now();
 
+  const prioPhase2 = checkPrioritizedProcessingOrder(res.processedOrders);
+  if (!prioPhase2.ok) {
+    console.error(
+      `  💥 Phase 2 prioritized-order invariant failed [policy=${policy}]: order ${prioPhase2.orderId}`,
+    );
+    process.exit(1);
+  }
+
   const sched = res.processedOrders.filter(
     (o) => o.status === OrderStatus.SCHEDULED,
   );
@@ -644,6 +690,10 @@ for (const policy of policyNames) {
     ms: Math.round(t1 - t0),
   });
 }
+
+console.log(
+  `  Phase 2: prioritized processing order — ${policyNames.length}/${policyNames.length} policies OK`,
+);
 
 // --- Print comparison table ---
 const gf = policyResults.get("GAP_FILLING")!;
