@@ -580,7 +580,6 @@ export default function PermissionsPage() {
       }
       rightSection={<></>}
       hideRightSection={true}
-      onBack={() => router.replace("/login")}
     />
   );
 }

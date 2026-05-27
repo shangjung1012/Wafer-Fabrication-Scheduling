@@ -3,14 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { useRouter } from "next/navigation";
-import {
-  Mail,
-  RefreshCw,
-  RotateCw,
-  ShieldAlert,
-  UserPlus,
-  Users,
-} from "lucide-react";
+import { Mail, RefreshCw, RotateCw, ShieldAlert, UserPlus } from "lucide-react";
 
 import { type ClientAuthSession } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
@@ -613,9 +606,4 @@ const resultStyle: React.CSSProperties = {
   fontSize: 12,
   overflowX: "auto",
   maxHeight: 260,
-};
-
-const mutedTextStyle: React.CSSProperties = {
-  color: "#475569",
-  fontSize: 14,
 };

@@ -9,7 +9,6 @@ export function DashboardShell({
   topSection,
   leftSection,
   rightSection,
-  onBack: _onBack,
   hideTopBar,
   hideRightSection,
 }: {
@@ -18,7 +17,6 @@ export function DashboardShell({
   topSection?: React.ReactNode;
   leftSection: React.ReactNode;
   rightSection?: React.ReactNode;
-  onBack: () => void;
   hideTopBar?: boolean;
   hideRightSection?: boolean;
 }) {
