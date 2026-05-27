@@ -177,8 +177,42 @@ function ConflictIssuesPageContent() {
 
   const [activeTab, setActiveTab] = useState<"open" | "closed">("open");
   const [issues, setIssues] = useState<IssueRow[]>([]);
+  /** Tab badges: both buckets, not derived from `issues` (which is only the active tab). */
+  const [issueCounts, setIssueCounts] = useState({ open: 0, closed: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    Promise.all([
+      apiFetch("/api/conflict-issues?status=OPEN").then(async (res) =>
+        res.ok ? ((await res.json()) as IssueRow[]) : [],
+      ),
+      apiFetch("/api/conflict-issues?status=IN_DISCUSSION").then(async (res) =>
+        res.ok ? ((await res.json()) as IssueRow[]) : [],
+      ),
+      apiFetch("/api/conflict-issues?status=RESOLVED").then(async (res) =>
+        res.ok ? ((await res.json()) as IssueRow[]) : [],
+      ),
+      apiFetch("/api/conflict-issues?status=CLOSED").then(async (res) =>
+        res.ok ? ((await res.json()) as IssueRow[]) : [],
+      ),
+    ])
+      .then(([openRows, inDisc, resolved, closed]) => {
+        if (cancelled) return;
+        setIssueCounts({
+          open: openRows.length + inDisc.length,
+          closed: resolved.length + closed.length,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   useEffect(() => {
     if (!session) return;
@@ -204,6 +238,13 @@ function ConflictIssuesPageContent() {
                 new Date(x.updatedAt).getTime(),
             ),
           );
+          const mergedLen = a.length + b.length;
+          setIssueCounts((prev) => ({
+            ...prev,
+            ...(activeTab === "open"
+              ? { open: mergedLen }
+              : { closed: mergedLen }),
+          }));
         } else {
           setError("Failed to load issues.");
         }
@@ -219,13 +260,6 @@ function ConflictIssuesPageContent() {
 
   if (session === undefined) return <div style={pageShellStyle}>Loading…</div>;
   if (session === null) return <div style={pageShellStyle}>Redirecting…</div>;
-
-  const openCount = issues.filter(
-    (i) => i.status === "OPEN" || i.status === "IN_DISCUSSION",
-  ).length;
-  const closedCount = issues.filter(
-    (i) => i.status === "RESOLVED" || i.status === "CLOSED",
-  ).length;
 
   return (
     <DashboardShell
@@ -281,8 +315,8 @@ function ConflictIssuesPageContent() {
                 }}
               >
                 {tab === "open"
-                  ? `Open (${openCount})`
-                  : `Closed (${closedCount})`}
+                  ? `Open (${issueCounts.open})`
+                  : `Closed (${issueCounts.closed})`}
               </button>
             ))}
           </div>
