@@ -67,6 +67,7 @@ function timeAgo(dateStr: string): string {
 
 function apiFetch(path: string) {
   return fetch(path, {
+    cache: "no-store",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
   });
@@ -85,29 +86,22 @@ export function ConflictIssueSection() {
       setLoading(true);
       setError(null);
 
-      const urls =
+      const url =
         activeTab === "open"
-          ? [
-              "/api/conflict-issues?status=OPEN",
-              "/api/conflict-issues?status=IN_DISCUSSION",
-            ]
-          : [
-              "/api/conflict-issues?status=RESOLVED",
-              "/api/conflict-issues?status=CLOSED",
-            ];
+          ? "/api/conflict-issues?statuses=OPEN,IN_DISCUSSION"
+          : "/api/conflict-issues?statuses=RESOLVED,CLOSED";
 
       try {
-        const [res1, res2] = await Promise.all(urls.map((u) => apiFetch(u)));
+        const res = await apiFetch(url);
         if (cancelled) return;
-        if (!res1.ok || !res2.ok) {
+        if (!res.ok) {
           setError("Failed to load conflict issues.");
           setIssues([]);
           return;
         }
-        const a = (await res1.json()) as IssueRow[];
-        const b = (await res2.json()) as IssueRow[];
+        const issuesData = (await res.json()) as IssueRow[];
         setIssues(
-          [...a, ...b].sort(
+          issuesData.sort(
             (x, y) =>
               new Date(y.updatedAt).getTime() - new Date(x.updatedAt).getTime(),
           ),

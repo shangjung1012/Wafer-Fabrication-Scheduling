@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/dashboard/AppHeader";
 
 function apiFetch(path: string, options: RequestInit = {}) {
   return fetch(path, {
+    cache: "no-store",
     ...options,
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
@@ -95,23 +96,17 @@ export default function ConflictIssuesPage() {
 
   useEffect(() => {
     if (!session) return;
-    const urls =
+    const url =
       activeTab === "open"
-        ? [
-            "/api/conflict-issues?status=OPEN",
-            "/api/conflict-issues?status=IN_DISCUSSION",
-          ]
-        : [
-            "/api/conflict-issues?status=RESOLVED",
-            "/api/conflict-issues?status=CLOSED",
-          ];
-    Promise.all(urls.map((u) => apiFetch(u)))
-      .then(async ([res1, res2]) => {
-        if (res1.ok && res2.ok) {
-          const a = (await res1.json()) as IssueRow[];
-          const b = (await res2.json()) as IssueRow[];
+        ? "/api/conflict-issues?statuses=OPEN,IN_DISCUSSION"
+        : "/api/conflict-issues?statuses=RESOLVED,CLOSED";
+
+    apiFetch(url)
+      .then(async (res) => {
+        if (res.ok) {
+          const issuesData = (await res.json()) as IssueRow[];
           setIssues(
-            [...a, ...b].sort(
+            issuesData.sort(
               (x, y) =>
                 new Date(y.updatedAt).getTime() -
                 new Date(x.updatedAt).getTime(),

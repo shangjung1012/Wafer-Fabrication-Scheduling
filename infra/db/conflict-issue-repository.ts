@@ -112,7 +112,7 @@ export type CreateIssueInput = {
 };
 
 export type IssueFilters = {
-  status?: ConflictIssueStatus;
+  statuses?: ConflictIssueStatus[];
   assigneeId?: string; // SALES: own issues
   orderType?: string; // ADMIN/SUPERADMIN: group filter
   createdById?: string;
@@ -160,7 +160,9 @@ export async function findConflictIssues(
 ): Promise<ConflictIssueRow[]> {
   const rows = await db.conflictIssue.findMany({
     where: {
-      ...(filters.status !== undefined ? { status: filters.status } : {}),
+      ...(filters.statuses && filters.statuses.length > 0
+        ? { status: { in: filters.statuses } }
+        : {}),
       ...(filters.assigneeId ? { assigneeId: filters.assigneeId } : {}),
       ...(filters.orderType ? { order: { type: filters.orderType } } : {}),
       ...(filters.createdById ? { createdById: filters.createdById } : {}),
@@ -412,14 +414,21 @@ export async function staleOtherProposals(
     select: { id: true, proposal: true },
   });
 
-  for (const c of others) {
-    const p = c.proposal as Record<string, unknown>;
-    if (p.status === "PENDING") {
-      await db.conflictIssueComment.update({
+  const updates = others
+    .filter((c) => {
+      const p = c.proposal as Record<string, unknown> | null;
+      return p !== null && p.status === "PENDING";
+    })
+    .map((c) => {
+      const p = c.proposal as Record<string, unknown>;
+      return db.conflictIssueComment.update({
         where: { id: c.id },
         data: { proposal: { ...p, status: "STALE" } },
       });
-    }
+    });
+
+  if (updates.length > 0) {
+    await db.$transaction(updates);
   }
 }
 
