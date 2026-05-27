@@ -5,7 +5,7 @@
  * Business logic (RBAC, state machine, OCC) belongs in modules/order/conflict-issue-service.ts.
  */
 
-import type { PrismaClient } from "@/lib/generated/prisma";
+import type { PrismaClient, Prisma } from "@/lib/generated/prisma";
 import {
   ConflictIssueStatus,
   ConflictResolution,
@@ -356,6 +356,33 @@ export async function createConflictIssue(
     },
     select: { id: true, number: true, createdAt: true },
   });
+}
+
+export async function createManyConflictIssues(
+  db: PrismaClient,
+  data: Prisma.ConflictIssueCreateManyInput[],
+): Promise<void> {
+  if (data.length === 0) return;
+  await db.conflictIssue.createMany({ data });
+}
+
+export async function findConflictIssuesByOrderIds(
+  db: PrismaClient,
+  orderIds: string[],
+): Promise<{ id: string; orderId: string; number: number }[]> {
+  if (orderIds.length === 0) return [];
+  return db.conflictIssue.findMany({
+    where: { orderId: { in: orderIds } },
+    select: { id: true, orderId: true, number: true },
+  });
+}
+
+export async function createManyConflictIssueEvents(
+  db: PrismaClient,
+  data: Prisma.ConflictIssueEventCreateManyInput[],
+): Promise<void> {
+  if (data.length === 0) return;
+  await db.conflictIssueEvent.createMany({ data });
 }
 
 export async function createConflictIssueComment(

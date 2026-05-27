@@ -38,3 +38,11 @@
 
 - **原因**：在 `createIssuesForFailedOrders` 中，系統使用循序的 `for` 迴圈逐一處理排程失敗的訂單。若同時有大量訂單失敗，循序處理會導致長時間的阻塞，並產生大量的 N+1 循序讀取。
 - **修改**：將循序迴圈改為分批平行處理 (Chunked Parallel Processing)。將每 5 筆訂單分為一組，利用 `Promise.all` 同時執行。在提升處理吞吐量的同時，也能保護資料庫連線池避免被瞬間大量請求耗盡。
+
+## 8. 確保衝突訂單建立之效能與資料一致性 (Atomicity & Bulk Insert)
+
+- **原因**：使用 `Promise.all` 進行平行寫入雖能提升吞吐量，但大量併發的資料庫請求在 Azure 雲端環境容易導致 SNAT port 或連線池耗盡 (Connection Pool Exhaustion)。此外，同一批次的寫入若發生部分失敗，將導致資料庫產生「半殘」的髒資料，破壞系統的一致性。
+- **修改**：
+  - **單一連線交易**：將整個 Chunk 處理邏輯包裝進單一的 `prisma.$transaction`，改以順序處理記憶體計算，保證整個批次同生共死 (Atomicity)，且每個 Chunk 只佔用一條資料庫連線。
+  - **批次寫入 (Bulk Insert)**：消滅了迴圈內的獨立 `create` 操作，將資料在記憶體中整理為陣列後，透過單次 `createMany` 批次寫入資料庫，最大化網路傳輸效率與寫入效能。
+  - **延遲副作用 (Deferred Side-effects)**：將寄送 Email 的行為封裝為 Thunks，等待資料庫交易安全 `commit` 之後才觸發，避免因 Email 寄送錯誤導致資料庫 Rollback。
