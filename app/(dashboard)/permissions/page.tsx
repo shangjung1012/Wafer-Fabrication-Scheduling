@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Mail, RefreshCw, RotateCw, ShieldAlert, UserPlus } from "lucide-react";
 
-import { type ClientAuthSession } from "@/modules/auth/client-session";
+import {
+  type ClientAuthSession,
+  logoutClientAuthSession,
+} from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 
 type Role = ClientAuthSession["user"]["role"];
@@ -167,6 +170,11 @@ export default function PermissionsPage() {
     [session],
   );
 
+  const handleLogout = useCallback(async () => {
+    await logoutClientAuthSession();
+    router.replace("/login");
+  }, [router]);
+
   useEffect(() => {
     if (session === undefined) return;
     if (session === null) {
@@ -318,6 +326,7 @@ export default function PermissionsPage() {
     <DashboardShell
       title="Permissions"
       subtitle="Manage user accounts and roles."
+      onBack={handleLogout}
       leftSectionSurfaceClassName="flex flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
       leftSection={
         <>
