@@ -93,7 +93,7 @@ describe("Time Logic and Cron Jobs", () => {
 
       await handleSimulationTimeAdvance(oldTime, newTime);
 
-      expect(advanceOrderStatuses).toHaveBeenCalledWith(newTime, undefined);
+      expect(advanceOrderStatuses).toHaveBeenCalledWith(newTime);
       expect(triggerAutoSchedule).not.toHaveBeenCalled();
     });
   });

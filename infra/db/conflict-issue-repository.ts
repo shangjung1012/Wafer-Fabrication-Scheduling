@@ -5,7 +5,7 @@
  * Business logic (RBAC, state machine, OCC) belongs in modules/order/conflict-issue-service.ts.
  */
 
-import type { PrismaClient, Prisma } from "@/lib/generated/prisma";
+import type { PrismaClient } from "@/lib/generated/prisma";
 import {
   ConflictIssueStatus,
   ConflictResolution,
@@ -112,7 +112,7 @@ export type CreateIssueInput = {
 };
 
 export type IssueFilters = {
-  statuses?: ConflictIssueStatus[];
+  status?: ConflictIssueStatus;
   assigneeId?: string; // SALES: own issues
   orderType?: string; // ADMIN/SUPERADMIN: group filter
   createdById?: string;
@@ -160,9 +160,7 @@ export async function findConflictIssues(
 ): Promise<ConflictIssueRow[]> {
   const rows = await db.conflictIssue.findMany({
     where: {
-      ...(filters.statuses && filters.statuses.length > 0
-        ? { status: { in: filters.statuses } }
-        : {}),
+      ...(filters.status !== undefined ? { status: filters.status } : {}),
       ...(filters.assigneeId ? { assigneeId: filters.assigneeId } : {}),
       ...(filters.orderType ? { order: { type: filters.orderType } } : {}),
       ...(filters.createdById ? { createdById: filters.createdById } : {}),
@@ -358,33 +356,6 @@ export async function createConflictIssue(
   });
 }
 
-export async function createManyConflictIssues(
-  db: PrismaClient,
-  data: Prisma.ConflictIssueCreateManyInput[],
-): Promise<void> {
-  if (data.length === 0) return;
-  await db.conflictIssue.createMany({ data });
-}
-
-export async function findConflictIssuesByOrderIds(
-  db: PrismaClient,
-  orderIds: string[],
-): Promise<{ id: string; orderId: string; number: number }[]> {
-  if (orderIds.length === 0) return [];
-  return db.conflictIssue.findMany({
-    where: { orderId: { in: orderIds } },
-    select: { id: true, orderId: true, number: true },
-  });
-}
-
-export async function createManyConflictIssueEvents(
-  db: PrismaClient,
-  data: Prisma.ConflictIssueEventCreateManyInput[],
-): Promise<void> {
-  if (data.length === 0) return;
-  await db.conflictIssueEvent.createMany({ data });
-}
-
 export async function createConflictIssueComment(
   db: PrismaClient,
   input: CreateCommentInput,
@@ -441,21 +412,14 @@ export async function staleOtherProposals(
     select: { id: true, proposal: true },
   });
 
-  const updates = others
-    .filter((c) => {
-      const p = c.proposal as Record<string, unknown> | null;
-      return p !== null && p.status === "PENDING";
-    })
-    .map((c) => {
-      const p = c.proposal as Record<string, unknown>;
-      return db.conflictIssueComment.update({
+  for (const c of others) {
+    const p = c.proposal as Record<string, unknown>;
+    if (p.status === "PENDING") {
+      await db.conflictIssueComment.update({
         where: { id: c.id },
         data: { proposal: { ...p, status: "STALE" } },
       });
-    });
-
-  if (updates.length > 0) {
-    await db.$transaction(updates);
+    }
   }
 }
 
