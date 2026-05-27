@@ -247,6 +247,53 @@ function OrderEditorModal({
   );
 }
 
+/** Shown only on first dashboard fetch so the shell + nav stay mounted (no full-page flash). */
+function DashboardMainSkeleton({ variant }: { variant: "sales" | "admin" }) {
+  return (
+    <div
+      className="flex flex-col flex-1 min-h-0 animate-pulse"
+      aria-busy="true"
+      aria-label="Loading dashboard content"
+    >
+      <div className="border-b border-gray-100 bg-gray-50/50 px-5 py-4">
+        <div className="h-4 w-56 rounded bg-gray-200" />
+        <div
+          className={`mt-2 h-3 rounded bg-gray-100 ${variant === "admin" ? "w-72" : "w-64"}`}
+        />
+      </div>
+      <div className="flex-1 space-y-3 overflow-hidden p-5">
+        {Array.from({ length: variant === "sales" ? 6 : 5 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-12 rounded-lg bg-gray-100"
+            style={{ width: `${85 + (i % 3) * 5}%` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DashboardIssuesColumnSkeleton() {
+  return (
+    <div
+      className="flex flex-1 min-h-0 flex-col p-5 animate-pulse"
+      aria-busy="true"
+      aria-label="Loading issues summary"
+    >
+      <div className="mb-4 h-8 w-2/3 max-w-xs rounded bg-gray-100" />
+      <div className="space-y-2">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="h-16 rounded-lg border border-gray-100 bg-gray-50"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Main component
 export default function DashboardPage() {
   const router = useRouter();
@@ -256,6 +303,8 @@ export default function DashboardPage() {
   );
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
+  /** After first fetch completes (success or error); avoids skeleton on refresh. */
+  const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorValues | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -308,12 +357,15 @@ export default function DashboardPage() {
             .map((i) => i.orderId),
         );
         setFlaggedOrderIds((prev) => new Set([...prev, ...flagged]));
-        setLoading(false);
       })
       .catch((err) => {
         if (cancelled) return;
         console.error(err);
+      })
+      .finally(() => {
+        if (cancelled) return;
         setLoading(false);
+        setHasFetchedOnce(true);
       });
 
     return () => {
@@ -531,43 +583,58 @@ export default function DashboardPage() {
     setTimeout(() => setFlagBanner(null), 5000);
   };
 
-  if (session === undefined || loading) {
+  if (session === undefined) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">
-        Loading...
+        Loading session…
       </div>
     );
   }
 
-  const leftSection =
-    isSales && !isAdmin ? (
-      <SalesOrdersSection
-        orders={orders}
-        scheduleByOrderId={scheduleByOrderId}
-        onEdit={(order) =>
-          setEditOrder({
-            orderId: order.id,
-            name: order.name,
-            quantity: order.quantity.toString(),
-          })
-        }
-        onCreate={() => setCreateOpen(true)}
-        onFlag={(order) => void handleFlagOrder(order)}
-        flaggedOrderIds={flaggedOrderIds}
-      />
-    ) : (
-      <AdminPendingSection
-        rows={factoryMatrix}
-        dateColumns={dateColumns}
-        dateRangeLabel={
-          timelineData
-            ? `${timelineData.today ?? format(new Date(), "yyyy-MM-dd")} ~ ${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), 6), "yyyy-MM-dd")}`
-            : ""
-        }
-      />
+  if (session === null) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">
+        Redirecting to login…
+      </div>
     );
+  }
 
-  const rightSection = <ConflictIssueSection />;
+  const showMainSkeleton = loading && !hasFetchedOnce;
+
+  const leftSection = showMainSkeleton ? (
+    <DashboardMainSkeleton variant={isSales && !isAdmin ? "sales" : "admin"} />
+  ) : isSales && !isAdmin ? (
+    <SalesOrdersSection
+      orders={orders}
+      scheduleByOrderId={scheduleByOrderId}
+      onEdit={(order) =>
+        setEditOrder({
+          orderId: order.id,
+          name: order.name,
+          quantity: order.quantity.toString(),
+        })
+      }
+      onCreate={() => setCreateOpen(true)}
+      onFlag={(order) => void handleFlagOrder(order)}
+      flaggedOrderIds={flaggedOrderIds}
+    />
+  ) : (
+    <AdminPendingSection
+      rows={factoryMatrix}
+      dateColumns={dateColumns}
+      dateRangeLabel={
+        timelineData
+          ? `${timelineData.today ?? format(new Date(), "yyyy-MM-dd")} ~ ${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), 6), "yyyy-MM-dd")}`
+          : ""
+      }
+    />
+  );
+
+  const rightSection = showMainSkeleton ? (
+    <DashboardIssuesColumnSkeleton />
+  ) : (
+    <ConflictIssueSection />
+  );
 
   return (
     <>
