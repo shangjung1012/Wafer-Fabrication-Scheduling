@@ -206,6 +206,7 @@ describe("createIssuesForFailedOrders", () => {
     expect(conflictRepo.createManyConflictIssues).toHaveBeenCalledTimes(1);
     const issuesArg = vi.mocked(conflictRepo.createManyConflictIssues).mock
       .calls[0][1];
+
     // required: 1000, available: 400 → deficit 600
     expect(issuesArg[0].title).toBe(
       'Cannot schedule "Order One" — short by 600 units',
@@ -214,6 +215,7 @@ describe("createIssuesForFailedOrders", () => {
     expect(issuesArg[0].createdById).toBe("ADMIN1");
 
     // OPENED event written
+    expect(conflictRepo.createManyConflictIssueEvents).toHaveBeenCalledTimes(1);
     const eventsArg = vi.mocked(conflictRepo.createManyConflictIssueEvents).mock
       .calls[0][1];
     expect(eventsArg.length).toBeGreaterThanOrEqual(1);
@@ -490,7 +492,7 @@ describe("acceptProposal — OCC", () => {
       expectedOrderUpdatedAt,
       authorId = "SALES1",
       kind = "DELAY_DUE_DATE",
-      newDueDate = "2026-05-25",
+      newDueDate = "2026-05-25T00:00:00Z",
       status = "PENDING",
     } = overrides;
 

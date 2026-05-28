@@ -204,10 +204,10 @@ function assertValidSalesDelayDueDate(
   }
   const todayStr = toIsoDateOnly(today);
   if (newDueDate < todayStr) {
-    throw Object.assign(
-      new Error("New due date cannot be in the past."),
-      { status: 400, code: "BAD_REQUEST" },
-    );
+    throw Object.assign(new Error("New due date cannot be in the past."), {
+      status: 400,
+      code: "BAD_REQUEST",
+    });
   }
 }
 
@@ -952,15 +952,266 @@ export type CreateIssuesForFailedOrdersResult = {
 };
 
 /**
+ * Extracts the pure, atomic issue creation logic to allow it to be executed
+ * directly inside an external database transaction (e.g., core.ts scheduling).
+ */
+export async function createIssuesForFailedOrdersTx(
+  pr: PrismaClient,
+  failedOrderIds: string[],
+  actorId: string,
+  runConfig: SchedulingConfig,
+  runAt: Date,
+): Promise<{
+  createdCount: number;
+  skippedCount: number;
+  emailsToDispatch: Array<() => Promise<void>>;
+}> {
+  let createdCount = 0;
+  let skippedCount = 0;
+  // Store email dispatch promises as thunks to safely execute outside the transaction
+  const emailsToDispatch: Array<() => Promise<void>> = [];
+
+  // Memory payloads for bulk insertion
+  const newIssuesData: Prisma.ConflictIssueCreateManyInput[] = [];
+  const eventsData: Prisma.ConflictIssueEventCreateManyInput[] = [];
+  const metadataMap = new Map<
+    string,
+    {
+      order: NonNullable<Awaited<ReturnType<typeof findOrderForIssueCreation>>>;
+      deficit: number;
+      contextSnapshot: Prisma.InputJsonValue;
+      uniqueRecipients: Array<{ email: string; username: string | null }>;
+    }
+  >();
+
+  // Cache the super admin ID per-chunk to avoid redundant queries
+  let cachedSuperAdminId: string | undefined = undefined;
+
+  // Phase 1: Reads and Memory Preparation (Sequential processing)
+  for (const orderId of failedOrderIds) {
+    const order = await findOrderForIssueCreation(pr, orderId);
+    if (!order || order.status !== OrderStatus.FAILED) continue;
+
+    // Snapshot — window, factories, capacity, competing orders
+    const windowStart = new Date(runConfig.startDate);
+    windowStart.setUTCHours(0, 0, 0, 0);
+    const windowEnd = calculateOrderDeadline(order.dueDate, runConfig);
+    windowEnd.setUTCHours(23, 59, 59, 999);
+
+    const factories = await findFactoriesForIssueSnapshot(
+      pr,
+      order.type,
+      windowStart,
+      windowEnd,
+    );
+
+    // Build a CapacityDraft map
+    const capacityMap = new Map<string, CapacityDraft>();
+    for (const f of factories) {
+      for (const cap of f.dailyCapacities) {
+        const dateKey = toIsoDateOnly(cap.date);
+        capacityMap.set(`${f.id}_${dateKey}`, {
+          id: cap.id,
+          factoryId: cap.factoryId,
+          date: cap.date,
+          maxCapacity: cap.maxCapacity,
+          curCapacity: cap.curCapacity,
+        });
+      }
+    }
+
+    const factoryInputs = factories.map((f) => ({
+      id: f.id,
+      maxCapacity: f.maxCapacity,
+    }));
+
+    const totalAvailableInWindow = computeTotalAvailableCapacity(
+      windowStart,
+      windowEnd,
+      factoryInputs,
+      capacityMap,
+    );
+
+    const requiredQuantity = order.quantity;
+    const deficit = Math.max(0, requiredQuantity - totalAvailableInWindow);
+
+    const competingOrders = await findCompetingScheduledOrders(pr, {
+      factoryIds: factories.map((f) => f.id),
+      windowStart,
+      windowEnd,
+      excludeOrderId: order.id,
+    });
+
+    const contextSnapshot = {
+      previewRunAt: runAt.toISOString(),
+      reschedulePolicy: runConfig.reschedulePolicy,
+      config: {
+        frozenDays: runConfig.frozenDays,
+        productionDays: runConfig.productionDays,
+        bufferDays: runConfig.bufferDays,
+        splittable: runConfig.splittable,
+      },
+      windowStart: toIsoDateOnly(windowStart),
+      windowEnd: toIsoDateOnly(windowEnd),
+      requiredQuantity,
+      totalAvailableInWindow,
+      deficit,
+      factoriesConsidered: factories.map((f) => ({
+        id: f.id,
+        productionType: f.productionType,
+        maxCapacity: f.maxCapacity,
+      })),
+      orderSnapshot: {
+        quantity: order.quantity,
+        dueDate: order.dueDate.toISOString(),
+        status: order.status,
+        updatedAt: order.updatedAt.toISOString(),
+      },
+      competingOrders,
+    };
+
+    const existing = await findOpenIssueByOrderId(pr, order.id);
+    if (existing) {
+      eventsData.push({
+        issueId: existing.id,
+        actorId,
+        type: ConflictIssueEventType.REPREVIEW_RAN,
+        payload: {
+          reason: "CAPACITY_CHANGED",
+          snapshot: contextSnapshot,
+        } as Prisma.InputJsonValue,
+      });
+      skippedCount += 1;
+      continue;
+    }
+
+    let assigneeId: string | null = order.applicantId ?? null;
+    if (!assigneeId) {
+      const firstAdmin = factories
+        .flatMap((f) => f.admins)
+        .find((a) => !!a?.id);
+      if (firstAdmin?.id) {
+        assigneeId = firstAdmin.id;
+      }
+    }
+
+    if (!assigneeId) {
+      if (cachedSuperAdminId === undefined) {
+        const superAdmins = await findUsers(pr, { role: "SUPERADMIN" });
+        cachedSuperAdminId = superAdmins.length > 0 ? superAdmins[0].id : "";
+      }
+      if (cachedSuperAdminId) assigneeId = cachedSuperAdminId;
+    }
+
+    if (!assigneeId) {
+      throw new Error(
+        `No assignee available for order ${order.id}. Failing chunk for rollback.`,
+      );
+    }
+
+    newIssuesData.push({
+      orderId: order.id,
+      title: `Cannot schedule "${order.name}" — short by ${deficit} units`,
+      status: ConflictIssueStatus.OPEN,
+      createdById: actorId,
+      assigneeId,
+      contextSnapshot: contextSnapshot as Prisma.InputJsonValue,
+    });
+
+    const recipients: Array<{
+      email: string;
+      username: string | null;
+    }> = [];
+    if (order.applicant?.email)
+      recipients.push({
+        email: order.applicant.email,
+        username: order.applicant.username,
+      });
+    for (const f of factories) {
+      for (const admin of f.admins) {
+        if (admin?.email)
+          recipients.push({
+            email: admin.email,
+            username: admin.username,
+          });
+      }
+    }
+
+    const seenEmails = new Set<string>();
+    const uniqueRecipients = recipients.filter((r) => {
+      if (seenEmails.has(r.email)) return false;
+      seenEmails.add(r.email);
+      return true;
+    });
+
+    metadataMap.set(order.id, {
+      order,
+      deficit,
+      contextSnapshot: contextSnapshot as Prisma.InputJsonValue,
+      uniqueRecipients,
+    });
+  }
+
+  // Phase 2: Bulk Insert Issues (createMany)
+  if (newIssuesData.length > 0) {
+    await createManyConflictIssues(pr, newIssuesData);
+    createdCount += newIssuesData.length;
+
+    // Fetch newly created issues to obtain DB-generated IDs and auto-incremented numbers
+    const createdIssues = await findConflictIssuesByOrderIds(
+      pr,
+      newIssuesData.map((d) => d.orderId),
+    );
+
+    for (const issue of createdIssues) {
+      const meta = metadataMap.get(issue.orderId);
+      if (!meta) continue;
+
+      // Attach OPENED event data
+      eventsData.push({
+        issueId: issue.id,
+        actorId,
+        type: ConflictIssueEventType.OPENED,
+        payload: {
+          snapshot: meta.contextSnapshot,
+        } as Prisma.InputJsonValue,
+      });
+
+      // Prepare deferred email dispatches with DB-generated issue.number
+      const dueDateString = toIsoDateOnly(meta.order.dueDate);
+      const issueNumber = issue.number;
+
+      meta.uniqueRecipients.forEach((r) => {
+        emailsToDispatch.push(() =>
+          renderAndSend(issueCreatedTemplate, {
+            orderName: meta.order.name,
+            orderQuantity: meta.order.quantity,
+            dueDate: dueDateString,
+            deficit: meta.deficit,
+            issueNumber,
+            recipientEmail: r.email,
+            recipientUsername: r.username,
+          }).catch((err) => {
+            console.error(
+              `[createIssuesForFailedOrders] Email failed for order ${meta.order.id} → ${r.email}:`,
+              err,
+            );
+          }),
+        );
+      });
+    }
+  }
+
+  // Phase 3: Bulk Insert Events
+  if (eventsData.length > 0) {
+    await createManyConflictIssueEvents(pr, eventsData);
+  }
+
+  return { createdCount, skippedCount, emailsToDispatch };
+}
+
+/**
  * Called fire-and-forget after a schedule transaction commits.
- *
- * For each id in `failedOrderIds`:
- *  - Skip if the order is no longer FAILED (race-safety).
- *  - If an OPEN / IN_DISCUSSION ConflictIssue already exists for the order:
- *    append a system event (capacity changed) and do NOT email or create a new
- *    issue.
- *  - Otherwise: compute a contextSnapshot, insert a ConflictIssue, and email
- *    the applicant + the order's factory admins.
  *
  * Never throws. All per-order failures are caught and logged; returns the
  * aggregate counts so the caller can include them in structured logs.
@@ -988,258 +1239,13 @@ export async function createIssuesForFailedOrders(input: {
     try {
       const chunkResult = await db.$transaction(
         async (tx) => {
-          const pr = tx as unknown as PrismaClient;
-          let createdCount = 0;
-          let skippedCount = 0;
-          // Store email dispatch promises as thunks to safely execute outside the transaction
-          const emailsToDispatch: Array<() => Promise<void>> = [];
-
-          // Memory payloads for bulk insertion
-          const newIssuesData: Prisma.ConflictIssueCreateManyInput[] = [];
-          const eventsData: Prisma.ConflictIssueEventCreateManyInput[] = [];
-          const metadataMap = new Map<
-            string,
-            {
-              order: NonNullable<
-                Awaited<ReturnType<typeof findOrderForIssueCreation>>
-              >;
-              deficit: number;
-              contextSnapshot: Prisma.InputJsonValue;
-              uniqueRecipients: Array<{
-                email: string;
-                username: string | null;
-              }>;
-            }
-          >();
-
-          // Cache the super admin ID per-chunk to avoid redundant queries
-          let cachedSuperAdminId: string | undefined = undefined;
-
-          // Phase 1: Reads and Memory Preparation (Sequential processing)
-          for (const orderId of chunk) {
-            const order = await findOrderForIssueCreation(pr, orderId);
-            if (!order || order.status !== OrderStatus.FAILED) continue;
-
-            // Snapshot — window, factories, capacity, competing orders
-            const windowStart = new Date(runConfig.startDate);
-            windowStart.setUTCHours(0, 0, 0, 0);
-            const windowEnd = calculateOrderDeadline(order.dueDate, runConfig);
-            windowEnd.setUTCHours(23, 59, 59, 999);
-
-            const factories = await findFactoriesForIssueSnapshot(
-              pr,
-              order.type,
-              windowStart,
-              windowEnd,
-            );
-
-            // Build a CapacityDraft map
-            const capacityMap = new Map<string, CapacityDraft>();
-            for (const f of factories) {
-              for (const cap of f.dailyCapacities) {
-                const dateKey = toIsoDateOnly(cap.date);
-                capacityMap.set(`${f.id}_${dateKey}`, {
-                  id: cap.id,
-                  factoryId: cap.factoryId,
-                  date: cap.date,
-                  maxCapacity: cap.maxCapacity,
-                  curCapacity: cap.curCapacity,
-                });
-              }
-            }
-
-            const factoryInputs = factories.map((f) => ({
-              id: f.id,
-              maxCapacity: f.maxCapacity,
-            }));
-
-            const totalAvailableInWindow = computeTotalAvailableCapacity(
-              windowStart,
-              windowEnd,
-              factoryInputs,
-              capacityMap,
-            );
-
-            const requiredQuantity = order.quantity;
-            const deficit = Math.max(
-              0,
-              requiredQuantity - totalAvailableInWindow,
-            );
-
-            const competingOrders = await findCompetingScheduledOrders(pr, {
-              factoryIds: factories.map((f) => f.id),
-              windowStart,
-              windowEnd,
-              excludeOrderId: order.id,
-            });
-
-            const contextSnapshot = {
-              previewRunAt: runAt.toISOString(),
-              reschedulePolicy: runConfig.reschedulePolicy,
-              config: {
-                frozenDays: runConfig.frozenDays,
-                productionDays: runConfig.productionDays,
-                bufferDays: runConfig.bufferDays,
-                splittable: runConfig.splittable,
-              },
-              windowStart: toIsoDateOnly(windowStart),
-              windowEnd: toIsoDateOnly(windowEnd),
-              requiredQuantity,
-              totalAvailableInWindow,
-              deficit,
-              factoriesConsidered: factories.map((f) => ({
-                id: f.id,
-                productionType: f.productionType,
-                maxCapacity: f.maxCapacity,
-              })),
-              orderSnapshot: {
-                quantity: order.quantity,
-                dueDate: order.dueDate.toISOString(),
-                status: order.status,
-                updatedAt: order.updatedAt.toISOString(),
-              },
-              competingOrders,
-            };
-
-            const existing = await findOpenIssueByOrderId(pr, order.id);
-            if (existing) {
-              eventsData.push({
-                issueId: existing.id,
-                actorId,
-                type: ConflictIssueEventType.REPREVIEW_RAN,
-                payload: {
-                  reason: "CAPACITY_CHANGED",
-                  snapshot: contextSnapshot,
-                } as Prisma.InputJsonValue,
-              });
-              skippedCount += 1;
-              continue;
-            }
-
-            let assigneeId: string | null = order.applicantId ?? null;
-            if (!assigneeId) {
-              const firstAdmin = factories
-                .flatMap((f) => f.admins)
-                .find((a) => !!a?.id);
-              if (firstAdmin?.id) {
-                assigneeId = firstAdmin.id;
-              }
-            }
-
-            if (!assigneeId) {
-              if (cachedSuperAdminId === undefined) {
-                const superAdmins = await findUsers(pr, { role: "SUPERADMIN" });
-                cachedSuperAdminId =
-                  superAdmins.length > 0 ? superAdmins[0].id : "";
-              }
-              if (cachedSuperAdminId) assigneeId = cachedSuperAdminId;
-            }
-
-            if (!assigneeId) {
-              throw new Error(
-                `No assignee available for order ${order.id}. Failing chunk for rollback.`,
-              );
-            }
-
-            newIssuesData.push({
-              orderId: order.id,
-              title: `Cannot schedule "${order.name}" — short by ${deficit} units`,
-              status: ConflictIssueStatus.OPEN,
-              createdById: actorId,
-              assigneeId,
-              contextSnapshot: contextSnapshot as Prisma.InputJsonValue,
-            });
-
-            const recipients: Array<{
-              email: string;
-              username: string | null;
-            }> = [];
-            if (order.applicant?.email)
-              recipients.push({
-                email: order.applicant.email,
-                username: order.applicant.username,
-              });
-            for (const f of factories) {
-              for (const admin of f.admins) {
-                if (admin?.email)
-                  recipients.push({
-                    email: admin.email,
-                    username: admin.username,
-                  });
-              }
-            }
-
-            const seenEmails = new Set<string>();
-            const uniqueRecipients = recipients.filter((r) => {
-              if (seenEmails.has(r.email)) return false;
-              seenEmails.add(r.email);
-              return true;
-            });
-
-            metadataMap.set(order.id, {
-              order,
-              deficit,
-              contextSnapshot: contextSnapshot as Prisma.InputJsonValue,
-              uniqueRecipients,
-            });
-          }
-
-          // Phase 2: Bulk Insert Issues (createMany)
-          if (newIssuesData.length > 0) {
-            await createManyConflictIssues(pr, newIssuesData);
-            createdCount += newIssuesData.length;
-
-            // Fetch newly created issues to obtain DB-generated IDs and auto-incremented numbers
-            const createdIssues = await findConflictIssuesByOrderIds(
-              pr,
-              newIssuesData.map((d) => d.orderId),
-            );
-
-            for (const issue of createdIssues) {
-              const meta = metadataMap.get(issue.orderId);
-              if (!meta) continue;
-
-              // Attach OPENED event data
-              eventsData.push({
-                issueId: issue.id,
-                actorId,
-                type: ConflictIssueEventType.OPENED,
-                payload: {
-                  snapshot: meta.contextSnapshot,
-                } as Prisma.InputJsonValue,
-              });
-
-              // Prepare deferred email dispatches with DB-generated issue.number
-              const dueDateString = toIsoDateOnly(meta.order.dueDate);
-              const issueNumber = issue.number;
-
-              meta.uniqueRecipients.forEach((r) => {
-                emailsToDispatch.push(() =>
-                  renderAndSend(issueCreatedTemplate, {
-                    orderName: meta.order.name,
-                    orderQuantity: meta.order.quantity,
-                    dueDate: dueDateString,
-                    deficit: meta.deficit,
-                    issueNumber,
-                    recipientEmail: r.email,
-                    recipientUsername: r.username,
-                  }).catch((err) => {
-                    console.error(
-                      `[createIssuesForFailedOrders] Email failed for order ${meta.order.id} → ${r.email}:`,
-                      err,
-                    );
-                  }),
-                );
-              });
-            }
-          }
-
-          // Phase 3: Bulk Insert Events
-          if (eventsData.length > 0) {
-            await createManyConflictIssueEvents(pr, eventsData);
-          }
-
-          return { createdCount, skippedCount, emailsToDispatch };
+          return createIssuesForFailedOrdersTx(
+            tx as unknown as PrismaClient,
+            chunk,
+            actorId,
+            runConfig,
+            runAt,
+          );
         },
         { timeout: 15000 },
       );

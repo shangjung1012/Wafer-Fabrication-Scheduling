@@ -20,6 +20,7 @@ import {
 } from "@/infra/db/capacity-repository";
 import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
 import { withScheduleLock } from "@/infra/redis/schedule-store";
+import { createIssuesForFailedOrdersTx } from "@/modules/order/conflict-issue-service";
 import { calculateMinimumStartDate } from "@/modules/schedule/validation-utils";
 
 export async function prepareSchedulingData(
@@ -130,6 +131,8 @@ export async function _applyScheduleTransaction(
     .filter((o) => o.status === OrderStatus.FAILED)
     .map((o) => o.id);
 
+  let deferredEmails: Array<() => Promise<void>> = [];
+
   await prisma.$transaction(async (tx) => {
     const db = tx as unknown as PrismaClient;
 
@@ -163,7 +166,29 @@ export async function _applyScheduleTransaction(
     }
 
     await createAssignments(db, strategyResult.newAssignments);
+
+    // Atomically create conflict issues for any orders that failed scheduling
+    if (failedIds.length > 0) {
+      const { emailsToDispatch } = await createIssuesForFailedOrdersTx(
+        db,
+        failedIds,
+        operatorId,
+        config,
+        new Date(),
+      );
+      deferredEmails = emailsToDispatch;
+    }
   });
+
+  // Execute emails safely outside the database transaction
+  if (deferredEmails.length > 0) {
+    Promise.allSettled(deferredEmails.map((fn) => fn())).catch((err) => {
+      console.error(
+        "[_applyScheduleTransaction] Error dispatching emails:",
+        err,
+      );
+    });
+  }
 
   return { failedIds };
 }
