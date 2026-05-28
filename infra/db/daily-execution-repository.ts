@@ -141,35 +141,42 @@ export async function revertSimulationStatuses(
       await upsertSystemState(tx as unknown as PrismaClient, patch);
     }
 
-    // 1. Find assignments advanced beyond real today
-    const toRevertToInProduction = await tx.orderAssignment.findMany({
-      where: {
-        status: AssignmentStatus.COMPLETED,
-        completionDate: { gt: realToday },
-      },
-      select: { id: true, orderId: true },
-    });
-
+    // 1. Find assignments that haven't started yet from real-today's perspective.
+    //    These include COMPLETED and IN_PRODUCTION that were advanced during simulation.
+    //    Both cases should revert to SCHEDULED.
     const toRevertToScheduled = await tx.orderAssignment.findMany({
       where: {
-        status: AssignmentStatus.IN_PRODUCTION,
+        status: {
+          in: [AssignmentStatus.COMPLETED, AssignmentStatus.IN_PRODUCTION],
+        },
         productionDate: { gt: realToday },
       },
       select: { id: true, orderId: true },
     });
 
-    // 2. Batch revert assignment statuses
-    if (toRevertToInProduction.length > 0) {
-      await tx.orderAssignment.updateMany({
-        where: { id: { in: toRevertToInProduction.map((a) => a.id) } },
-        data: { status: AssignmentStatus.IN_PRODUCTION },
-      });
-    }
+    // Find assignments currently within their production window
+    // (productionDate ≤ today AND completionDate > today) that simulation prematurely completed.
+    const toRevertToInProduction = await tx.orderAssignment.findMany({
+      where: {
+        status: AssignmentStatus.COMPLETED,
+        productionDate: { lte: realToday },
+        completionDate: { gt: realToday },
+      },
+      select: { id: true, orderId: true },
+    });
 
+    // 2. Batch revert assignment statuses — SCHEDULED first, then IN_PRODUCTION
     if (toRevertToScheduled.length > 0) {
       await tx.orderAssignment.updateMany({
         where: { id: { in: toRevertToScheduled.map((a) => a.id) } },
         data: { status: AssignmentStatus.SCHEDULED },
+      });
+    }
+
+    if (toRevertToInProduction.length > 0) {
+      await tx.orderAssignment.updateMany({
+        where: { id: { in: toRevertToInProduction.map((a) => a.id) } },
+        data: { status: AssignmentStatus.IN_PRODUCTION },
       });
     }
 
