@@ -464,12 +464,12 @@ async function seedSystemAndConfigs() {
   await prisma.systemState.upsert({
     where: { id: "global" },
     update: {
-      isSimulationMode: true,
+      isSimulationMode: false,
       simulationDate: new Date("2026-06-03T00:00:00.000Z"),
     },
     create: {
       id: "global",
-      isSimulationMode: true,
+      isSimulationMode: false,
       simulationDate: new Date("2026-06-03T00:00:00.000Z"),
     },
   });

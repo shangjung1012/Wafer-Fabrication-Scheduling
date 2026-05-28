@@ -1,7 +1,15 @@
 import { advanceOrderStatuses } from "@/modules/schedule/daily-execution";
 import { triggerAutoSchedule } from "@/modules/schedule/auto-scheduler";
 import { upsertSystemState } from "@/infra/db/system-state-repository";
+import { revertSimulationStatuses } from "@/infra/db/daily-execution-repository";
 import { prisma } from "@/lib/prisma";
+
+export async function handleSimulationRevert(
+  realToday: Date,
+  patch?: { isSimulationMode?: boolean; simulationDate?: Date | null },
+): Promise<void> {
+  await revertSimulationStatuses(realToday, patch);
+}
 
 export async function handleSimulationTimeAdvance(
   oldTime: Date | null | undefined,

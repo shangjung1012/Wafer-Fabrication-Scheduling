@@ -691,7 +691,7 @@ export default function DashboardPage() {
       dateColumns={dateColumns}
       dateRangeLabel={
         timelineData
-          ? `${timelineData.today ?? format(new Date(), "yyyy-MM-dd")} ~ ${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), 6), "yyyy-MM-dd")}`
+          ? `${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), -2), "yyyy-MM-dd")} ~ ${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), 4), "yyyy-MM-dd")}`
           : ""
       }
     />

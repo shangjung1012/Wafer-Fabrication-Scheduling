@@ -10,7 +10,10 @@ import {
   getSystemState,
   upsertSystemState,
 } from "@/infra/db/system-state-repository";
-import { handleSimulationTimeAdvance } from "@/modules/schedule/simulation-service";
+import {
+  handleSimulationTimeAdvance,
+  handleSimulationRevert,
+} from "@/modules/schedule/simulation-service";
 
 export async function GET(request: Request) {
   try {
@@ -87,6 +90,9 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const switchingToRealTime =
+      isSimulationMode === false && currentState.isSimulationMode === true;
+
     if (patch.simulationDate) {
       const newTime = new Date(patch.simulationDate);
       const oldTime = currentState.simulationDate
@@ -94,6 +100,8 @@ export async function PATCH(request: Request) {
         : null;
 
       await handleSimulationTimeAdvance(oldTime, newTime, patch);
+    } else if (switchingToRealTime) {
+      await handleSimulationRevert(new Date(), patch);
     } else if (Object.keys(patch).length > 0) {
       await upsertSystemState(prisma, patch);
     }

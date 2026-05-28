@@ -99,9 +99,9 @@ function applyPendingIsPrioritizedByOrder(
   });
 }
 
-/** Default window: 10 calendar days starting at anchor (anchor + 9 inclusive). */
+/** Default window: 10 calendar days starting 2 days before anchor (anchor - 2 through anchor + 7). */
 function defaultTimelineRange(anchorDayYmd: string) {
-  const startDate = anchorDayYmd.slice(0, 10);
+  const startDate = toDateStr(addDays(parseISO(anchorDayYmd.slice(0, 10)), -2));
   const endDate = toDateStr(addDays(parseISO(startDate), 9));
   return { startDate, endDate };
 }
@@ -3166,14 +3166,19 @@ export default function SchedulePage() {
     setSimMode(nextIsManual); // optimistic update — confirmed by patchSim response
     if (!nextIsManual) {
       patchSim({ isSimulationMode: false });
+      // Snap the date window back to today-2
+      const range = defaultTimelineRange(format(new Date(), "yyyy-MM-dd"));
+      setStartDate(range.startDate);
+      setEndDate(range.endDate);
       return;
     }
 
+    // Always start simulation from the current real date, not a stale previous sim date
     patchSim({
       isSimulationMode: true,
-      simulationDate: simDate
-        ? dateInputToIso(simDate)
-        : dateInputToIso(data?.today ?? format(new Date(), "yyyy-MM-dd")),
+      simulationDate: dateInputToIso(
+        data?.today ?? format(new Date(), "yyyy-MM-dd"),
+      ),
     });
   };
 
@@ -3530,13 +3535,6 @@ export default function SchedulePage() {
         </div>
         {simMode && (
           <>
-            <input
-              type="date"
-              value={simDate}
-              onChange={handleSimDateChange}
-              disabled={simLoading}
-              className="border border-amber-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
-            />
             <button
               type="button"
               onClick={() => stepSimDate(1)}
@@ -3553,11 +3551,16 @@ export default function SchedulePage() {
             >
               +2 hours
             </button>
-            <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-              Custom:{" "}
-              {simDateTime
-                ? simDateTime.substring(0, 16).replace("T", " ")
-                : "—"}
+            <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
+              Custom:
+              <input
+                type="date"
+                value={simDate}
+                onChange={handleSimDateChange}
+                disabled={simLoading}
+                className="bg-transparent border-none outline-none text-amber-700 font-semibold cursor-pointer"
+              />
+              {simDateTime && <span>{simDateTime.substring(11, 16)}</span>}
             </span>
           </>
         )}
