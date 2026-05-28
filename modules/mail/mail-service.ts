@@ -63,22 +63,54 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
   }
 
   const senderAddress = requiredEnv("AZURE_COMMUNICATION_EMAIL_SENDER_ADDRESS");
-  const poller = await getEmailClient().beginSend({
-    senderAddress,
-    content: {
-      subject: input.subject,
-      plainText: input.plainText,
-      ...(input.html ? { html: input.html } : {}),
-    },
-    recipients: {
-      to: input.to,
-      ...(input.cc?.length ? { cc: input.cc } : {}),
-      ...(input.bcc?.length ? { bcc: input.bcc } : {}),
-    },
-    ...(input.replyTo?.length ? { replyTo: input.replyTo } : {}),
-  });
+  const abort = new AbortController();
+  const timeoutId = setTimeout(
+    () => abort.abort(),
+    30_000, // 30-second hard timeout
+  );
 
-  const response = await poller.pollUntilDone();
+  let poller;
+  try {
+    poller = await getEmailClient().beginSend({
+      senderAddress,
+      content: {
+        subject: input.subject,
+        plainText: input.plainText,
+        ...(input.html ? { html: input.html } : {}),
+      },
+      recipients: {
+        to: input.to,
+        ...(input.cc?.length ? { cc: input.cc } : {}),
+        ...(input.bcc?.length ? { bcc: input.bcc } : {}),
+      },
+      ...(input.replyTo?.length ? { replyTo: input.replyTo } : {}),
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw new MailSendError(
+      err instanceof Error ? err.message : "Failed to initiate email send.",
+    );
+  }
+
+  let response;
+  try {
+    response = await poller.pollUntilDone({ abortSignal: abort.signal });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    const isTimeout =
+      err instanceof Error &&
+      (err.name === "AbortError" || abort.signal.aborted);
+    throw new MailSendError(
+      isTimeout
+        ? "Email send timed out — the mail service did not respond within 30 seconds."
+        : err instanceof Error
+          ? err.message
+          : "Email send failed.",
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
   if (response.status !== KnownEmailSendStatus.Succeeded) {
     throw new MailSendError(
       response.error?.message ?? `Email send status: ${response.status}`,
