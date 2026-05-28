@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, PATCH } from "@/app/api/system/simulation/route";
-import {
-  CsrfError,
-  UnauthorizedError,
-} from "@/modules/auth/require-auth";
+import { CsrfError, UnauthorizedError } from "@/modules/auth/require-auth";
 
 const {
   prisma,
@@ -11,12 +8,14 @@ const {
   getSystemState,
   upsertSystemState,
   handleSimulationTimeAdvance,
+  handleSimulationRevert,
 } = vi.hoisted(() => ({
   prisma: {},
   requireAuth: vi.fn(),
   getSystemState: vi.fn(),
   upsertSystemState: vi.fn(),
   handleSimulationTimeAdvance: vi.fn(),
+  handleSimulationRevert: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({ prisma }));
@@ -45,6 +44,7 @@ vi.mock("@/infra/db/system-state-repository", () => ({
 }));
 vi.mock("@/modules/schedule/simulation-service", () => ({
   handleSimulationTimeAdvance,
+  handleSimulationRevert,
 }));
 
 describe("/api/system/simulation", () => {
@@ -161,7 +161,7 @@ describe("/api/system/simulation", () => {
       expect(getSystemState).toHaveBeenCalledTimes(2);
     });
 
-    it("uses upsertSystemState when only flags change (no simulationDate patch)", async () => {
+    it("calls handleSimulationRevert when switching from simulation to real-time", async () => {
       getSystemState.mockResolvedValueOnce({
         id: "global",
         isSimulationMode: true,
@@ -176,6 +176,31 @@ describe("/api/system/simulation", () => {
       const res = await PATCH(patchRequest({ isSimulationMode: false }));
       expect(res.status).toBe(200);
       expect(handleSimulationTimeAdvance).not.toHaveBeenCalled();
+      expect(handleSimulationRevert).toHaveBeenCalledTimes(1);
+      const [realTodayArg, patchArg] = handleSimulationRevert.mock.calls[0];
+      expect(realTodayArg).toBeInstanceOf(Date);
+      expect(patchArg).toMatchObject({ isSimulationMode: false });
+      expect(upsertSystemState).not.toHaveBeenCalled();
+      expect(getSystemState).toHaveBeenCalledTimes(2);
+    });
+
+    it("uses upsertSystemState when flag changes but not switching from simulation to real-time", async () => {
+      // isSimulationMode was already false — not a revert scenario
+      getSystemState.mockResolvedValueOnce({
+        id: "global",
+        isSimulationMode: false,
+        simulationDate: null,
+      });
+      getSystemState.mockResolvedValueOnce({
+        id: "global",
+        isSimulationMode: false,
+        simulationDate: null,
+      });
+
+      const res = await PATCH(patchRequest({ isSimulationMode: false }));
+      expect(res.status).toBe(200);
+      expect(handleSimulationTimeAdvance).not.toHaveBeenCalled();
+      expect(handleSimulationRevert).not.toHaveBeenCalled();
       expect(upsertSystemState).toHaveBeenCalledWith(prisma, {
         isSimulationMode: false,
       });
