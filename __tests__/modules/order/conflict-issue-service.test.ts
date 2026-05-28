@@ -471,7 +471,7 @@ describe("acceptProposal — OCC", () => {
       expectedOrderUpdatedAt,
       authorId = "SALES1",
       kind = "DELAY_DUE_DATE",
-      newDueDate = "2026-05-10T00:00:00Z",
+      newDueDate = "2026-05-25",
       status = "PENDING",
     } = overrides;
 
@@ -587,7 +587,7 @@ describe("acceptProposal — OCC", () => {
     const updateCall = vi.mocked(orderRepo.updateOrder).mock.calls[0];
     expect(updateCall[1]).toBe("O1");
     expect((updateCall[2] as { dueDate?: Date }).dueDate).toEqual(
-      new Date("2026-05-10T00:00:00Z"),
+      new Date("2026-05-25T00:00:00.000Z"),
     );
 
     // Issue marked RESOLVED

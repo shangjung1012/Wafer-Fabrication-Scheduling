@@ -43,6 +43,7 @@ import {
 import { findFactoriesForIssueSnapshot } from "@/infra/db/factory-repository";
 import { findDailyCapacitiesByDateRange } from "@/infra/db/capacity-repository";
 import { findUserById, findUsers } from "@/infra/db/user-repository";
+import { getTime } from "@/lib/get-time";
 import { calculateOrderDeadline } from "@/modules/schedule/validation-utils";
 import {
   computeTotalAvailableCapacity,
@@ -178,6 +179,33 @@ export type AddCommentInput = {
   expectedOrderUpdatedAt?: string; // required when proposal is present
 };
 
+function toIsoDateOnly(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function assertValidSalesDelayDueDate(
+  currentDueDate: Date,
+  newDueDate: string,
+  today: Date,
+): void {
+  const current = toIsoDateOnly(currentDueDate);
+  if (newDueDate <= current) {
+    throw Object.assign(
+      new Error(
+        "New due date must be later than the order's current due date.",
+      ),
+      { status: 400, code: "BAD_REQUEST" },
+    );
+  }
+  const todayStr = toIsoDateOnly(today);
+  if (newDueDate < todayStr) {
+    throw Object.assign(
+      new Error("New due date cannot be in the past."),
+      { status: 400, code: "BAD_REQUEST" },
+    );
+  }
+}
+
 export async function addComment(
   ctx: RequestContext,
   db: PrismaClient,
@@ -206,6 +234,19 @@ export async function addComment(
           "expectedOrderUpdatedAt is required when attaching a proposal.",
         ),
         { status: 400, code: "BAD_REQUEST" },
+      );
+    }
+    if (
+      ctx.user.role === "SALES" &&
+      input.proposal.kind === "DELAY_DUE_DATE" &&
+      input.proposal.newDueDate
+    ) {
+      const order = await findOrderById(db, issue.orderId);
+      if (!order) issueNotFound();
+      assertValidSalesDelayDueDate(
+        order.dueDate,
+        input.proposal.newDueDate,
+        await getTime(),
       );
     }
     proposalPayload = {
@@ -337,6 +378,15 @@ export async function acceptProposal(
           status: 400,
           code: "BAD_REQUEST",
         },
+      );
+    }
+    const proposedDate = proposalData.proposal.newDueDate.slice(0, 10);
+    if (proposedDate <= toIsoDateOnly(order.dueDate)) {
+      throw Object.assign(
+        new Error(
+          "New due date must be later than the order's current due date.",
+        ),
+        { status: 400, code: "BAD_REQUEST" },
       );
     }
     safeFields.dueDate = new Date(proposalData.proposal.newDueDate);
@@ -888,14 +938,6 @@ export async function getSuggestions(
 // ---------------------------------------------------------------------------
 // Service: auto-create issues for newly-FAILED orders
 // ---------------------------------------------------------------------------
-
-/**
- * Format a Date as YYYY-MM-DD using UTC slicing on the ISO string.
- * Matches the convention used by the strategy engine's date keys.
- */
-function toIsoDateOnly(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 export type CreateIssuesForFailedOrdersResult = {
   created: number;
