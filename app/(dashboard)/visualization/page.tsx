@@ -699,24 +699,24 @@ function DetailPanel({
                   <StatusBadge status={item.status} />
                   {item.status === "SCHEDULED" &&
                     (!isSales || myOrderIdSet.has(item.orderId)) && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onEditOrder({
-                          orderId: item.orderId,
-                          name: item.orderName,
-                          quantity: String(item.assignedQuantity),
-                          status: item.status,
-                          dueDate: item.dueDate,
-                          type: factory.productionType,
-                          isPrioritized: item.isPrioritized,
-                        })
-                      }
-                      className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:text-gray-900"
-                    >
-                      Edit
-                    </button>
-                  )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onEditOrder({
+                            orderId: item.orderId,
+                            name: item.orderName,
+                            quantity: String(item.assignedQuantity),
+                            status: item.status,
+                            dueDate: item.dueDate,
+                            type: factory.productionType,
+                            isPrioritized: item.isPrioritized,
+                          })
+                        }
+                        className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:text-gray-900"
+                      >
+                        Edit
+                      </button>
+                    )}
                 </div>
               </div>
               <div className="text-xs text-gray-500 space-y-0.5">
@@ -1790,98 +1790,90 @@ function GanttCell({
 
   const cellInner = (
     <>
-        {/* Conflict marker */}
-        {hasConflict && (
-          <span className="absolute top-1 right-1 text-amber-600">
-            <AlertTriangle
-              className="h-2.5 w-2.5"
-              strokeWidth={2.5}
+      {/* Conflict marker */}
+      {hasConflict && (
+        <span className="absolute top-1 right-1 text-amber-600">
+          <AlertTriangle
+            className="h-2.5 w-2.5"
+            strokeWidth={2.5}
+            aria-hidden
+          />
+        </span>
+      )}
+
+      {/* Rescheduled marker */}
+      {hasRescheduled && !hasConflict && (
+        <span className="absolute top-1 right-1 text-purple-500">
+          <ArrowDownUp className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+        </span>
+      )}
+      {hasRescheduled && hasConflict && (
+        <span className="absolute top-1 right-4 text-purple-500">
+          <ArrowDownUp className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+        </span>
+      )}
+
+      {/* Newly placed (preview) marker */}
+      {hasNewlyPlaced && (
+        <span
+          className={`absolute ${hasRescheduled || hasConflict ? "top-1 right-7" : "top-1 right-1"} text-emerald-600`}
+        >
+          <Plus className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
+        </span>
+      )}
+
+      {/* Assignment counts: total ×N (lock ×M, crown ×K) */}
+      {cell.items.length > 0 && (
+        <span
+          className="absolute top-1 left-1 text-[9px] font-bold text-gray-500 inline-flex flex-wrap items-center gap-x-1 gap-y-0 max-w-[68px] leading-tight"
+          title={`${totalCount} assignment(s)${fixedScheduledCount > 0 ? `, ${fixedScheduledCount} locked` : ""}${prioritizedScheduledCount > 0 ? `, ${prioritizedScheduledCount} prioritized` : ""}`}
+        >
+          <span>×{totalCount}</span>
+          {(fixedScheduledCount > 0 || prioritizedScheduledCount > 0) && (
+            <span className="inline-flex items-center gap-px">
+              <span>(</span>
+              {fixedScheduledCount > 0 && (
+                <span className="text-gray-700 inline-flex items-center gap-px">
+                  <Lock className="h-2 w-2" aria-hidden />
+                  <span>×{fixedScheduledCount}</span>
+                </span>
+              )}
+              {fixedScheduledCount > 0 && prioritizedScheduledCount > 0 && (
+                <span className="mx-px"> </span>
+              )}
+              {prioritizedScheduledCount > 0 && (
+                <span className="text-amber-600 inline-flex items-center gap-px">
+                  <Crown className="h-2 w-2" aria-hidden />
+                  <span>×{prioritizedScheduledCount}</span>
+                </span>
+              )}
+              <span>)</span>
+            </span>
+          )}
+          {isMyOrder && (
+            <span
+              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600"
+              title="Includes my order"
               aria-hidden
             />
-          </span>
-        )}
+          )}
+        </span>
+      )}
 
-        {/* Rescheduled marker */}
-        {hasRescheduled && !hasConflict && (
-          <span className="absolute top-1 right-1 text-purple-500">
-            <ArrowDownUp
-              className="h-2.5 w-2.5"
-              strokeWidth={2.5}
-              aria-hidden
-            />
-          </span>
-        )}
-        {hasRescheduled && hasConflict && (
-          <span className="absolute top-1 right-4 text-purple-500">
-            <ArrowDownUp
-              className="h-2.5 w-2.5"
-              strokeWidth={2.5}
-              aria-hidden
-            />
-          </span>
-        )}
-
-        {/* Newly placed (preview) marker */}
-        {hasNewlyPlaced && (
-          <span
-            className={`absolute ${hasRescheduled || hasConflict ? "top-1 right-7" : "top-1 right-1"} text-emerald-600`}
-          >
-            <Plus className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
-          </span>
-        )}
-
-        {/* Assignment counts: total ×N (lock ×M, crown ×K) */}
-        {cell.items.length > 0 && (
-          <span
-            className="absolute top-1 left-1 text-[9px] font-bold text-gray-500 inline-flex flex-wrap items-center gap-x-1 gap-y-0 max-w-[68px] leading-tight"
-            title={`${totalCount} assignment(s)${fixedScheduledCount > 0 ? `, ${fixedScheduledCount} locked` : ""}${prioritizedScheduledCount > 0 ? `, ${prioritizedScheduledCount} prioritized` : ""}`}
-          >
-            <span>×{totalCount}</span>
-            {(fixedScheduledCount > 0 || prioritizedScheduledCount > 0) && (
-              <span className="inline-flex items-center gap-px">
-                <span>(</span>
-                {fixedScheduledCount > 0 && (
-                  <span className="text-gray-700 inline-flex items-center gap-px">
-                    <Lock className="h-2 w-2" aria-hidden />
-                    <span>×{fixedScheduledCount}</span>
-                  </span>
-                )}
-                {fixedScheduledCount > 0 && prioritizedScheduledCount > 0 && (
-                  <span className="mx-px"> </span>
-                )}
-                {prioritizedScheduledCount > 0 && (
-                  <span className="text-amber-600 inline-flex items-center gap-px">
-                    <Crown className="h-2 w-2" aria-hidden />
-                    <span>×{prioritizedScheduledCount}</span>
-                  </span>
-                )}
-                <span>)</span>
-              </span>
-            )}
-            {isMyOrder && (
-              <span
-                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600"
-                title="Includes my order"
-                aria-hidden
-              />
-            )}
-          </span>
-        )}
-
-        {/* Capacity bar */}
-        <div className="w-full px-1 pb-1">
-          <div className="w-full h-1 bg-white/60 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full ${barColor}`}
-              style={{ width: `${Math.min(pct, 100)}%` }}
-            />
-          </div>
-          <p
-            className={`text-[9px] font-semibold text-center mt-0.5 ${pct > 100 ? "text-red-600" : "text-gray-500"}`}
-          >
-            {pct}%
-          </p>
+      {/* Capacity bar */}
+      <div className="w-full px-1 pb-1">
+        <div className="w-full h-1 bg-white/60 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full ${barColor}`}
+            style={{ width: `${Math.min(pct, 100)}%` }}
+          />
         </div>
+        <p
+          className={`text-[9px] font-semibold text-center mt-0.5 ${pct > 100 ? "text-red-600" : "text-gray-500"}`}
+        >
+          {pct}%
+        </p>
+      </div>
     </>
   );
 
@@ -1899,11 +1891,7 @@ function GanttCell({
       ) : (
         <div
           className={cellBodyClass}
-          title={
-            isSales
-              ? "This cell has no orders you own"
-              : undefined
-          }
+          title={isSales ? "This cell has no orders you own" : undefined}
         >
           {cellInner}
         </div>
@@ -2025,9 +2013,11 @@ export default function SchedulePage() {
   const session = useClientAuthSession();
   const isSales = session?.user.role === "SALES";
   const isSuperAdmin = session?.user.role === "SUPERADMIN";
-  const [selectedScheduleType, setSelectedScheduleType] = useState("A");
+  const [selectedScheduleType, setSelectedScheduleType] = useState<
+    string | null
+  >(null);
   const activeScheduleType = isSuperAdmin
-    ? selectedScheduleType
+    ? (selectedScheduleType ?? session?.user.group ?? "A")
     : (session?.user.group ?? "");
   const pathname = usePathname();
   const [startDate, setStartDate] = useState("");
@@ -2115,12 +2105,6 @@ export default function SchedulePage() {
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(
     () => new Set(),
   );
-
-  useEffect(() => {
-    if (session?.user.group) {
-      setSelectedScheduleType(session.user.group);
-    }
-  }, [session?.user.group]);
 
   const handleScheduleTypeChange = useCallback((type: string) => {
     setSelectedScheduleType(type);
