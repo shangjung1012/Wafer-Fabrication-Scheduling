@@ -3929,7 +3929,7 @@ export default function SchedulePage() {
                 orders={
                   isSuperAdmin
                     ? data.adminContext.pendingOrders.filter(
-                        (o) => o.type === selectedScheduleType,
+                        (o) => o.type === activeScheduleType,
                       )
                     : data.adminContext.pendingOrders
                 }
@@ -3955,7 +3955,7 @@ export default function SchedulePage() {
                   isSuperAdmin ? SCHEDULE_PRODUCTION_TYPES : undefined
                 }
                 selectedScheduleType={
-                  isSuperAdmin ? (selectedScheduleType ?? undefined) : undefined
+                  isSuperAdmin ? activeScheduleType : undefined
                 }
                 onScheduleTypeChange={
                   isSuperAdmin ? handleScheduleTypeChange : undefined
