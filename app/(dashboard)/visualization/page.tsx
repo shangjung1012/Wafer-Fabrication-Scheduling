@@ -157,11 +157,7 @@ function CommittedDateInput({
   const valueOnFocusRef = useRef(value);
   const committedDuringFocusRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onCommitRef = useRef(onCommit);
-  const valueRef = useRef(value);
   const inputRef = useRef<HTMLInputElement>(null);
-  onCommitRef.current = onCommit;
-  valueRef.current = value;
 
   useEffect(() => {
     if (!focusedRef.current) setDraft(value);
@@ -174,11 +170,14 @@ function CommittedDateInput({
     }
   }, []);
 
-  const commit = useCallback((next: string) => {
-    if (!next || next === valueRef.current) return;
-    committedDuringFocusRef.current = true;
-    onCommitRef.current(next);
-  }, []);
+  const commit = useCallback(
+    (next: string) => {
+      if (!next || next === value) return;
+      committedDuringFocusRef.current = true;
+      onCommit(next);
+    },
+    [onCommit, value],
+  );
 
   const scheduleCommit = useCallback(
     (next: string) => {
@@ -188,10 +187,12 @@ function CommittedDateInput({
         if (!focusedRef.current) return;
         const anchor = valueOnFocusRef.current;
         if (anchor && isMonthNavigationOnly(anchor, next)) return;
-        commit(next);
+        if (!next || next === value) return;
+        committedDuringFocusRef.current = true;
+        onCommit(next);
       }, DATE_COMMIT_DEBOUNCE_MS);
     },
-    [clearDebounce, commit],
+    [clearDebounce, onCommit, value],
   );
 
   useEffect(() => {
@@ -218,8 +219,8 @@ function CommittedDateInput({
       onFocus={() => {
         focusedRef.current = true;
         committedDuringFocusRef.current = false;
-        valueOnFocusRef.current = valueRef.current;
-        setDraft(valueRef.current);
+        valueOnFocusRef.current = value;
+        setDraft(value);
       }}
       onChange={(e) => {
         const next = e.target.value;
@@ -231,7 +232,7 @@ function CommittedDateInput({
         focusedRef.current = false;
         clearDebounce();
         if (!committedDuringFocusRef.current) {
-          setDraft(valueRef.current);
+          setDraft(value);
         }
         committedDuringFocusRef.current = false;
       }}
@@ -244,7 +245,7 @@ function CommittedDateInput({
         }
         if (e.key === "Escape") {
           clearDebounce();
-          setDraft(valueRef.current);
+          setDraft(value);
           e.currentTarget.blur();
         }
       }}
@@ -3626,79 +3627,80 @@ export default function SchedulePage() {
         </div>
       </div>
 
-      {/* Simulation mode bar */}
-      <div
-        className={`flex-none px-6 py-2 flex items-center gap-3 flex-wrap border-b text-xs ${
-          simMode ? "bg-amber-50 border-amber-200" : "bg-white border-gray-100"
-        }`}
-      >
-        <span className="font-medium text-gray-700">Time Mode</span>
-        <div className="inline-flex rounded border border-gray-300 bg-white overflow-hidden">
-          <button
-            type="button"
-            onClick={() => handleTimeModeChange(false)}
-            disabled={simLoading}
-            className={`px-2.5 py-1 font-semibold transition-colors ${
-              !simMode
-                ? "bg-green-600 text-white"
-                : "text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-            }`}
-          >
-            Real-time
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTimeModeChange(true)}
-            disabled={simLoading || simMode}
-            className={`px-2.5 py-1 font-semibold border-l border-gray-300 transition-colors ${
-              simMode
-                ? "bg-amber-500 text-white"
-                : "text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-            }`}
-          >
-            Custom
-          </button>
-        </div>
-        {simMode && (
-          <>
+      {!isSales && (
+        <div
+          className={`flex-none px-6 py-2 flex items-center gap-3 flex-wrap border-b text-xs ${
+            simMode ? "bg-amber-50 border-amber-200" : "bg-white border-gray-100"
+          }`}
+        >
+          <span className="font-medium text-gray-700">Time Mode</span>
+          <div className="inline-flex rounded border border-gray-300 bg-white overflow-hidden">
             <button
               type="button"
-              onClick={() => stepSimDate(1)}
+              onClick={() => handleTimeModeChange(false)}
               disabled={simLoading}
-              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium"
+              className={`px-2.5 py-1 font-semibold transition-colors ${
+                !simMode
+                  ? "bg-green-600 text-white"
+                  : "text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              }`}
             >
-              +1 day
+              Real-time
             </button>
             <button
               type="button"
-              onClick={() => stepSimHours(2)}
-              disabled={simLoading}
-              className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium ml-1"
+              onClick={() => handleTimeModeChange(true)}
+              disabled={simLoading || simMode}
+              className={`px-2.5 py-1 font-semibold border-l border-gray-300 transition-colors ${
+                simMode
+                  ? "bg-amber-500 text-white"
+                  : "text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              }`}
             >
-              +2 hours
+              Custom
             </button>
-            <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-              Custom:
-              <CommittedDateInput
-                value={simDate}
-                onCommit={handleSimDateCommit}
+          </div>
+          {simMode && (
+            <>
+              <button
+                type="button"
+                onClick={() => stepSimDate(1)}
                 disabled={simLoading}
-                className="bg-transparent border-none outline-none text-amber-700 font-semibold cursor-pointer"
+                className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium"
+              >
+                +1 day
+              </button>
+              <button
+                type="button"
+                onClick={() => stepSimHours(2)}
+                disabled={simLoading}
+                className="px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium ml-1"
+              >
+                +2 hours
+              </button>
+              <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
+                Custom:
+                <CommittedDateInput
+                  value={simDate}
+                  onCommit={handleSimDateCommit}
+                  disabled={simLoading}
+                  className="bg-transparent border-none outline-none text-amber-700 font-semibold cursor-pointer"
+                />
+                {simDateTime && <span>{simDateTime.substring(11, 16)}</span>}
+              </span>
+            </>
+          )}
+          {!simMode && (
+            <span className="inline-flex items-center gap-1.5 text-green-700 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
+              <span
+                className="h-2 w-2 shrink-0 rounded-full bg-green-600"
+                aria-hidden
               />
-              {simDateTime && <span>{simDateTime.substring(11, 16)}</span>}
+              Real-time
             </span>
-          </>
-        )}
-        {!simMode && (
-          <span className="inline-flex items-center gap-1.5 text-green-700 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
-            <span
-              className="h-2 w-2 shrink-0 rounded-full bg-green-600"
-              aria-hidden
-            />
-            Real-time
-          </span>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Date range + schedule controls */}
       <div className="flex-none px-6 py-3 border-b border-gray-100 bg-white">
