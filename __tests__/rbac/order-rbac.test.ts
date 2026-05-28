@@ -31,8 +31,8 @@ const ctx = (
   requestId: "test",
 });
 
-const salesA = ctx("sales-A", "SALES");
-const salesB = ctx("sales-B", "SALES");
+const sales1 = ctx("sales-1", "SALES");
+const sales2 = ctx("sales-2", "SALES");
 const adminA1 = ctx("admin-A1", "ADMIN");
 const adminB1 = ctx("admin-B1", "ADMIN");
 
@@ -60,7 +60,7 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 async function seedOrderA(name = "TestOrder") {
-  const order = await createOrderService(salesA, prisma, {
+  const order = await createOrderService(sales1, prisma, {
     name,
     type: "A",
     dueDate: new Date("2026-12-31"),
@@ -71,7 +71,7 @@ async function seedOrderA(name = "TestOrder") {
 }
 
 async function seedOrderB(name = "TestOrderB") {
-  const order = await createOrderService(salesB, prisma, {
+  const order = await createOrderService(sales2, prisma, {
     name,
     type: "B",
     dueDate: new Date("2026-12-31"),
@@ -86,16 +86,16 @@ async function seedOrderB(name = "TestOrderB") {
 // ---------------------------------------------------------------------------
 
 describe("流程一：正常訂單生命週期", () => {
-  it("1. SALES sales-A 建立 type A 訂單 → 201", async () => {
+  it("1. SALES sales-1 建立 type A 訂單 → 201", async () => {
     const order = await seedOrderA();
     expect(order.id).toBeDefined();
     expect(order.status).toBe("PENDING");
     expect(order.type).toBe("A");
-    expect(order.applicantId).toBe("sales-A");
+    expect(order.applicantId).toBe("sales-1");
   });
 
-  it("2. SALES sales-A 可建立任意 type 的訂單 → 201", async () => {
-    const order = await createOrderService(salesA, prisma, {
+  it("2. SALES sales-1 可建立任意 type 的訂單 → 201", async () => {
+    const order = await createOrderService(sales1, prisma, {
       name: "CrossTypeOrder",
       type: "B",
       dueDate: new Date("2026-12-31"),
@@ -104,7 +104,7 @@ describe("流程一：正常訂單生命週期", () => {
     createdOrderIds.push(order.id);
     expect(order.id).toBeDefined();
     expect(order.type).toBe("B");
-    expect(order.applicantId).toBe("sales-A");
+    expect(order.applicantId).toBe("sales-1");
   });
 
   it("3. ADMIN admin-A1 審核訂單 PENDING → SCHEDULED", async () => {
@@ -122,7 +122,7 @@ describe("流程一：正常訂單生命週期", () => {
     });
 
     await expect(
-      updateOrderService(salesA, prisma, order.id, { name: "改名" }),
+      updateOrderService(sales1, prisma, order.id, { name: "改名" }),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 });
@@ -132,10 +132,10 @@ describe("流程一：正常訂單生命週期", () => {
 // ---------------------------------------------------------------------------
 
 describe("流程二：scope 隔離", () => {
-  it("7. SALES sales-B 查 sales-A 的訂單 → 404", async () => {
+  it("7. SALES sales-2 查 sales-1 的訂單 → 404", async () => {
     const order = await seedOrderA();
 
-    const err = await getOrder(salesB, prisma, order.id).catch((e) => e);
+    const err = await getOrder(sales2, prisma, order.id).catch((e) => e);
     expect(err).toMatchObject({ status: 404, code: "NOT_FOUND" });
   });
 
@@ -158,11 +158,11 @@ describe("流程二：scope 隔離", () => {
     await seedOrderA("OrderByA");
     await seedOrderB("OrderByB");
 
-    const salesAOrders = await listOrders(salesA, prisma, {});
-    const salesBOrders = await listOrders(salesB, prisma, {});
+    const sales1Orders = await listOrders(sales1, prisma, {});
+    const sales2Orders = await listOrders(sales2, prisma, {});
 
-    expect(salesAOrders.every((o) => o.applicantId === "sales-A")).toBe(true);
-    expect(salesBOrders.every((o) => o.applicantId === "sales-B")).toBe(true);
+    expect(sales1Orders.every((o) => o.applicantId === "sales-1")).toBe(true);
+    expect(sales2Orders.every((o) => o.applicantId === "sales-2")).toBe(true);
   });
 
   it("SALES 不能改 type 欄位", async () => {
@@ -170,7 +170,7 @@ describe("流程二：scope 隔離", () => {
 
     // UpdateOrderServiceInput 已移除 type 欄位，TypeScript 會在編譯期攔截
     // 此測試確認 SALES 無法透過 API 傳入 type（runtime 層面）
-    const updated = await updateOrderService(salesA, prisma, order.id, {
+    const updated = await updateOrderService(sales1, prisma, order.id, {
       name: "合法修改",
     });
     expect(updated.type).toBe("A"); // type 沒有被改變

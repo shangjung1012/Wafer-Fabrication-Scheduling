@@ -9,6 +9,8 @@ import { DashboardSummary } from "@/components/dashboard/DashboardSummary";
 import { AdminPendingSection } from "../../../../components/dashboard/AdminPendingSection";
 import { SalesOrdersSection } from "@/components/dashboard/SalesOrdersSection";
 import { ConflictIssueSection } from "@/components/dashboard/ConflictIssueSection";
+import { OrderCsvDropZone } from "@/components/orders/OrderCsvDropZone";
+import { importOrdersFromCsv } from "@/components/orders/order-csv";
 import { X } from "lucide-react";
 
 // Types
@@ -96,18 +98,21 @@ function OrderEditorModal({
   initialValues,
   onClose,
   onSubmit,
+  onCsvImported,
 }: {
   mode: "create" | "edit";
   title: string;
   initialValues: OrderEditorValues;
   onClose: () => void;
   onSubmit: (values: OrderEditorValues) => Promise<void>;
+  onCsvImported?: () => void;
 }) {
   const isCreate = mode === "create";
   const [name, setName] = useState(initialValues.name);
   const [quantity, setQuantity] = useState(initialValues.quantity);
   const [type, setType] = useState(initialValues.type ?? "A");
   const [dueDate, setDueDate] = useState(initialValues.dueDate ?? "2026-12-31");
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -117,6 +122,31 @@ function OrderEditorModal({
     setError("");
 
     try {
+      if (isCreate && csvFile) {
+        const result = await importOrdersFromCsv(csvFile);
+        if (result.successCount === 0) {
+          throw new Error(
+            result.errorList.join("\n") || "No orders were imported.",
+          );
+        }
+        if (result.errorList.length > 0) {
+          const preview = result.errorList.slice(0, 5).join("\n");
+          const more =
+            result.errorList.length > 5
+              ? `\n…+${result.errorList.length - 5} more`
+              : "";
+          setError(
+            `Imported ${result.successCount} order(s). Some rows failed:\n${preview}${more}`,
+          );
+          onCsvImported?.();
+          setCsvFile(null);
+          return;
+        }
+        onCsvImported?.();
+        onClose();
+        return;
+      }
+
       await onSubmit({
         orderId: initialValues.orderId,
         name: name.trim(),
@@ -156,7 +186,7 @@ function OrderEditorModal({
 
         <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 whitespace-pre-wrap">
               {error}
             </div>
           )}
@@ -225,6 +255,24 @@ function OrderEditorModal({
             />
           </label>
 
+          {isCreate && (
+            <>
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase tracking-wide">
+                  <span className="bg-white px-2 text-gray-400">or</span>
+                </div>
+              </div>
+              <OrderCsvDropZone
+                file={csvFile}
+                onFileChange={setCsvFile}
+                disabled={submitting}
+              />
+            </>
+          )}
+
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               type="button"
@@ -238,7 +286,13 @@ function OrderEditorModal({
               disabled={submitting}
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? "Saving…" : isCreate ? "Send" : "Save"}
+              {submitting
+                ? csvFile
+                  ? "Importing…"
+                  : "Saving…"
+                : isCreate
+                  ? "Send"
+                  : "Save"}
             </button>
           </div>
         </form>
@@ -390,7 +444,7 @@ export default function DashboardPage() {
     if (session.user.role === "SALES") {
       return orders.filter((o) => o.applicantId === session.user.id);
     }
-    if (session.user.role === "ADMIN" || session.user.role === "SUPERADMIN") {
+    if (session.user.role === "ADMIN") {
       const g = session.user.group;
       if (g) return orders.filter((o) => o.type === g);
     }
@@ -637,7 +691,7 @@ export default function DashboardPage() {
       dateColumns={dateColumns}
       dateRangeLabel={
         timelineData
-          ? `${timelineData.today ?? format(new Date(), "yyyy-MM-dd")} ~ ${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), 6), "yyyy-MM-dd")}`
+          ? `${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), -2), "yyyy-MM-dd")} ~ ${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), 4), "yyyy-MM-dd")}`
           : ""
       }
     />
@@ -679,6 +733,11 @@ export default function DashboardPage() {
           }}
           onClose={() => setCreateOpen(false)}
           onSubmit={handleCreateOrder}
+          onCsvImported={() => {
+            setCreateOpen(false);
+            setLoading(true);
+            setRefreshKey((value) => value + 1);
+          }}
         />
       )}
 

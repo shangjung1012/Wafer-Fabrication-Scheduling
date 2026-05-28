@@ -41,7 +41,7 @@ function makeMockRow() {
     createdById: "ADMIN1",
     createdBy: { username: "admin-A" },
     assigneeId: "SALES1",
-    assignee: { username: "sales-A", email: "sales@example.com" },
+    assignee: { username: "sales-1", email: "sales@example.com" },
     resolvedAt: null,
     closedAt: null,
     createdAt: new Date("2026-05-21T07:59:00Z"),

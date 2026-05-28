@@ -345,7 +345,7 @@ describe("invitation-service", () => {
     await expect(
       acceptInvitation(db as never, {
         token,
-        username: "sales-A",
+        username: "sales-1",
         password: "Password123!",
       }),
     ).resolves.toEqual({ ok: true });
@@ -353,7 +353,7 @@ describe("invitation-service", () => {
     const user = users.find(
       (item) => item.email === "sales-a@mail.shangjung.com",
     );
-    expect(user?.username).toBe("sales-A");
+    expect(user?.username).toBe("sales-1");
     expect(user?.password).not.toBe("Password123!");
     await expect(
       verifyPassword(String(user?.password), "Password123!"),
@@ -363,7 +363,7 @@ describe("invitation-service", () => {
     await expect(
       acceptInvitation(db as never, {
         token,
-        username: "sales-A2",
+        username: "sales-12",
         password: "Password123!",
       }),
     ).rejects.toThrow(InvitationError);
@@ -381,12 +381,12 @@ describe("invitation-service", () => {
     const results = await Promise.allSettled([
       acceptInvitation(db as never, {
         token,
-        username: "sales-A",
+        username: "sales-1",
         password: "Password123!",
       }),
       acceptInvitation(db as never, {
         token,
-        username: "sales-B",
+        username: "sales-2",
         password: "Password456!",
       }),
     ]);
@@ -400,7 +400,7 @@ describe("invitation-service", () => {
     const user = users.find(
       (item) => item.email === "sales-a@mail.shangjung.com",
     );
-    expect(["sales-A", "sales-B"]).toContain(user?.username);
+    expect(["sales-1", "sales-2"]).toContain(user?.username);
   });
 
   it("rejects expired invitations and duplicate usernames", async () => {

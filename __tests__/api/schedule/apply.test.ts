@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/schedule/apply/route";
 import * as auth from "@/modules/auth/require-auth";
-import * as scheduleCore from "@/modules/schedule/core";
+import { resolveActorScope } from "@/modules/auth/scope";
+import * as scheduleOrchestrator from "@/modules/order/schedule-orchestrator";
 import * as scheduleStore from "@/infra/redis/schedule-store";
-import * as conflictIssueService from "@/modules/order/conflict-issue-service";
 
 vi.mock("@/modules/auth/require-auth", () => ({
   requireAuth: vi.fn(),
@@ -14,8 +14,16 @@ vi.mock("@/modules/auth/require-auth", () => ({
   },
 }));
 
-vi.mock("@/modules/schedule/core", () => ({
-  applyScheduleTransaction: vi.fn(),
+vi.mock("@/modules/auth/scope", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/modules/auth/scope")>();
+  return {
+    ...actual,
+    resolveActorScope: vi.fn(),
+  };
+});
+
+vi.mock("@/modules/order/schedule-orchestrator", () => ({
+  applyScheduleTransactionWithIssues: vi.fn(),
 }));
 
 vi.mock("@/infra/redis/schedule-store", () => ({
@@ -27,14 +35,6 @@ vi.mock("@/infra/redis/schedule-store", () => ({
 
 vi.mock("@/lib/redis", () => ({
   getRedis: vi.fn(),
-}));
-
-vi.mock("@/modules/order/conflict-issue-service", () => ({
-  createIssuesForFailedOrders: vi.fn().mockResolvedValue({
-    created: 0,
-    skippedAsDuplicate: 0,
-    failed: 0,
-  }),
 }));
 
 vi.mock("@/lib/get-time", () => ({
@@ -53,18 +53,18 @@ describe("POST /api/schedule/apply", () => {
       user: { role: "ADMIN", id: "U1" },
     } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
 
-    vi.mocked(scheduleCore.applyScheduleTransaction).mockResolvedValue({
-      failedIds: [],
-    } as unknown as Awaited<
-      ReturnType<typeof scheduleCore.applyScheduleTransaction>
-    >);
+    vi.mocked(resolveActorScope).mockResolvedValue({
+      role: "ADMIN",
+      userId: "U1",
+      factoryIds: ["factory-A1"],
+      productionType: "A",
+      group: "A",
+    });
 
     vi.mocked(
-      conflictIssueService.createIssuesForFailedOrders,
+      scheduleOrchestrator.applyScheduleTransactionWithIssues,
     ).mockResolvedValue({
-      created: 0,
-      skippedAsDuplicate: 0,
-      failed: 0,
+      failedIds: [],
     });
   });
 
@@ -83,15 +83,15 @@ describe("POST /api/schedule/apply", () => {
 
   it("should return 409 if unable to acquire lock (already running)", async () => {
     vi.mocked(scheduleStore.getPreview).mockResolvedValue({
-      type: "Type A",
+      type: "A",
       version: 1,
       config: {},
       result: {},
     });
     vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(1);
-    vi.mocked(scheduleCore.applyScheduleTransaction).mockRejectedValue(
-      new Error("already running"),
-    );
+    vi.mocked(
+      scheduleOrchestrator.applyScheduleTransactionWithIssues,
+    ).mockRejectedValue(new Error("already running"));
 
     const res = await POST(createRequest({ previewId: "valid-123" }));
     expect(res.status).toBe(409);
@@ -101,12 +101,12 @@ describe("POST /api/schedule/apply", () => {
 
   it("should return 409 if version mismatched", async () => {
     vi.mocked(scheduleStore.getPreview).mockResolvedValue({
-      type: "Type A",
+      type: "A",
       version: 1,
       config: {},
       result: {},
     });
-    vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(2); // Mismatched version
+    vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(2);
 
     const res = await POST(createRequest({ previewId: "valid-123" }));
     expect(res.status).toBe(409);
@@ -116,7 +116,7 @@ describe("POST /api/schedule/apply", () => {
 
   it("should apply schedule, increment version, delete preview", async () => {
     const payload = {
-      type: "Type A",
+      type: "A",
       version: 1,
       config: { splittable: true },
       result: { processedOrders: [] },
@@ -127,77 +127,38 @@ describe("POST /api/schedule/apply", () => {
     const res = await POST(createRequest({ previewId: "valid-123" }));
     expect(res.status).toBe(200);
 
-    expect(scheduleCore.applyScheduleTransaction).toHaveBeenCalledWith(
-      payload.type,
-      payload.config,
-      payload.result,
-      "U1",
-    );
-    expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
-      "Type A",
-    );
+    expect(
+      scheduleOrchestrator.applyScheduleTransactionWithIssues,
+    ).toHaveBeenCalledWith({
+      type: payload.type,
+      config: payload.config,
+      result: payload.result,
+      operatorId: "U1",
+      runAt: new Date("2026-05-21T00:00:00Z"),
+    });
+    expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith("A");
     expect(scheduleStore.deletePreview).toHaveBeenCalledWith("valid-123");
   });
 
-  it("should fire-and-forget createIssuesForFailedOrders when there are failed IDs", async () => {
+  it("should return 200 when the orchestrator reports failed order ids", async () => {
     const payload = {
-      type: "Type A",
+      type: "A",
       version: 1,
       config: { splittable: true },
       result: { processedOrders: [] },
     };
     vi.mocked(scheduleStore.getPreview).mockResolvedValue(payload);
     vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(1);
-    vi.mocked(scheduleCore.applyScheduleTransaction).mockResolvedValue({
-      failedIds: ["O1", "O2"],
-    } as unknown as Awaited<
-      ReturnType<typeof scheduleCore.applyScheduleTransaction>
-    >);
-
-    const res = await POST(createRequest({ previewId: "valid-123" }));
-    expect(res.status).toBe(200);
-
-    // Wait a microtask so the fire-and-forget kicks
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(
-      conflictIssueService.createIssuesForFailedOrders,
-    ).toHaveBeenCalledTimes(1);
-    expect(
-      conflictIssueService.createIssuesForFailedOrders,
-    ).toHaveBeenCalledWith({
-      failedOrderIds: ["O1", "O2"],
-      actorId: "U1",
-      runConfig: payload.config,
-      runAt: new Date("2026-05-21T00:00:00Z"),
-      prisma: expect.anything(),
-    });
-  });
-
-  it("should still return 200 if createIssuesForFailedOrders throws", async () => {
-    const payload = {
-      type: "Type A",
-      version: 1,
-      config: { splittable: true },
-      result: { processedOrders: [] },
-    };
-    vi.mocked(scheduleStore.getPreview).mockResolvedValue(payload);
-    vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(1);
-    vi.mocked(scheduleCore.applyScheduleTransaction).mockResolvedValue({
-      failedIds: ["O1"],
-    } as unknown as Awaited<
-      ReturnType<typeof scheduleCore.applyScheduleTransaction>
-    >);
     vi.mocked(
-      conflictIssueService.createIssuesForFailedOrders,
-    ).mockRejectedValueOnce(new Error("issue service failed"));
+      scheduleOrchestrator.applyScheduleTransactionWithIssues,
+    ).mockResolvedValue({
+      failedIds: ["O1", "O2"],
+    });
 
     const res = await POST(createRequest({ previewId: "valid-123" }));
     expect(res.status).toBe(200);
-
-    // Allow the fire-and-forget rejection to settle
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(
+      scheduleOrchestrator.applyScheduleTransactionWithIssues,
+    ).toHaveBeenCalledTimes(1);
   });
 });

@@ -262,7 +262,7 @@ describe("auth-service", () => {
   it("locks an account for 15 minutes after 5 failed login attempts", async () => {
     const { db, users } = createDb();
     await seedActiveUser(db, {
-      username: "sales-A",
+      username: "sales-1",
       email: "sales-a@mail.shangjung.com",
       role: "SALES",
       group: "A",
@@ -271,7 +271,7 @@ describe("auth-service", () => {
     for (let i = 0; i < 4; i++) {
       await expect(
         login(db as never, {
-          username: "sales-A",
+          username: "sales-1",
           password: "wrong-password",
         }),
       ).rejects.toThrow(InvalidCredentialsError);
@@ -279,7 +279,7 @@ describe("auth-service", () => {
 
     await expect(
       login(db as never, {
-        username: "sales-A",
+        username: "sales-1",
         password: "wrong-password",
       }),
     ).rejects.toThrow(AccountLockedError);

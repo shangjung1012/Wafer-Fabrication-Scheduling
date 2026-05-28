@@ -52,6 +52,11 @@ export async function listOrders(
     return findOrders(db, { applicantId: scope.userId, status, keyword });
   }
 
+  if (scope.role === "SUPERADMIN") {
+    const rows = await findOrders(db, { status, keyword });
+    return rows.filter((o) => ["A", "B", "C"].includes(o.type));
+  }
+
   return findOrders(db, { group: getScopeGroup(scope), status, keyword });
 }
 

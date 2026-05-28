@@ -23,6 +23,7 @@ export type AssignmentWithOrderRow = {
   orderIsFixed: boolean;
   orderIsPrioritized: boolean;
   applicantId: string;
+  applicantUsername: string | null;
   lastModifiedById: string | null;
 };
 
@@ -38,7 +39,9 @@ export type VisualizationFilters = {
   factoryIds?: string[]; // takes precedence over factoryId; used for SALES scope
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
-  productionType?: string; // scope-enforced by service layer
+  productionType?: string; // scope-enforced by service layer (single type)
+  /** When set (e.g. SUPERADMIN), limits factories/assignments/capacities to these types. */
+  productionTypes?: string[];
 };
 
 export type SalesAssignmentRow = {
@@ -49,6 +52,7 @@ export type SalesAssignmentRow = {
 export type PendingOrderRow = {
   id: string;
   name: string;
+  type: string;
   status: string;
   quantity: number;
   dueDate: string; // YYYY-MM-DD
@@ -72,9 +76,11 @@ export async function findFactoriesForVisualization(
         : filters.factoryId
           ? { id: filters.factoryId }
           : {}),
-      ...(filters.productionType && !filters.factoryIds
-        ? { productionType: filters.productionType }
-        : {}),
+      ...(filters.productionTypes && !filters.factoryIds
+        ? { productionType: { in: filters.productionTypes } }
+        : filters.productionType && !filters.factoryIds
+          ? { productionType: filters.productionType }
+          : {}),
     },
     select: { id: true, productionType: true, maxCapacity: true },
     orderBy: [{ productionType: "asc" }, { id: "asc" }],
@@ -94,9 +100,11 @@ export async function findAssignmentsForVisualization(
         : filters.factoryId
           ? { factoryId: filters.factoryId }
           : {}),
-      ...(filters.productionType && !filters.factoryIds
-        ? { factory: { productionType: filters.productionType } }
-        : {}),
+      ...(filters.productionTypes && !filters.factoryIds
+        ? { factory: { productionType: { in: filters.productionTypes } } }
+        : filters.productionType && !filters.factoryIds
+          ? { factory: { productionType: filters.productionType } }
+          : {}),
       ...(dateWhere ? { productionDate: dateWhere } : {}),
     },
     select: {
@@ -114,6 +122,7 @@ export async function findAssignmentsForVisualization(
           isPrioritized: true,
           applicantId: true,
           lastModifiedById: true,
+          applicant: { select: { username: true } },
         },
       },
     },
@@ -132,6 +141,7 @@ export async function findAssignmentsForVisualization(
     orderIsFixed: r.order.isFixed,
     orderIsPrioritized: r.order.isPrioritized,
     applicantId: r.order.applicantId,
+    applicantUsername: r.order.applicant.username,
     lastModifiedById: r.order.lastModifiedById,
   }));
 }
@@ -149,9 +159,11 @@ export async function findDailyCapacitiesForVisualization(
         : filters.factoryId
           ? { factoryId: filters.factoryId }
           : {}),
-      ...(filters.productionType && !filters.factoryIds
-        ? { factory: { productionType: filters.productionType } }
-        : {}),
+      ...(filters.productionTypes && !filters.factoryIds
+        ? { factory: { productionType: { in: filters.productionTypes } } }
+        : filters.productionType && !filters.factoryIds
+          ? { factory: { productionType: filters.productionType } }
+          : {}),
       ...(dateWhere ? { date: dateWhere } : {}),
     },
     select: {
@@ -199,6 +211,7 @@ export async function findPendingOrdersForSales(
     select: {
       id: true,
       name: true,
+      type: true,
       status: true,
       quantity: true,
       dueDate: true,
@@ -211,6 +224,7 @@ export async function findPendingOrdersForSales(
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
+    type: r.type,
     status: r.status,
     quantity: r.quantity,
     dueDate: format(r.dueDate, "yyyy-MM-dd"),
@@ -233,28 +247,35 @@ export async function findPendingOrdersForSales(
  */
 export async function findPendingOrdersForAdmin(
   db: PrismaClient,
-  productionType: string,
+  productionType?: string,
+  typesIn?: string[],
 ): Promise<PendingOrderRow[]> {
   const rows = await db.order.findMany({
     where: {
-      type: productionType,
       status: "PENDING",
+      ...(productionType
+        ? { type: productionType }
+        : typesIn
+          ? { type: { in: typesIn } }
+          : {}),
     },
     select: {
       id: true,
       name: true,
+      type: true,
       status: true,
       quantity: true,
       dueDate: true,
       createdAt: true,
       isPrioritized: true,
     },
-    orderBy: { dueDate: "asc" },
+    orderBy: [{ type: "asc" }, { dueDate: "asc" }],
   });
 
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
+    type: r.type,
     status: r.status,
     quantity: r.quantity,
     dueDate: format(r.dueDate, "yyyy-MM-dd"),

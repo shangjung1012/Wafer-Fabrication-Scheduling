@@ -15,7 +15,7 @@
 | POST   | `/api/orders`        | 建立訂單（單筆）                               | SALES              |
 | PUT    | `/api/orders/:id`    | 修改訂單欄位                                   | SALES / ADMIN      |
 | DELETE | `/api/orders`        | 批次軟刪除訂單（body: `{ids:[...]}`）          | ADMIN              |
-| POST   | `/api/orders/import` | 匯入 CSV 批次建立訂單                          | ADMIN / SUPERADMIN |
+| POST   | `/api/orders/import` | 匯入 CSV 批次建立訂單                          | SALES / ADMIN / SUPERADMIN |
 
 ---
 
@@ -66,7 +66,7 @@ PENDING ─┬─► SCHEDULED ─► IN_PRODUCTION ─► COMPLETED
 | 建立訂單     | ✓                               | —                       | —                 |
 | 修改訂單     | ✓ 自己的 PENDING，不能改 status | ✓ 同 group，可改 status | —                 |
 | 刪除訂單     | —                               | ✓                       | —                 |
-| 匯入 CSV     | —                               | ✓                       | ✓                 |
+| 匯入 CSV     | ✓                               | ✓                       | ✓                 |
 
 ---
 
@@ -85,7 +85,7 @@ Next.js 把請求交給 route handler。做三件事：
 從 `Authorization: Bearer <accessToken>` 驗證 JWT 後解析出：
 
 ```ts
-{ user: { id: "sales-A", role: "SALES", username: "sales-A" }, requestId: "..." }
+{ user: { id: "sales-1", role: "SALES", username: "sales-1" }, requestId: "..." }
 ```
 
 ### 3. `modules/order/order-service.ts`（業務邏輯 + 授權）

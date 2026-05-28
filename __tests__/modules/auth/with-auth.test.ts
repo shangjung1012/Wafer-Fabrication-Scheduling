@@ -66,7 +66,7 @@ describe("withAuth", () => {
     const token = await issueAccessToken({
       id: "user-1",
       role: "SALES",
-      username: "sales-A",
+      username: "sales-1",
       sessionId: "session-1",
     });
     const handler = withAuth(async () => {

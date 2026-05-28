@@ -39,6 +39,8 @@ import type {
 } from "@/modules/visualization/types";
 import { logoutClientAuthSession } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
+import { OrderCsvDropZone } from "@/components/orders/OrderCsvDropZone";
+import { importOrdersFromCsv } from "@/components/orders/order-csv";
 import {
   DraggableAssignmentChip,
   DraggablePendingOrderCard,
@@ -97,9 +99,9 @@ function applyPendingIsPrioritizedByOrder(
   });
 }
 
-/** Default window: 10 calendar days starting at anchor (anchor + 9 inclusive). */
+/** Default window: 10 calendar days starting 2 days before anchor (anchor - 2 through anchor + 7). */
 function defaultTimelineRange(anchorDayYmd: string) {
-  const startDate = anchorDayYmd.slice(0, 10);
+  const startDate = toDateStr(addDays(parseISO(anchorDayYmd.slice(0, 10)), -2));
   const endDate = toDateStr(addDays(parseISO(startDate), 9));
   return { startDate, endDate };
 }
@@ -134,6 +136,8 @@ function convertNewScheduleToPreview(args: {
     dueDate?: string | Date;
     name?: string;
     applicantId?: string;
+    applicantUsername?: string | null;
+    applicant?: { username?: string | null };
     lastModifiedById?: string | null;
     assignments?: Array<{
       id?: string;
@@ -160,6 +164,12 @@ function convertNewScheduleToPreview(args: {
   const affectedSet = new Set(affectedOrders);
   const failedSet = new Set(failedOrderIds);
   const orderById = new Map(newSchedule.map((o) => [o.id, o]));
+  const applicantUsernameByOrderId = new Map(
+    (baseTimeline?.timeline ?? []).map((t) => [
+      t.orderId,
+      t.applicantUsername ?? t.applicantId,
+    ]),
+  );
 
   const toIsoDate = (d: string | Date | undefined): string => {
     if (!d) return "";
@@ -199,6 +209,11 @@ function convertNewScheduleToPreview(args: {
         status: (a.status as TimelineItem["status"]) ?? "SCHEDULED",
         dueDate: toIsoDate(order.dueDate),
         applicantId: order.applicantId ?? "",
+        applicantUsername:
+          order.applicantUsername ??
+          order.applicant?.username ??
+          applicantUsernameByOrderId.get(order.id) ??
+          null,
         lastModifiedById: order.lastModifiedById ?? null,
       });
     }
@@ -518,6 +533,7 @@ function DetailPanel({
   myOrderIds,
   etaByOrderId,
   editMode,
+  isSales = false,
   onEditOrder,
   onToggleOrderFixed,
   onToggleOrderPrioritized,
@@ -530,6 +546,8 @@ function DetailPanel({
   etaByOrderId?: Map<string, string>;
   /** When true, show per-order lock (isFixed) toggle for SCHEDULED rows. */
   editMode?: boolean;
+  /** SALES: only own orders get full detail; others see aggregate counts only. */
+  isSales?: boolean;
   onEditOrder: (order: OrderEditorValues) => void;
   onToggleOrderFixed?: (orderId: string, next: boolean) => void;
   onToggleOrderPrioritized?: (orderId: string, next: boolean) => void;
@@ -537,6 +555,18 @@ function DetailPanel({
 }) {
   const myOrderIdSet = new Set(myOrderIds ?? []);
   const myOrderItems = cell.items.filter((i) => myOrderIdSet.has(i.orderId));
+  const otherItems = isSales
+    ? cell.items.filter((i) => !myOrderIdSet.has(i.orderId))
+    : [];
+  const otherOrderCount = new Set(otherItems.map((i) => i.orderId)).size;
+  const visibleConflicts = isSales
+    ? cell.conflicts.filter(
+        (c) =>
+          c.conflictType === "CAPACITY" ||
+          c.orderIds.some((id) => myOrderIdSet.has(id)),
+      )
+    : cell.conflicts;
+  const detailItems = isSales ? myOrderItems : cell.items;
   const fillRatio =
     cell.maxCapacity > 0 ? cell.usedCapacity / cell.maxCapacity : 0;
   const isOverCapacity = fillRatio > 1;
@@ -594,12 +624,12 @@ function DetailPanel({
       </div>
 
       {/* Conflicts */}
-      {cell.conflicts.length > 0 && (
+      {visibleConflicts.length > 0 && (
         <div className="px-5 py-3 border-b border-gray-100 space-y-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
             Conflicts
           </p>
-          {cell.conflicts.map((c, i) => (
+          {visibleConflicts.map((c, i) => (
             <div
               key={i}
               className={`rounded-lg px-3 py-2 text-xs ${c.severity === "ERROR" ? "bg-red-50 text-red-700 border border-red-200" : "bg-orange-50 text-orange-700 border border-orange-200"}`}
@@ -613,13 +643,34 @@ function DetailPanel({
 
       {/* Order list */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          Orders ({cell.items.length})
-        </p>
-        {cell.items.length === 0 && (
-          <p className="text-sm text-gray-400">No assignments on this day.</p>
+        {isSales && otherOrderCount > 0 && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs text-gray-600">
+            <p className="font-semibold text-gray-700">Other orders</p>
+            <p className="mt-1">
+              {otherOrderCount} order{otherOrderCount === 1 ? "" : "s"} (
+              {otherItems.length} assignment
+              {otherItems.length === 1 ? "" : "s"}) in this cell — details are
+              hidden.
+            </p>
+            <p className="mt-1 text-gray-500">
+              Capacity usage above includes all assignments on this day.
+            </p>
+          </div>
         )}
-        {cell.items.map((item) => {
+
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          {isSales
+            ? `My orders (${myOrderItems.length})`
+            : `Orders (${cell.items.length})`}
+        </p>
+        {detailItems.length === 0 && (
+          <p className="text-sm text-gray-400">
+            {isSales
+              ? "None of your orders are scheduled in this cell."
+              : "No assignments on this day."}
+          </p>
+        )}
+        {detailItems.map((item) => {
           const diff = diffByOrderId.get(item.orderId);
           return (
             <div
@@ -646,25 +697,26 @@ function DetailPanel({
                 </span>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={item.status} />
-                  {item.status === "SCHEDULED" && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onEditOrder({
-                          orderId: item.orderId,
-                          name: item.orderName,
-                          quantity: String(item.assignedQuantity),
-                          status: item.status,
-                          dueDate: item.dueDate,
-                          type: factory.productionType,
-                          isPrioritized: item.isPrioritized,
-                        })
-                      }
-                      className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:text-gray-900"
-                    >
-                      Edit
-                    </button>
-                  )}
+                  {item.status === "SCHEDULED" &&
+                    (!isSales || myOrderIdSet.has(item.orderId)) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onEditOrder({
+                            orderId: item.orderId,
+                            name: item.orderName,
+                            quantity: String(item.assignedQuantity),
+                            status: item.status,
+                            dueDate: item.dueDate,
+                            type: factory.productionType,
+                            isPrioritized: item.isPrioritized,
+                          })
+                        }
+                        className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:text-gray-900"
+                      >
+                        Edit
+                      </button>
+                    )}
                 </div>
               </div>
               <div className="text-xs text-gray-500 space-y-0.5">
@@ -688,10 +740,13 @@ function DetailPanel({
                     ) : null}
                   </span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between gap-2">
                   <span>Applicant</span>
-                  <span className="font-medium text-blue-700 font-mono">
-                    {item.applicantId}
+                  <span
+                    className="font-medium text-blue-700 text-right truncate"
+                    title={item.applicantId}
+                  >
+                    {item.applicantUsername ?? item.applicantId ?? "—"}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -775,8 +830,8 @@ function DetailPanel({
         })}
       </div>
 
-      {/* My Orders section (SALES view) */}
-      {myOrderItems.length > 0 && (
+      {/* Legacy SALES ETA strip — admin paths may pass myOrderIds without isSales */}
+      {!isSales && myOrderItems.length > 0 && (
         <div className="px-5 py-4 border-t border-gray-100 space-y-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
             My Orders
@@ -858,6 +913,9 @@ function PendingSidebar({
   onConfirmSplit,
   onUndoSplit,
   pendingOrdersTitle = "My Pending Orders",
+  scheduleTypes,
+  selectedScheduleType,
+  onScheduleTypeChange,
 }: {
   orders: PendingOrderInfo[];
   today: string;
@@ -884,6 +942,10 @@ function PendingSidebar({
   onUndoSplit?: (orderId: string) => void;
   /** SALES: default "My Pending Orders"; ADMIN / SUPERADMIN: "Pending Orders". */
   pendingOrdersTitle?: string;
+  /** SUPERADMIN: A/B/C tabs to filter pending + schedule target type. */
+  scheduleTypes?: readonly string[];
+  selectedScheduleType?: string;
+  onScheduleTypeChange?: (type: string) => void;
 }) {
   const multiSelectEnabled =
     !editMode && Boolean(setSelectedOrderIds && onPreviewSelected);
@@ -1264,6 +1326,33 @@ function PendingSidebar({
             </button>
           )}
         </div>
+        {scheduleTypes &&
+          scheduleTypes.length > 0 &&
+          selectedScheduleType &&
+          onScheduleTypeChange && (
+            <div
+              className="mt-2 flex gap-1"
+              role="tablist"
+              aria-label="Production type"
+            >
+              {scheduleTypes.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="tab"
+                  aria-selected={t === selectedScheduleType}
+                  onClick={() => onScheduleTypeChange(t)}
+                  className={`flex-1 rounded border px-2 py-1 text-[10px] font-semibold transition-colors ${
+                    t === selectedScheduleType
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-gray-200 bg-gray-50 text-gray-600 hover:border-blue-300 hover:text-blue-700"
+                  }`}
+                >
+                  Type {t}
+                </button>
+              ))}
+            </div>
+          )}
       </div>
       {multiSelectEnabled && pending.length > 0 && (
         <div className="px-3 py-2 border-b border-gray-200 bg-white space-y-2">
@@ -1346,6 +1435,7 @@ function OrderFormModal({
   today,
   onClose,
   onSubmit,
+  onCsvImported,
 }: {
   title: string;
   mode: "create" | "edit";
@@ -1354,6 +1444,7 @@ function OrderFormModal({
   today?: string;
   onClose: () => void;
   onSubmit: (values: OrderEditorValues) => Promise<void>;
+  onCsvImported?: () => void;
 }) {
   const [name, setName] = useState(initialValues.name);
   const [quantity, setQuantity] = useState(initialValues.quantity);
@@ -1364,6 +1455,7 @@ function OrderFormModal({
   const [isPrioritized, setIsPrioritized] = useState(
     initialValues.isPrioritized ?? false,
   );
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -1374,6 +1466,31 @@ function OrderFormModal({
     setSubmitting(true);
     setError("");
     try {
+      if (isCreate && csvFile) {
+        const result = await importOrdersFromCsv(csvFile);
+        if (result.successCount === 0) {
+          throw new Error(
+            result.errorList.join("\n") || "No orders were imported.",
+          );
+        }
+        if (result.errorList.length > 0) {
+          const preview = result.errorList.slice(0, 5).join("\n");
+          const more =
+            result.errorList.length > 5
+              ? `\n…+${result.errorList.length - 5} more`
+              : "";
+          setError(
+            `Imported ${result.successCount} order(s). Some rows failed:\n${preview}${more}`,
+          );
+          onCsvImported?.();
+          setCsvFile(null);
+          return;
+        }
+        onCsvImported?.();
+        onClose();
+        return;
+      }
+
       await onSubmit({
         name: name.trim(),
         quantity: quantity.trim(),
@@ -1415,7 +1532,7 @@ function OrderFormModal({
 
         <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 whitespace-pre-wrap">
               {error}
             </div>
           )}
@@ -1509,6 +1626,24 @@ function OrderFormModal({
             </label>
           )}
 
+          {isCreate && (
+            <>
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase tracking-wide">
+                  <span className="bg-white px-2 text-gray-400">or</span>
+                </div>
+              </div>
+              <OrderCsvDropZone
+                file={csvFile}
+                onFileChange={setCsvFile}
+                disabled={submitting}
+              />
+            </>
+          )}
+
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               type="button"
@@ -1522,7 +1657,13 @@ function OrderFormModal({
               disabled={submitting}
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? "Saving…" : mode === "create" ? "Send" : "Save"}
+              {submitting
+                ? csvFile && isCreate
+                  ? "Importing…"
+                  : "Saving…"
+                : mode === "create"
+                  ? "Send"
+                  : "Save"}
             </button>
           </div>
         </form>
@@ -1541,6 +1682,7 @@ function GanttCell({
   hasNewlyPlaced,
   isMyOrder,
   isSales,
+  detailClickable,
   editMode,
   movedAssignmentIds,
   dropDisabled = false,
@@ -1556,6 +1698,8 @@ function GanttCell({
   hasNewlyPlaced: boolean;
   isMyOrder: boolean;
   isSales: boolean;
+  /** SALES: false when the cell has no orders owned by the current user. */
+  detailClickable: boolean;
   editMode: boolean;
   movedAssignmentIds: Set<string>;
   dropDisabled?: boolean;
@@ -1642,105 +1786,116 @@ function GanttCell({
     );
   }
 
+  const cellBodyClass = `w-full h-full flex flex-col items-center justify-end relative transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${hasNewlyPlaced && !isMyOrder ? "ring-2 ring-inset ring-emerald-500" : ""} ${detailClickable ? "cursor-pointer hover:brightness-95" : "cursor-default"}`;
+
+  const cellInner = (
+    <>
+      {/* Conflict marker */}
+      {hasConflict && (
+        <span className="absolute top-1 right-1 text-amber-600">
+          <AlertTriangle
+            className="h-2.5 w-2.5"
+            strokeWidth={2.5}
+            aria-hidden
+          />
+        </span>
+      )}
+
+      {/* Rescheduled marker */}
+      {hasRescheduled && !hasConflict && (
+        <span className="absolute top-1 right-1 text-purple-500">
+          <ArrowDownUp className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+        </span>
+      )}
+      {hasRescheduled && hasConflict && (
+        <span className="absolute top-1 right-4 text-purple-500">
+          <ArrowDownUp className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+        </span>
+      )}
+
+      {/* Newly placed (preview) marker */}
+      {hasNewlyPlaced && (
+        <span
+          className={`absolute ${hasRescheduled || hasConflict ? "top-1 right-7" : "top-1 right-1"} text-emerald-600`}
+        >
+          <Plus className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
+        </span>
+      )}
+
+      {/* Assignment counts: total ×N (lock ×M, crown ×K) */}
+      {cell.items.length > 0 && (
+        <span
+          className="absolute top-1 left-1 text-[9px] font-bold text-gray-500 inline-flex flex-wrap items-center gap-x-1 gap-y-0 max-w-[68px] leading-tight"
+          title={`${totalCount} assignment(s)${fixedScheduledCount > 0 ? `, ${fixedScheduledCount} locked` : ""}${prioritizedScheduledCount > 0 ? `, ${prioritizedScheduledCount} prioritized` : ""}`}
+        >
+          <span>×{totalCount}</span>
+          {(fixedScheduledCount > 0 || prioritizedScheduledCount > 0) && (
+            <span className="inline-flex items-center gap-px">
+              <span>(</span>
+              {fixedScheduledCount > 0 && (
+                <span className="text-gray-700 inline-flex items-center gap-px">
+                  <Lock className="h-2 w-2" aria-hidden />
+                  <span>×{fixedScheduledCount}</span>
+                </span>
+              )}
+              {fixedScheduledCount > 0 && prioritizedScheduledCount > 0 && (
+                <span className="mx-px"> </span>
+              )}
+              {prioritizedScheduledCount > 0 && (
+                <span className="text-amber-600 inline-flex items-center gap-px">
+                  <Crown className="h-2 w-2" aria-hidden />
+                  <span>×{prioritizedScheduledCount}</span>
+                </span>
+              )}
+              <span>)</span>
+            </span>
+          )}
+          {isMyOrder && (
+            <span
+              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600"
+              title="Includes my order"
+              aria-hidden
+            />
+          )}
+        </span>
+      )}
+
+      {/* Capacity bar */}
+      <div className="w-full px-1 pb-1">
+        <div className="w-full h-1 bg-white/60 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full ${barColor}`}
+            style={{ width: `${Math.min(pct, 100)}%` }}
+          />
+        </div>
+        <p
+          className={`text-[9px] font-semibold text-center mt-0.5 ${pct > 100 ? "text-red-600" : "text-gray-500"}`}
+        >
+          {pct}%
+        </p>
+      </div>
+    </>
+  );
+
   return (
     <td className={`w-[72px] min-w-[72px] h-14 p-0 ${tdBorderClass}`}>
-      <button
-        onClick={onClick}
-        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""} ${hasNewlyPlaced && !isMyOrder ? "ring-2 ring-inset ring-emerald-500" : ""}`}
-      >
-        {/* Conflict marker */}
-        {hasConflict && (
-          <span className="absolute top-1 right-1 text-amber-600">
-            <AlertTriangle
-              className="h-2.5 w-2.5"
-              strokeWidth={2.5}
-              aria-hidden
-            />
-          </span>
-        )}
-
-        {/* Rescheduled marker */}
-        {hasRescheduled && !hasConflict && (
-          <span className="absolute top-1 right-1 text-purple-500">
-            <ArrowDownUp
-              className="h-2.5 w-2.5"
-              strokeWidth={2.5}
-              aria-hidden
-            />
-          </span>
-        )}
-        {hasRescheduled && hasConflict && (
-          <span className="absolute top-1 right-4 text-purple-500">
-            <ArrowDownUp
-              className="h-2.5 w-2.5"
-              strokeWidth={2.5}
-              aria-hidden
-            />
-          </span>
-        )}
-
-        {/* Newly placed (preview) marker */}
-        {hasNewlyPlaced && (
-          <span
-            className={`absolute ${hasRescheduled || hasConflict ? "top-1 right-7" : "top-1 right-1"} text-emerald-600`}
-          >
-            <Plus className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
-          </span>
-        )}
-
-        {/* Assignment counts: total ×N (lock ×M, crown ×K) */}
-        {cell.items.length > 0 && (
-          <span
-            className="absolute top-1 left-1 text-[9px] font-bold text-gray-500 inline-flex flex-wrap items-center gap-x-1 gap-y-0 max-w-[68px] leading-tight"
-            title={`${totalCount} assignment(s)${fixedScheduledCount > 0 ? `, ${fixedScheduledCount} locked` : ""}${prioritizedScheduledCount > 0 ? `, ${prioritizedScheduledCount} prioritized` : ""}`}
-          >
-            <span>×{totalCount}</span>
-            {(fixedScheduledCount > 0 || prioritizedScheduledCount > 0) && (
-              <span className="inline-flex items-center gap-px">
-                <span>(</span>
-                {fixedScheduledCount > 0 && (
-                  <span className="text-gray-700 inline-flex items-center gap-px">
-                    <Lock className="h-2 w-2" aria-hidden />
-                    <span>×{fixedScheduledCount}</span>
-                  </span>
-                )}
-                {fixedScheduledCount > 0 && prioritizedScheduledCount > 0 && (
-                  <span className="mx-px"> </span>
-                )}
-                {prioritizedScheduledCount > 0 && (
-                  <span className="text-amber-600 inline-flex items-center gap-px">
-                    <Crown className="h-2 w-2" aria-hidden />
-                    <span>×{prioritizedScheduledCount}</span>
-                  </span>
-                )}
-                <span>)</span>
-              </span>
-            )}
-            {isMyOrder && (
-              <span
-                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600"
-                title="Includes my order"
-                aria-hidden
-              />
-            )}
-          </span>
-        )}
-
-        {/* Capacity bar */}
-        <div className="w-full px-1 pb-1">
-          <div className="w-full h-1 bg-white/60 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full ${barColor}`}
-              style={{ width: `${Math.min(pct, 100)}%` }}
-            />
-          </div>
-          <p
-            className={`text-[9px] font-semibold text-center mt-0.5 ${pct > 100 ? "text-red-600" : "text-gray-500"}`}
-          >
-            {pct}%
-          </p>
+      {detailClickable ? (
+        <button
+          type="button"
+          onClick={onClick}
+          className={cellBodyClass}
+          title={isMyOrder ? "View cell details" : undefined}
+        >
+          {cellInner}
+        </button>
+      ) : (
+        <div
+          className={cellBodyClass}
+          title={isSales ? "This cell has no orders you own" : undefined}
+        >
+          {cellInner}
         </div>
-      </button>
+      )}
     </td>
   );
 }
@@ -1851,11 +2006,19 @@ function NavLinks({
   );
 }
 
+const SCHEDULE_PRODUCTION_TYPES = ["A", "B", "C"] as const;
+
 export default function SchedulePage() {
   const router = useRouter();
   const session = useClientAuthSession();
   const isSales = session?.user.role === "SALES";
-  const productionType = session?.user.group ?? "";
+  const isSuperAdmin = session?.user.role === "SUPERADMIN";
+  const [selectedScheduleType, setSelectedScheduleType] = useState<
+    string | null
+  >(null);
+  const activeScheduleType = isSuperAdmin
+    ? (selectedScheduleType ?? session?.user.group ?? "A")
+    : (session?.user.group ?? "");
   const pathname = usePathname();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -1943,6 +2106,14 @@ export default function SchedulePage() {
     () => new Set(),
   );
 
+  const handleScheduleTypeChange = useCallback((type: string) => {
+    setSelectedScheduleType(type);
+    setSelectedOrderIds(new Set());
+    setPreviewData(null);
+    setPreviewId(null);
+    setPreviewError(null);
+  }, []);
+
   // Fetch timeline data
   useEffect(() => {
     if (session === null) {
@@ -1978,7 +2149,7 @@ export default function SchedulePage() {
 
   // Run schedule handler (applies the selected algorithm directly)
   const handleRunSchedule = async (algorithmOverride?: string) => {
-    if (!productionType) return;
+    if (!activeScheduleType) return;
     const policy = algorithmOverride ?? reschedulePolicy;
     setScheduleStatus("running");
     try {
@@ -1997,7 +2168,7 @@ export default function SchedulePage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ type: productionType, config: baseConfig }),
+        body: JSON.stringify({ type: activeScheduleType, config: baseConfig }),
       });
       if (res.status === 409) {
         setScheduleStatus("conflict");
@@ -2023,7 +2194,7 @@ export default function SchedulePage() {
   };
 
   const handlePreviewSchedule = async (targetOrderIds?: string[]) => {
-    if (!productionType) return;
+    if (!activeScheduleType) return;
     setPreviewLoading(true);
     setPreviewError(null);
     try {
@@ -2043,7 +2214,7 @@ export default function SchedulePage() {
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: productionType,
+          type: activeScheduleType,
           config: baseConfig,
         }),
       });
@@ -2979,14 +3150,19 @@ export default function SchedulePage() {
     setSimMode(nextIsManual); // optimistic update — confirmed by patchSim response
     if (!nextIsManual) {
       patchSim({ isSimulationMode: false });
+      // Snap the date window back to today-2
+      const range = defaultTimelineRange(format(new Date(), "yyyy-MM-dd"));
+      setStartDate(range.startDate);
+      setEndDate(range.endDate);
       return;
     }
 
+    // Always start simulation from the current real date, not a stale previous sim date
     patchSim({
       isSimulationMode: true,
-      simulationDate: simDate
-        ? dateInputToIso(simDate)
-        : dateInputToIso(data?.today ?? format(new Date(), "yyyy-MM-dd")),
+      simulationDate: dateInputToIso(
+        data?.today ?? format(new Date(), "yyyy-MM-dd"),
+      ),
     });
   };
 
@@ -3063,15 +3239,24 @@ export default function SchedulePage() {
     return set;
   }, [effective?.timeline]);
 
-  // Group factories by productionType
+  // Group factories by productionType (A/B/C only; excludes integration-test types)
   const groups = useMemo(() => {
     if (!effective) return [];
     const map = new Map<string, FactoryInfo[]>();
     for (const f of effective.factories) {
+      if (
+        !SCHEDULE_PRODUCTION_TYPES.includes(
+          f.productionType as (typeof SCHEDULE_PRODUCTION_TYPES)[number],
+        )
+      ) {
+        continue;
+      }
       const existing = map.get(f.productionType) ?? [];
       map.set(f.productionType, [...existing, f]);
     }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return SCHEDULE_PRODUCTION_TYPES.filter((t) => map.has(t)).map(
+      (type) => [type, map.get(type)!] as const,
+    );
   }, [effective]);
 
   // Diff lookup: orderId → DiffEntry
@@ -3334,13 +3519,6 @@ export default function SchedulePage() {
         </div>
         {simMode && (
           <>
-            <input
-              type="date"
-              value={simDate}
-              onChange={handleSimDateChange}
-              disabled={simLoading}
-              className="border border-amber-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
-            />
             <button
               type="button"
               onClick={() => stepSimDate(1)}
@@ -3357,11 +3535,16 @@ export default function SchedulePage() {
             >
               +2 hours
             </button>
-            <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-              Custom:{" "}
-              {simDateTime
-                ? simDateTime.substring(0, 16).replace("T", " ")
-                : "—"}
+            <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
+              Custom:
+              <input
+                type="date"
+                value={simDate}
+                onChange={handleSimDateChange}
+                disabled={simLoading}
+                className="bg-transparent border-none outline-none text-amber-700 font-semibold cursor-pointer"
+              />
+              {simDateTime && <span>{simDateTime.substring(11, 16)}</span>}
             </span>
           </>
         )}
@@ -3469,7 +3652,7 @@ export default function SchedulePage() {
                 ) : (
                   <span className="inline-flex items-center gap-1">
                     <Play className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    {`Run (Type ${productionType || "-"})`}
+                    {`Run (Type ${activeScheduleType || "-"})`}
                   </span>
                 )}
               </button>
@@ -3743,7 +3926,13 @@ export default function SchedulePage() {
             )}
             {!isSales && data.adminContext && (
               <PendingSidebar
-                orders={data.adminContext.pendingOrders}
+                orders={
+                  isSuperAdmin
+                    ? data.adminContext.pendingOrders.filter(
+                        (o) => o.type === selectedScheduleType,
+                      )
+                    : data.adminContext.pendingOrders
+                }
                 today={data.today}
                 onEditOrder={(order) => setEditOrder(order)}
                 pendingOrdersTitle="Pending Orders"
@@ -3762,6 +3951,15 @@ export default function SchedulePage() {
                 pendingSplitPlacements={pendingSplitPlacements}
                 onConfirmSplit={handleConfirmSplit}
                 onUndoSplit={handleUndoSplit}
+                scheduleTypes={
+                  isSuperAdmin ? SCHEDULE_PRODUCTION_TYPES : undefined
+                }
+                selectedScheduleType={
+                  isSuperAdmin ? (selectedScheduleType ?? undefined) : undefined
+                }
+                onScheduleTypeChange={
+                  isSuperAdmin ? handleScheduleTypeChange : undefined
+                }
               />
             )}
             <div className="flex-1 overflow-auto">
@@ -3869,6 +4067,7 @@ export default function SchedulePage() {
                                   myOrderIdSet.has(i.orderId),
                                 )
                               : false;
+                            const detailClickable = !isSales || isMyOrder;
 
                             // Edit-mode drop validation: block drops that would
                             // overflow the cell's maxCapacity or push the
@@ -3957,6 +4156,7 @@ export default function SchedulePage() {
                                 hasNewlyPlaced={newlyPlacedCells.has(key)}
                                 isMyOrder={isMyOrder}
                                 isSales={isSales}
+                                detailClickable={detailClickable}
                                 editMode={editMode}
                                 movedAssignmentIds={movedAssignmentIds}
                                 dropDisabled={dropDisabled}
@@ -3983,12 +4183,13 @@ export default function SchedulePage() {
                                         })
                                     : undefined
                                 }
-                                onClick={() =>
+                                onClick={() => {
+                                  if (!detailClickable) return;
                                   setSelectedCell({
                                     factoryId: factory.id,
                                     date,
-                                  })
-                                }
+                                  });
+                                }}
                               />
                             );
                           })}
@@ -4078,6 +4279,7 @@ export default function SchedulePage() {
             myOrderIds={data?.salesContext?.myOrderIds}
             etaByOrderId={etaByOrderId}
             editMode={editMode}
+            isSales={isSales}
             onEditOrder={(order) => setEditOrder(order)}
             onToggleOrderFixed={handleToggleOrderFixed}
             onToggleOrderPrioritized={handleToggleOrderPrioritized}
@@ -4099,6 +4301,12 @@ export default function SchedulePage() {
           today={data?.today}
           onClose={() => setCreateOpen(false)}
           onSubmit={handleCreateOrder}
+          onCsvImported={() => {
+            setCreateOpen(false);
+            setLoading(true);
+            setFetchError(null);
+            setRefreshKey((k) => k + 1);
+          }}
         />
       )}
 

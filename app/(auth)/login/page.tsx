@@ -31,9 +31,9 @@ const QUICK_ACCOUNTS = [
     email: "admin-a1@mail.shangjung.com",
   },
   {
-    label: "Sales A",
-    username: "sales-A",
-    email: "sales-a@mail.shangjung.com",
+    label: "Sales 1",
+    username: "sales-1",
+    email: "sales-1@mail.com",
   },
 ];
 
