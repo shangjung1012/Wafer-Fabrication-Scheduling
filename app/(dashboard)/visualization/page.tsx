@@ -3955,7 +3955,7 @@ export default function SchedulePage() {
                   isSuperAdmin ? SCHEDULE_PRODUCTION_TYPES : undefined
                 }
                 selectedScheduleType={
-                  isSuperAdmin ? selectedScheduleType : undefined
+                  isSuperAdmin ? (selectedScheduleType ?? undefined) : undefined
                 }
                 onScheduleTypeChange={
                   isSuperAdmin ? handleScheduleTypeChange : undefined
