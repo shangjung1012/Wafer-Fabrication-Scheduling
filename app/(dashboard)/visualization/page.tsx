@@ -2986,11 +2986,12 @@ export default function SchedulePage() {
       return;
     }
 
+    // Always start simulation from the current real date, not a stale previous sim date
     patchSim({
       isSimulationMode: true,
-      simulationDate: simDate
-        ? dateInputToIso(simDate)
-        : dateInputToIso(data?.today ?? format(new Date(), "yyyy-MM-dd")),
+      simulationDate: dateInputToIso(
+        data?.today ?? format(new Date(), "yyyy-MM-dd"),
+      ),
     });
   };
 
