@@ -119,6 +119,139 @@ function toDateInputValue(value?: string) {
   }
 }
 
+/** True when calendar month arrows moved but the day-of-month digit stayed the same. */
+function isMonthNavigationOnly(prevYmd: string, nextYmd: string) {
+  try {
+    const n = parseISO(nextYmd);
+    const p = parseISO(prevYmd);
+    return (
+      (n.getUTCFullYear() !== p.getUTCFullYear() ||
+        n.getUTCMonth() !== p.getUTCMonth()) &&
+      n.getUTCDate() === p.getUTCDate()
+    );
+  } catch {
+    return false;
+  }
+}
+
+const DATE_COMMIT_DEBOUNCE_MS = 400;
+
+/**
+ * Date input that commits when the user picks a day, not while browsing months.
+ * Draft updates immediately so the native picker works; commit is debounced and
+ * also wired to the native `change` event. Closing without a commit reverts.
+ */
+function CommittedDateInput({
+  value,
+  onCommit,
+  className,
+  disabled,
+}: {
+  value: string;
+  onCommit: (next: string) => void;
+  className?: string;
+  disabled?: boolean;
+}) {
+  const [draft, setDraft] = useState(value);
+  const focusedRef = useRef(false);
+  const valueOnFocusRef = useRef(value);
+  const committedDuringFocusRef = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onCommitRef = useRef(onCommit);
+  const valueRef = useRef(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+  onCommitRef.current = onCommit;
+  valueRef.current = value;
+
+  useEffect(() => {
+    if (!focusedRef.current) setDraft(value);
+  }, [value]);
+
+  const clearDebounce = useCallback(() => {
+    if (debounceRef.current !== null) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+  }, []);
+
+  const commit = useCallback((next: string) => {
+    if (!next || next === valueRef.current) return;
+    committedDuringFocusRef.current = true;
+    onCommitRef.current(next);
+  }, []);
+
+  const scheduleCommit = useCallback(
+    (next: string) => {
+      clearDebounce();
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
+        if (!focusedRef.current) return;
+        const anchor = valueOnFocusRef.current;
+        if (anchor && isMonthNavigationOnly(anchor, next)) return;
+        commit(next);
+      }, DATE_COMMIT_DEBOUNCE_MS);
+    },
+    [clearDebounce, commit],
+  );
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const handleNativeChange = () => {
+      const next = el.value;
+      clearDebounce();
+      commit(next);
+    };
+    el.addEventListener("change", handleNativeChange);
+    return () => el.removeEventListener("change", handleNativeChange);
+  }, [clearDebounce, commit]);
+
+  useEffect(() => () => clearDebounce(), [clearDebounce]);
+
+  return (
+    <input
+      ref={inputRef}
+      type="date"
+      value={draft}
+      disabled={disabled}
+      className={className}
+      onFocus={() => {
+        focusedRef.current = true;
+        committedDuringFocusRef.current = false;
+        valueOnFocusRef.current = valueRef.current;
+        setDraft(valueRef.current);
+      }}
+      onChange={(e) => {
+        const next = e.target.value;
+        setDraft(next);
+        if (!focusedRef.current || !next) return;
+        scheduleCommit(next);
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+        clearDebounce();
+        if (!committedDuringFocusRef.current) {
+          setDraft(valueRef.current);
+        }
+        committedDuringFocusRef.current = false;
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          clearDebounce();
+          const next = e.currentTarget.value;
+          if (next) commit(next);
+          e.currentTarget.blur();
+        }
+        if (e.key === "Escape") {
+          clearDebounce();
+          setDraft(valueRef.current);
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Preview adapter
 // ---------------------------------------------------------------------------
@@ -3166,13 +3299,22 @@ export default function SchedulePage() {
     });
   };
 
-  const handleSimDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
+  const handleSimDateCommit = (val: string) => {
     setSimDate(val);
-    if (val) {
-      patchSim({ simulationDate: dateInputToIso(val) });
-    }
+    patchSim({ simulationDate: dateInputToIso(val) });
   };
+
+  const handleStartDateCommit = useCallback((val: string) => {
+    setStartDate(val);
+    setLoading(true);
+    setFetchError(null);
+  }, []);
+
+  const handleEndDateCommit = useCallback((val: string) => {
+    setEndDate(val);
+    setLoading(true);
+    setFetchError(null);
+  }, []);
 
   const stepSimDate = (days: number) => {
     const baseStr =
@@ -3537,10 +3679,9 @@ export default function SchedulePage() {
             </button>
             <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
               Custom:
-              <input
-                type="date"
+              <CommittedDateInput
                 value={simDate}
-                onChange={handleSimDateChange}
+                onCommit={handleSimDateCommit}
                 disabled={simLoading}
                 className="bg-transparent border-none outline-none text-amber-700 font-semibold cursor-pointer"
               />
@@ -3563,25 +3704,15 @@ export default function SchedulePage() {
       <div className="flex-none px-6 py-3 border-b border-gray-100 bg-white">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2">
-            <input
-              type="date"
+            <CommittedDateInput
               value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setLoading(true);
-                setFetchError(null);
-              }}
+              onCommit={handleStartDateCommit}
               className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
             />
             <span className="text-gray-400 text-sm">→</span>
-            <input
-              type="date"
+            <CommittedDateInput
               value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setLoading(true);
-                setFetchError(null);
-              }}
+              onCommit={handleEndDateCommit}
               className="text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
             />
           </div>
