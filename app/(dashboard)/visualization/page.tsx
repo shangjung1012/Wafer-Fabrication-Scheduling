@@ -3354,11 +3354,16 @@ export default function SchedulePage() {
             >
               +2 hours
             </button>
-            <span className="text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-              Custom:{" "}
-              {simDateTime
-                ? simDateTime.substring(0, 16).replace("T", " ")
-                : "—"}
+            <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
+              Custom:
+              <input
+                type="date"
+                value={simDate}
+                onChange={handleSimDateChange}
+                disabled={simLoading}
+                className="bg-transparent border-none outline-none text-amber-700 font-semibold cursor-pointer"
+              />
+              {simDateTime && <span>{simDateTime.substring(11, 16)}</span>}
             </span>
           </>
         )}
