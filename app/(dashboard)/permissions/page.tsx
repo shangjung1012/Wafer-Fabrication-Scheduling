@@ -4,7 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { useRouter } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { Mail, RefreshCw, RotateCw, ShieldAlert, UserPlus } from "lucide-react";
+import {
+  CheckCircle2,
+  Mail,
+  RefreshCw,
+  RotateCw,
+  ShieldAlert,
+  UserPlus,
+  X,
+  XCircle,
+} from "lucide-react";
 
 import {
   type ClientAuthSession,
@@ -31,6 +40,11 @@ type InviteForm = {
   email: string;
   role: Role;
   group: string;
+};
+
+type Notice = {
+  kind: "success" | "error";
+  message: string;
 };
 
 const initialForm: InviteForm = {
@@ -128,7 +142,7 @@ export default function PermissionsPage() {
   const [loading, setLoading] = useState<
     "list" | "invite" | `resend:${string}` | null
   >(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   const isSuperAdmin = session?.user.role === "SUPERADMIN";
   const inviteGroup = form.group.trim() || session?.user.group || "";
@@ -148,7 +162,6 @@ export default function PermissionsPage() {
       if (!session) return;
 
       setLoading((current) => current ?? "list");
-      setMessage(null);
 
       try {
         const url = role
@@ -157,7 +170,10 @@ export default function PermissionsPage() {
         const response = await apiFetch(url);
         const result = await parseResponse(response);
         if (!response.ok) {
-          setMessage(`Unable to load users (${result.status})`);
+          setNotice({
+            kind: "error",
+            message: `Unable to load users (${result.status})`,
+          });
           return;
         }
 
@@ -187,12 +203,22 @@ export default function PermissionsPage() {
     return () => window.clearTimeout(timer);
   }, [loadUsers, router, session]);
 
+  useEffect(() => {
+    if (!notice || notice.kind !== "success") return;
+
+    const timer = window.setTimeout(() => {
+      setNotice((current) => (current === notice ? null : current));
+    }, 4200);
+
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
   const handleInvite = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!isSuperAdmin) return;
 
     setLoading("invite");
-    setMessage(null);
+    setNotice(null);
 
     try {
       const response = await apiFetch("/api/users", {
@@ -201,12 +227,17 @@ export default function PermissionsPage() {
       });
       const result = await parseResponse(response);
       if (!response.ok) {
-        setMessage(`Invitation failed (${result.status})`);
+        setNotice({
+          kind: "error",
+          message: `Invitation failed (${result.status})`,
+        });
         return;
       }
 
-      // show a user-facing alert and optimistic list update
-      window.alert(`Invitation sent to ${form.email}.`);
+      setNotice({
+        kind: "success",
+        message: `Invitation sent to ${form.email}.`,
+      });
 
       // attempt to extract created user from response body
       const created = result.body as
@@ -248,7 +279,7 @@ export default function PermissionsPage() {
     if (!isSuperAdmin) return;
 
     setLoading(`resend:${user.id}`);
-    setMessage(null);
+    setNotice(null);
 
     try {
       const response = await apiFetch(
@@ -257,12 +288,17 @@ export default function PermissionsPage() {
       );
       const result = await parseResponse(response);
       if (!response.ok) {
-        setMessage(`Resend failed (${result.status})`);
+        setNotice({
+          kind: "error",
+          message: `Resend failed (${result.status})`,
+        });
         return;
       }
 
-      window.alert(`Invitation resent to ${user.email}.`);
-      setMessage(`Invitation resent to ${user.email}.`);
+      setNotice({
+        kind: "success",
+        message: `Invitation resent to ${user.email}.`,
+      });
       await loadUsers();
     } finally {
       setLoading(null);
@@ -330,6 +366,35 @@ export default function PermissionsPage() {
       leftSectionSurfaceClassName="flex flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
       leftSection={
         <>
+          {notice && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                ...toastStyle,
+                ...(notice.kind === "success"
+                  ? toastSuccessStyle
+                  : toastErrorStyle),
+              }}
+            >
+              {notice.kind === "success" ? (
+                <CheckCircle2 size={18} />
+              ) : (
+                <XCircle size={18} />
+              )}
+              <span style={{ flex: 1 }}>{notice.message}</span>
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                style={toastCloseButtonStyle}
+                aria-label="Dismiss notification"
+                title="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           <section style={panelStyle}>
             <div style={sectionHeaderStyle}>
               <div>
@@ -584,8 +649,6 @@ export default function PermissionsPage() {
               </table>
             </div>
           </section>
-
-          {message && <p style={messageStyle}>{message}</p>}
         </>
       }
       rightSection={<></>}
@@ -762,17 +825,51 @@ const tdStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const messageStyle: React.CSSProperties = {
-  border: "1px solid #cbd5e1",
-  background: "#f1f5f9",
-  borderRadius: 8,
-  padding: 12,
-  margin: "0 0 16px",
-  color: "#1e293b",
-  fontSize: 13,
-};
-
 const mutedTextStyle: React.CSSProperties = {
   color: "#475569",
   fontSize: 14,
+};
+
+const toastStyle: React.CSSProperties = {
+  position: "fixed",
+  top: 24,
+  right: 24,
+  zIndex: 50,
+  minWidth: 280,
+  maxWidth: "min(420px, calc(100vw - 48px))",
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  borderRadius: 8,
+  padding: "12px 12px",
+  boxShadow: "0 16px 40px rgba(15, 23, 42, 0.16)",
+  fontSize: 13,
+  fontWeight: 650,
+  lineHeight: 1.45,
+};
+
+const toastSuccessStyle: React.CSSProperties = {
+  border: "1px solid #86efac",
+  background: "#f0fdf4",
+  color: "#166534",
+};
+
+const toastErrorStyle: React.CSSProperties = {
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#991b1b",
+};
+
+const toastCloseButtonStyle: React.CSSProperties = {
+  width: 24,
+  height: 24,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "0",
+  borderRadius: 6,
+  background: "transparent",
+  color: "inherit",
+  cursor: "pointer",
+  padding: 0,
 };
