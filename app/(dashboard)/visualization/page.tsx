@@ -3338,13 +3338,6 @@ export default function SchedulePage() {
         </div>
         {simMode && (
           <>
-            <input
-              type="date"
-              value={simDate}
-              onChange={handleSimDateChange}
-              disabled={simLoading}
-              className="border border-amber-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
-            />
             <button
               type="button"
               onClick={() => stepSimDate(1)}
