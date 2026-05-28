@@ -2979,6 +2979,10 @@ export default function SchedulePage() {
     setSimMode(nextIsManual); // optimistic update — confirmed by patchSim response
     if (!nextIsManual) {
       patchSim({ isSimulationMode: false });
+      // Snap the date window back to today-2
+      const range = defaultTimelineRange(format(new Date(), "yyyy-MM-dd"));
+      setStartDate(range.startDate);
+      setEndDate(range.endDate);
       return;
     }
 
