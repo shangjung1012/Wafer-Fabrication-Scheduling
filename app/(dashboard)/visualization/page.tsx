@@ -913,6 +913,9 @@ function PendingSidebar({
   onConfirmSplit,
   onUndoSplit,
   pendingOrdersTitle = "My Pending Orders",
+  scheduleTypes,
+  selectedScheduleType,
+  onScheduleTypeChange,
 }: {
   orders: PendingOrderInfo[];
   today: string;
@@ -939,6 +942,10 @@ function PendingSidebar({
   onUndoSplit?: (orderId: string) => void;
   /** SALES: default "My Pending Orders"; ADMIN / SUPERADMIN: "Pending Orders". */
   pendingOrdersTitle?: string;
+  /** SUPERADMIN: A/B/C tabs to filter pending + schedule target type. */
+  scheduleTypes?: readonly string[];
+  selectedScheduleType?: string;
+  onScheduleTypeChange?: (type: string) => void;
 }) {
   const multiSelectEnabled =
     !editMode && Boolean(setSelectedOrderIds && onPreviewSelected);
@@ -1319,6 +1326,33 @@ function PendingSidebar({
             </button>
           )}
         </div>
+        {scheduleTypes &&
+          scheduleTypes.length > 0 &&
+          selectedScheduleType &&
+          onScheduleTypeChange && (
+            <div
+              className="mt-2 flex gap-1"
+              role="tablist"
+              aria-label="Production type"
+            >
+              {scheduleTypes.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="tab"
+                  aria-selected={t === selectedScheduleType}
+                  onClick={() => onScheduleTypeChange(t)}
+                  className={`flex-1 rounded border px-2 py-1 text-[10px] font-semibold transition-colors ${
+                    t === selectedScheduleType
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-gray-200 bg-gray-50 text-gray-600 hover:border-blue-300 hover:text-blue-700"
+                  }`}
+                >
+                  Type {t}
+                </button>
+              ))}
+            </div>
+          )}
       </div>
       {multiSelectEnabled && pending.length > 0 && (
         <div className="px-3 py-2 border-b border-gray-200 bg-white space-y-2">
@@ -1984,11 +2018,17 @@ function NavLinks({
   );
 }
 
+const SCHEDULE_PRODUCTION_TYPES = ["A", "B", "C"] as const;
+
 export default function SchedulePage() {
   const router = useRouter();
   const session = useClientAuthSession();
   const isSales = session?.user.role === "SALES";
-  const productionType = session?.user.group ?? "";
+  const isSuperAdmin = session?.user.role === "SUPERADMIN";
+  const [selectedScheduleType, setSelectedScheduleType] = useState("A");
+  const activeScheduleType = isSuperAdmin
+    ? selectedScheduleType
+    : (session?.user.group ?? "");
   const pathname = usePathname();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -2076,6 +2116,20 @@ export default function SchedulePage() {
     () => new Set(),
   );
 
+  useEffect(() => {
+    if (session?.user.group) {
+      setSelectedScheduleType(session.user.group);
+    }
+  }, [session?.user.group]);
+
+  const handleScheduleTypeChange = useCallback((type: string) => {
+    setSelectedScheduleType(type);
+    setSelectedOrderIds(new Set());
+    setPreviewData(null);
+    setPreviewId(null);
+    setPreviewError(null);
+  }, []);
+
   // Fetch timeline data
   useEffect(() => {
     if (session === null) {
@@ -2111,7 +2165,7 @@ export default function SchedulePage() {
 
   // Run schedule handler (applies the selected algorithm directly)
   const handleRunSchedule = async (algorithmOverride?: string) => {
-    if (!productionType) return;
+    if (!activeScheduleType) return;
     const policy = algorithmOverride ?? reschedulePolicy;
     setScheduleStatus("running");
     try {
@@ -2130,7 +2184,7 @@ export default function SchedulePage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ type: productionType, config: baseConfig }),
+        body: JSON.stringify({ type: activeScheduleType, config: baseConfig }),
       });
       if (res.status === 409) {
         setScheduleStatus("conflict");
@@ -2156,7 +2210,7 @@ export default function SchedulePage() {
   };
 
   const handlePreviewSchedule = async (targetOrderIds?: string[]) => {
-    if (!productionType) return;
+    if (!activeScheduleType) return;
     setPreviewLoading(true);
     setPreviewError(null);
     try {
@@ -2176,7 +2230,7 @@ export default function SchedulePage() {
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: productionType,
+          type: activeScheduleType,
           config: baseConfig,
         }),
       });
@@ -3196,15 +3250,24 @@ export default function SchedulePage() {
     return set;
   }, [effective?.timeline]);
 
-  // Group factories by productionType
+  // Group factories by productionType (A/B/C only; excludes integration-test types)
   const groups = useMemo(() => {
     if (!effective) return [];
     const map = new Map<string, FactoryInfo[]>();
     for (const f of effective.factories) {
+      if (
+        !SCHEDULE_PRODUCTION_TYPES.includes(
+          f.productionType as (typeof SCHEDULE_PRODUCTION_TYPES)[number],
+        )
+      ) {
+        continue;
+      }
       const existing = map.get(f.productionType) ?? [];
       map.set(f.productionType, [...existing, f]);
     }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return SCHEDULE_PRODUCTION_TYPES.filter((t) => map.has(t)).map(
+      (type) => [type, map.get(type)!] as const,
+    );
   }, [effective]);
 
   // Diff lookup: orderId → DiffEntry
@@ -3602,7 +3665,7 @@ export default function SchedulePage() {
                 ) : (
                   <span className="inline-flex items-center gap-1">
                     <Play className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    {`Run (Type ${productionType || "-"})`}
+                    {`Run (Type ${activeScheduleType || "-"})`}
                   </span>
                 )}
               </button>
@@ -3876,7 +3939,13 @@ export default function SchedulePage() {
             )}
             {!isSales && data.adminContext && (
               <PendingSidebar
-                orders={data.adminContext.pendingOrders}
+                orders={
+                  isSuperAdmin
+                    ? data.adminContext.pendingOrders.filter(
+                        (o) => o.type === selectedScheduleType,
+                      )
+                    : data.adminContext.pendingOrders
+                }
                 today={data.today}
                 onEditOrder={(order) => setEditOrder(order)}
                 pendingOrdersTitle="Pending Orders"
@@ -3895,6 +3964,15 @@ export default function SchedulePage() {
                 pendingSplitPlacements={pendingSplitPlacements}
                 onConfirmSplit={handleConfirmSplit}
                 onUndoSplit={handleUndoSplit}
+                scheduleTypes={
+                  isSuperAdmin ? SCHEDULE_PRODUCTION_TYPES : undefined
+                }
+                selectedScheduleType={
+                  isSuperAdmin ? selectedScheduleType : undefined
+                }
+                onScheduleTypeChange={
+                  isSuperAdmin ? handleScheduleTypeChange : undefined
+                }
               />
             )}
             <div className="flex-1 overflow-auto">

@@ -444,7 +444,7 @@ export default function DashboardPage() {
     if (session.user.role === "SALES") {
       return orders.filter((o) => o.applicantId === session.user.id);
     }
-    if (session.user.role === "ADMIN" || session.user.role === "SUPERADMIN") {
+    if (session.user.role === "ADMIN") {
       const g = session.user.group;
       if (g) return orders.filter((o) => o.type === g);
     }

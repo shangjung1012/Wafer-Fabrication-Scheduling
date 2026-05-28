@@ -29,6 +29,8 @@ export type TimelineFilters = {
   endDate?: string;
 };
 
+const STANDARD_PRODUCTION_TYPES = ["A", "B", "C"] as const;
+
 export async function getTimeline(
   ctx: RequestContext,
   db: PrismaClient,
@@ -42,16 +44,22 @@ export async function getTimeline(
 
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
 
-  // Both ADMIN and SUPERADMIN see all factories in their production type
-  const productionType = getScopeGroup(scope);
-  const scopedFilters = { ...filters, productionType };
+  const isSuperAdmin = scope.role === "SUPERADMIN";
+  const productionType = isSuperAdmin ? undefined : getScopeGroup(scope);
+  const scopedFilters = isSuperAdmin
+    ? { ...filters, productionTypes: [...STANDARD_PRODUCTION_TYPES] }
+    : { ...filters, productionType: productionType! };
 
   const [factoryRows, assignmentRows, capacityRows, pendingRows] =
     await Promise.all([
       findFactoriesForVisualization(db, scopedFilters),
       findAssignmentsForVisualization(db, scopedFilters),
       findDailyCapacitiesForVisualization(db, scopedFilters),
-      findPendingOrdersForAdmin(db, productionType),
+      findPendingOrdersForAdmin(
+        db,
+        productionType,
+        isSuperAdmin ? [...STANDARD_PRODUCTION_TYPES] : undefined,
+      ),
     ]);
 
   const factories = mapFactories(factoryRows);
@@ -60,16 +68,7 @@ export async function getTimeline(
   const conflicts = detectConflicts(timeline, capacityRows);
   const today = format(await getTime(), "yyyy-MM-dd");
 
-  const pendingOrders: PendingOrderInfo[] = pendingRows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    status: "PENDING",
-    quantity: r.quantity,
-    dueDate: r.dueDate,
-    createdAt: r.createdAt,
-    risk: calcRisk(r.dueDate, today),
-    isPrioritized: r.isPrioritized,
-  }));
+  const pendingOrders = mapPendingOrders(pendingRows, today);
 
   return {
     factories,
@@ -98,16 +97,7 @@ async function getSalesTimeline(
   const pendingRows = await findPendingOrdersForSales(db, scope.userId);
   const today = format(await getTime(), "yyyy-MM-dd");
 
-  const pendingOrders: PendingOrderInfo[] = pendingRows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    status: "PENDING",
-    quantity: r.quantity,
-    dueDate: r.dueDate,
-    createdAt: r.createdAt,
-    risk: calcRisk(r.dueDate, today),
-    isPrioritized: r.isPrioritized,
-  }));
+  const pendingOrders = mapPendingOrders(pendingRows, today);
 
   if (factoryIds.length === 0) {
     return {
@@ -149,6 +139,23 @@ function calcRisk(dueDate: string, today: string): OrderRisk {
   if (diff < 0) return "OVERDUE";
   if (diff <= 3) return "AT_RISK";
   return "ON_TRACK";
+}
+
+function mapPendingOrders(
+  rows: Awaited<ReturnType<typeof findPendingOrdersForAdmin>>,
+  today: string,
+): PendingOrderInfo[] {
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    type: r.type,
+    status: "PENDING",
+    quantity: r.quantity,
+    dueDate: r.dueDate,
+    createdAt: r.createdAt,
+    risk: calcRisk(r.dueDate, today),
+    isPrioritized: r.isPrioritized,
+  }));
 }
 
 // ---------------------------------------------------------------------------

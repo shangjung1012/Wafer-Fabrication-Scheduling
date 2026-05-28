@@ -442,6 +442,25 @@ describe("listConflictIssues", () => {
       statuses: [],
     });
   });
+
+  it("SUPERADMIN: omits orderType so all production types are listed", async () => {
+    vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
+      role: "SUPERADMIN",
+      userId: "SA1",
+      group: "A",
+    });
+    const superCtx: RequestContext = {
+      user: { id: "SA1", role: "SUPERADMIN", username: "sa-A" },
+      requestId: "req-sa",
+    };
+    await listConflictIssues(superCtx, prisma, {
+      statuses: [conflictRepo.ConflictIssueStatus.OPEN],
+    });
+    expect(findIssuesSpy).toHaveBeenCalledWith(prisma, {
+      statuses: [conflictRepo.ConflictIssueStatus.OPEN],
+    });
+    expect(findIssuesSpy.mock.calls[0][1]).not.toHaveProperty("orderType");
+  });
 });
 
 // ---------------------------------------------------------------------------

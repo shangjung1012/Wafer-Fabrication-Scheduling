@@ -86,7 +86,8 @@ function conflict(message: string): never {
 /**
  * Build DB filters based on the caller's role.
  * SALES  → only issues assigned to them
- * ADMIN / SUPERADMIN → issues for orders in their production type group
+ * ADMIN → issues for orders in their production type group
+ * SUPERADMIN → all types
  */
 async function buildFiltersForRole(
   ctx: RequestContext,
@@ -99,8 +100,10 @@ async function buildFiltersForRole(
 
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
-  const group = getScopeGroup(scope);
-  return { ...extra, orderType: group };
+  if (scope.role === "SUPERADMIN") {
+    return { ...extra };
+  }
+  return { ...extra, orderType: getScopeGroup(scope) };
 }
 
 /**
@@ -122,8 +125,9 @@ async function assertIssueAccess(
 
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
-  const group = getScopeGroup(scope);
-  if (issue.order.type !== group) issueNotFound();
+  if (scope.role !== "SUPERADMIN") {
+    if (issue.order.type !== getScopeGroup(scope)) issueNotFound();
+  }
   return issue;
 }
 
@@ -160,8 +164,9 @@ export async function getConflictIssue(
 
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
-  const group = getScopeGroup(scope);
-  if (issue.orderType !== group) issueNotFound();
+  if (scope.role !== "SUPERADMIN") {
+    if (issue.orderType !== getScopeGroup(scope)) issueNotFound();
+  }
   return issue;
 }
 
@@ -742,8 +747,9 @@ export async function getSuggestions(
   } else {
     requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
     const scope = await resolveActorScope(ctx, db);
-    const group = getScopeGroup(scope);
-    if (issue.orderType !== group) issueNotFound();
+    if (scope.role !== "SUPERADMIN") {
+      if (issue.orderType !== getScopeGroup(scope)) issueNotFound();
+    }
   }
 
   const snapshot = issue.contextSnapshot as {
