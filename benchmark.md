@@ -14,7 +14,7 @@ pnpm benchmark
 
 ---
 
-## 合成負載（與腳本一致）
+## Test Case
 
 
 | 項目              | 設定                                                                                   |
@@ -24,7 +24,7 @@ pnpm benchmark
 | `isPrioritized` | **5%** 機率為 `true`                                                                    |
 | 工廠              | **20** 間；每廠 `maxCapacity` 在 **1000–5000** 間隨機（腳本不區分產品型別，所有廠皆可服務所有訂單）                 |
 | 產能視窗            | 每廠 180 天 × 20 廠 = **3,600** 筆初始 `DailyCapacity`                                      |
-| Phase 2         | 在 Phase 1（`GAP_FILLING`）baseline 後再注入 2,000 筆 `NEW_*` 訂單，分別以三種 `reschedulePolicy` 重跑 |
+| Phase 2         | 在 Phase 1（`GAP_FILLING`）baseline 後再注入 2,000 筆 `NEW_`* 訂單，分別以三種 `reschedulePolicy` 重跑 |
 
 
 ---
@@ -183,7 +183,7 @@ Phase 2 在相同 baseline 下比較：
 | 指標                           | 意義                                            |
 | ---------------------------- | --------------------------------------------- |
 | Total scheduled / failed     | 該 policy 跑完後總排入／總失敗                           |
-| New orders (/2000)           | `NEW_`* 中變為 `SCHEDULED` 的筆數                   |
+| New orders (/2000)           | `NEW`_* 中變為 `SCHEDULED` 的筆數                   |
 | Retained (/Phase1 scheduled) | Phase 1 已 `SCHEDULED` 且 Phase 2 仍 `SCHEDULED` |
 | Displaced                    | Phase 1 已 `SCHEDULED` 但 Phase 2 變 `FAILED`    |
 | Stability                    | Retained / Phase1 scheduled                   |

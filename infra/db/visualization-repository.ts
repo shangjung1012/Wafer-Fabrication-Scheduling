@@ -23,6 +23,7 @@ export type AssignmentWithOrderRow = {
   orderIsFixed: boolean;
   orderIsPrioritized: boolean;
   applicantId: string;
+  applicantUsername: string | null;
   lastModifiedById: string | null;
 };
 
@@ -114,6 +115,7 @@ export async function findAssignmentsForVisualization(
           isPrioritized: true,
           applicantId: true,
           lastModifiedById: true,
+          applicant: { select: { username: true } },
         },
       },
     },
@@ -132,6 +134,7 @@ export async function findAssignmentsForVisualization(
     orderIsFixed: r.order.isFixed,
     orderIsPrioritized: r.order.isPrioritized,
     applicantId: r.order.applicantId,
+    applicantUsername: r.order.applicant.username,
     lastModifiedById: r.order.lastModifiedById,
   }));
 }

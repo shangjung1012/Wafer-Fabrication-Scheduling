@@ -27,6 +27,8 @@ export type TimelineItem = {
   status: AssignmentStatus;
   dueDate: string; // YYYY-MM-DD
   applicantId: string;
+  /** SALES login name (e.g. sales-1); preferred for display over applicantId. */
+  applicantUsername: string | null;
   lastModifiedById: string | null;
 };
 

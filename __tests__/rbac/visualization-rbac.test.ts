@@ -24,9 +24,9 @@ const ctx = (
   requestId: "test",
 });
 
-const salesA = ctx("sales-A", "SALES");
-const salesB = ctx("sales-B", "SALES");
-const salesC = ctx("sales-C", "SALES");
+const sales1 = ctx("sales-1", "SALES");
+const sales2 = ctx("sales-2", "SALES");
+const sales3 = ctx("sales-3", "SALES");
 const adminA1 = ctx("admin-A1", "ADMIN");
 const adminB1 = ctx("admin-B1", "ADMIN");
 const superAdminA = ctx("sa-A", "SUPERADMIN");
@@ -35,18 +35,18 @@ const superAdminB = ctx("sa-B", "SUPERADMIN");
 const FILTERS = { startDate: "2026-05-10", endDate: "2026-05-23" };
 
 describe("Visualization RBAC", () => {
-  it("SALES sales-A → 成功取得資料並附 salesContext", async () => {
-    const data = await getTimeline(salesA, prisma, FILTERS);
+  it("SALES sales-1 → 成功取得資料並附 salesContext", async () => {
+    const data = await getTimeline(sales1, prisma, FILTERS);
     expect(data.salesContext).toBeDefined();
     expect(Array.isArray(data.salesContext!.myOrderIds)).toBe(true);
     expect(Array.isArray(data.salesContext!.pendingOrders)).toBe(true);
   });
 
-  it("SALES sales-A → 只看到有自己訂單排程的工廠", async () => {
-    const data = await getTimeline(salesA, prisma, FILTERS);
+  it("SALES sales-1 → 只看到有自己訂單排程的工廠", async () => {
+    const data = await getTimeline(sales1, prisma, FILTERS);
     if (data.salesContext!.myOrderIds.length === 0) return; // no scheduled orders in seed range
     const myOrderIdSet = new Set(data.salesContext!.myOrderIds);
-    // All factories in the view must contain at least one of sales-A's assignments
+    // All factories in the view must contain at least one of sales-1's assignments
     const factoryIdsWithMyOrders = new Set(
       data.timeline
         .filter((t) => myOrderIdSet.has(t.orderId))
@@ -57,11 +57,11 @@ describe("Visualization RBAC", () => {
     }
   });
 
-  it("SALES sales-A / sales-B / sales-C 的 myOrderIds 兩兩不重疊", async () => {
+  it("SALES sales-1 / sales-2 / sales-3 的 myOrderIds 兩兩不重疊", async () => {
     const [dataA, dataB, dataC] = await Promise.all([
-      getTimeline(salesA, prisma, FILTERS),
-      getTimeline(salesB, prisma, FILTERS),
-      getTimeline(salesC, prisma, FILTERS),
+      getTimeline(sales1, prisma, FILTERS),
+      getTimeline(sales2, prisma, FILTERS),
+      getTimeline(sales3, prisma, FILTERS),
     ]);
     const aIds = new Set(dataA.salesContext!.myOrderIds);
     const bIds = new Set(dataB.salesContext!.myOrderIds);

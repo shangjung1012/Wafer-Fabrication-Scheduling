@@ -43,7 +43,7 @@ type SeedUser = {
   username: string;
   email: string;
   role: UserRole;
-  group: string;
+  group: string | null;
 };
 
 type SeedFactory = {
@@ -108,15 +108,18 @@ function buildUsers(): SeedUser[] {
         group: t,
       });
     }
+  }
 
+  for (let i = 1; i <= 10; i++) {
     users.push({
-      id: `sales-${t}`,
-      username: `sales-${t}`,
-      email: `sales-${t.toLowerCase()}@mail.com`,
+      id: `sales-${i}`,
+      username: `sales-${i}`,
+      email: `sales-${i}@mail.com`,
       role: "SALES",
-      group: t,
+      group: null,
     });
   }
+
   return users;
 }
 
@@ -139,8 +142,11 @@ function buildFactories(): SeedFactory[] {
 function generateOrdersAndAssignments() {
   let orderCounter = 1;
   let asgnCounter = 1;
-  /** Every seeded order rotates applicant across these three SALES users (even split; not tied to order type). */
-  const SALES_APPLICANTS = ["sales-A", "sales-B", "sales-C"] as const;
+  /** Every seeded order rotates applicant across sales-1 … sales-10 (even split; not tied to order type). */
+  const SALES_APPLICANTS = Array.from(
+    { length: 10 },
+    (_, i) => `sales-${i + 1}`,
+  );
   let salesRoundRobin = 0;
   const orders: SeedOrder[] = [];
   const assignments: SeedAssignment[] = [];
@@ -163,7 +169,7 @@ function generateOrdersAndAssignments() {
       type,
       quantity,
       dueDate,
-      applicantId: SALES_APPLICANTS[salesRoundRobin++ % 3],
+      applicantId: SALES_APPLICANTS[salesRoundRobin++ % SALES_APPLICANTS.length],
       status,
       isFixed,
       isPrioritized,
@@ -316,10 +322,15 @@ async function cleanupStaleState() {
   const ordersDeleted = await prisma.order.deleteMany({});
   const capacitiesDeleted = await prisma.dailyCapacity.deleteMany({});
 
+  const legacySalesDeleted = await prisma.user.deleteMany({
+    where: { id: { in: ["sales-A", "sales-B", "sales-C"] } },
+  });
+
   console.log(
     `  Deleted: events=${eventsDeleted.count}, comments=${commentsDeleted.count}, ` +
       `issues=${issuesDeleted.count}, assignments=${assignmentsDeleted.count}, ` +
-      `orders=${ordersDeleted.count}, capacities=${capacitiesDeleted.count}`,
+      `orders=${ordersDeleted.count}, capacities=${capacitiesDeleted.count}, ` +
+      `legacySales=${legacySalesDeleted.count}`,
   );
 }
 
@@ -537,12 +548,12 @@ async function main() {
   );
   console.log("");
   console.log(
-    "Seed orders: applicantId rotates sales-A → sales-B → sales-C (equal counts; order type is independent).",
+    "Seed orders: applicantId rotates sales-1 → … → sales-10 (equal counts; order type is independent).",
   );
   console.log("Login examples:");
   console.log("  username sa-A      password Password123!");
   console.log("  username admin-A1  password Password123!");
-  console.log("  username sales-A / sales-B / sales-C   password Password123!");
+  console.log("  username sales-1 … sales-10   password Password123!");
 }
 
 main()

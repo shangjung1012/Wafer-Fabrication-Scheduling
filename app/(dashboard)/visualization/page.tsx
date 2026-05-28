@@ -39,6 +39,8 @@ import type {
 } from "@/modules/visualization/types";
 import { logoutClientAuthSession } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
+import { OrderCsvDropZone } from "@/components/orders/OrderCsvDropZone";
+import { importOrdersFromCsv } from "@/components/orders/order-csv";
 import {
   DraggableAssignmentChip,
   DraggablePendingOrderCard,
@@ -134,6 +136,8 @@ function convertNewScheduleToPreview(args: {
     dueDate?: string | Date;
     name?: string;
     applicantId?: string;
+    applicantUsername?: string | null;
+    applicant?: { username?: string | null };
     lastModifiedById?: string | null;
     assignments?: Array<{
       id?: string;
@@ -160,6 +164,12 @@ function convertNewScheduleToPreview(args: {
   const affectedSet = new Set(affectedOrders);
   const failedSet = new Set(failedOrderIds);
   const orderById = new Map(newSchedule.map((o) => [o.id, o]));
+  const applicantUsernameByOrderId = new Map(
+    (baseTimeline?.timeline ?? []).map((t) => [
+      t.orderId,
+      t.applicantUsername ?? t.applicantId,
+    ]),
+  );
 
   const toIsoDate = (d: string | Date | undefined): string => {
     if (!d) return "";
@@ -199,6 +209,11 @@ function convertNewScheduleToPreview(args: {
         status: (a.status as TimelineItem["status"]) ?? "SCHEDULED",
         dueDate: toIsoDate(order.dueDate),
         applicantId: order.applicantId ?? "",
+        applicantUsername:
+          order.applicantUsername ??
+          order.applicant?.username ??
+          applicantUsernameByOrderId.get(order.id) ??
+          null,
         lastModifiedById: order.lastModifiedById ?? null,
       });
     }
@@ -518,6 +533,7 @@ function DetailPanel({
   myOrderIds,
   etaByOrderId,
   editMode,
+  isSales = false,
   onEditOrder,
   onToggleOrderFixed,
   onToggleOrderPrioritized,
@@ -530,6 +546,8 @@ function DetailPanel({
   etaByOrderId?: Map<string, string>;
   /** When true, show per-order lock (isFixed) toggle for SCHEDULED rows. */
   editMode?: boolean;
+  /** SALES: only own orders get full detail; others see aggregate counts only. */
+  isSales?: boolean;
   onEditOrder: (order: OrderEditorValues) => void;
   onToggleOrderFixed?: (orderId: string, next: boolean) => void;
   onToggleOrderPrioritized?: (orderId: string, next: boolean) => void;
@@ -537,6 +555,18 @@ function DetailPanel({
 }) {
   const myOrderIdSet = new Set(myOrderIds ?? []);
   const myOrderItems = cell.items.filter((i) => myOrderIdSet.has(i.orderId));
+  const otherItems = isSales
+    ? cell.items.filter((i) => !myOrderIdSet.has(i.orderId))
+    : [];
+  const otherOrderCount = new Set(otherItems.map((i) => i.orderId)).size;
+  const visibleConflicts = isSales
+    ? cell.conflicts.filter(
+        (c) =>
+          c.conflictType === "CAPACITY" ||
+          c.orderIds.some((id) => myOrderIdSet.has(id)),
+      )
+    : cell.conflicts;
+  const detailItems = isSales ? myOrderItems : cell.items;
   const fillRatio =
     cell.maxCapacity > 0 ? cell.usedCapacity / cell.maxCapacity : 0;
   const isOverCapacity = fillRatio > 1;
@@ -594,12 +624,12 @@ function DetailPanel({
       </div>
 
       {/* Conflicts */}
-      {cell.conflicts.length > 0 && (
+      {visibleConflicts.length > 0 && (
         <div className="px-5 py-3 border-b border-gray-100 space-y-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
             Conflicts
           </p>
-          {cell.conflicts.map((c, i) => (
+          {visibleConflicts.map((c, i) => (
             <div
               key={i}
               className={`rounded-lg px-3 py-2 text-xs ${c.severity === "ERROR" ? "bg-red-50 text-red-700 border border-red-200" : "bg-orange-50 text-orange-700 border border-orange-200"}`}
@@ -613,13 +643,34 @@ function DetailPanel({
 
       {/* Order list */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          Orders ({cell.items.length})
-        </p>
-        {cell.items.length === 0 && (
-          <p className="text-sm text-gray-400">No assignments on this day.</p>
+        {isSales && otherOrderCount > 0 && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs text-gray-600">
+            <p className="font-semibold text-gray-700">Other orders</p>
+            <p className="mt-1">
+              {otherOrderCount} order{otherOrderCount === 1 ? "" : "s"} (
+              {otherItems.length} assignment
+              {otherItems.length === 1 ? "" : "s"}) in this cell — details are
+              hidden.
+            </p>
+            <p className="mt-1 text-gray-500">
+              Capacity usage above includes all assignments on this day.
+            </p>
+          </div>
         )}
-        {cell.items.map((item) => {
+
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          {isSales
+            ? `My orders (${myOrderItems.length})`
+            : `Orders (${cell.items.length})`}
+        </p>
+        {detailItems.length === 0 && (
+          <p className="text-sm text-gray-400">
+            {isSales
+              ? "None of your orders are scheduled in this cell."
+              : "No assignments on this day."}
+          </p>
+        )}
+        {detailItems.map((item) => {
           const diff = diffByOrderId.get(item.orderId);
           return (
             <div
@@ -646,7 +697,8 @@ function DetailPanel({
                 </span>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={item.status} />
-                  {item.status === "SCHEDULED" && (
+                  {item.status === "SCHEDULED" &&
+                    (!isSales || myOrderIdSet.has(item.orderId)) && (
                     <button
                       type="button"
                       onClick={() =>
@@ -688,10 +740,13 @@ function DetailPanel({
                     ) : null}
                   </span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between gap-2">
                   <span>Applicant</span>
-                  <span className="font-medium text-blue-700 font-mono">
-                    {item.applicantId}
+                  <span
+                    className="font-medium text-blue-700 text-right truncate"
+                    title={item.applicantId}
+                  >
+                    {item.applicantUsername ?? item.applicantId ?? "—"}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -775,8 +830,8 @@ function DetailPanel({
         })}
       </div>
 
-      {/* My Orders section (SALES view) */}
-      {myOrderItems.length > 0 && (
+      {/* Legacy SALES ETA strip — admin paths may pass myOrderIds without isSales */}
+      {!isSales && myOrderItems.length > 0 && (
         <div className="px-5 py-4 border-t border-gray-100 space-y-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
             My Orders
@@ -1346,6 +1401,7 @@ function OrderFormModal({
   today,
   onClose,
   onSubmit,
+  onCsvImported,
 }: {
   title: string;
   mode: "create" | "edit";
@@ -1354,6 +1410,7 @@ function OrderFormModal({
   today?: string;
   onClose: () => void;
   onSubmit: (values: OrderEditorValues) => Promise<void>;
+  onCsvImported?: () => void;
 }) {
   const [name, setName] = useState(initialValues.name);
   const [quantity, setQuantity] = useState(initialValues.quantity);
@@ -1364,6 +1421,7 @@ function OrderFormModal({
   const [isPrioritized, setIsPrioritized] = useState(
     initialValues.isPrioritized ?? false,
   );
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -1374,6 +1432,31 @@ function OrderFormModal({
     setSubmitting(true);
     setError("");
     try {
+      if (isCreate && csvFile) {
+        const result = await importOrdersFromCsv(csvFile);
+        if (result.successCount === 0) {
+          throw new Error(
+            result.errorList.join("\n") || "No orders were imported.",
+          );
+        }
+        if (result.errorList.length > 0) {
+          const preview = result.errorList.slice(0, 5).join("\n");
+          const more =
+            result.errorList.length > 5
+              ? `\n…+${result.errorList.length - 5} more`
+              : "";
+          setError(
+            `Imported ${result.successCount} order(s). Some rows failed:\n${preview}${more}`,
+          );
+          onCsvImported?.();
+          setCsvFile(null);
+          return;
+        }
+        onCsvImported?.();
+        onClose();
+        return;
+      }
+
       await onSubmit({
         name: name.trim(),
         quantity: quantity.trim(),
@@ -1415,7 +1498,7 @@ function OrderFormModal({
 
         <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 whitespace-pre-wrap">
               {error}
             </div>
           )}
@@ -1509,6 +1592,24 @@ function OrderFormModal({
             </label>
           )}
 
+          {isCreate && (
+            <>
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase tracking-wide">
+                  <span className="bg-white px-2 text-gray-400">or</span>
+                </div>
+              </div>
+              <OrderCsvDropZone
+                file={csvFile}
+                onFileChange={setCsvFile}
+                disabled={submitting}
+              />
+            </>
+          )}
+
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               type="button"
@@ -1522,7 +1623,13 @@ function OrderFormModal({
               disabled={submitting}
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? "Saving…" : mode === "create" ? "Send" : "Save"}
+              {submitting
+                ? csvFile && isCreate
+                  ? "Importing…"
+                  : "Saving…"
+                : mode === "create"
+                  ? "Send"
+                  : "Save"}
             </button>
           </div>
         </form>
@@ -1541,6 +1648,7 @@ function GanttCell({
   hasNewlyPlaced,
   isMyOrder,
   isSales,
+  detailClickable,
   editMode,
   movedAssignmentIds,
   dropDisabled = false,
@@ -1556,6 +1664,8 @@ function GanttCell({
   hasNewlyPlaced: boolean;
   isMyOrder: boolean;
   isSales: boolean;
+  /** SALES: false when the cell has no orders owned by the current user. */
+  detailClickable: boolean;
   editMode: boolean;
   movedAssignmentIds: Set<string>;
   dropDisabled?: boolean;
@@ -1642,12 +1752,10 @@ function GanttCell({
     );
   }
 
-  return (
-    <td className={`w-[72px] min-w-[72px] h-14 p-0 ${tdBorderClass}`}>
-      <button
-        onClick={onClick}
-        className={`w-full h-full flex flex-col items-center justify-end relative cursor-pointer hover:brightness-95 transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${isMyOrder ? "ring-2 ring-inset ring-blue-500" : ""} ${hasNewlyPlaced && !isMyOrder ? "ring-2 ring-inset ring-emerald-500" : ""}`}
-      >
+  const cellBodyClass = `w-full h-full flex flex-col items-center justify-end relative transition-all ${bg} group ${isSales && !isMyOrder ? "opacity-60" : ""} ${hasNewlyPlaced && !isMyOrder ? "ring-2 ring-inset ring-emerald-500" : ""} ${detailClickable ? "cursor-pointer hover:brightness-95" : "cursor-default"}`;
+
+  const cellInner = (
+    <>
         {/* Conflict marker */}
         {hasConflict && (
           <span className="absolute top-1 right-1 text-amber-600">
@@ -1740,7 +1848,32 @@ function GanttCell({
             {pct}%
           </p>
         </div>
-      </button>
+    </>
+  );
+
+  return (
+    <td className={`w-[72px] min-w-[72px] h-14 p-0 ${tdBorderClass}`}>
+      {detailClickable ? (
+        <button
+          type="button"
+          onClick={onClick}
+          className={cellBodyClass}
+          title={isMyOrder ? "View cell details" : undefined}
+        >
+          {cellInner}
+        </button>
+      ) : (
+        <div
+          className={cellBodyClass}
+          title={
+            isSales
+              ? "This cell has no orders you own"
+              : undefined
+          }
+        >
+          {cellInner}
+        </div>
+      )}
     </td>
   );
 }
@@ -3869,6 +4002,7 @@ export default function SchedulePage() {
                                   myOrderIdSet.has(i.orderId),
                                 )
                               : false;
+                            const detailClickable = !isSales || isMyOrder;
 
                             // Edit-mode drop validation: block drops that would
                             // overflow the cell's maxCapacity or push the
@@ -3957,6 +4091,7 @@ export default function SchedulePage() {
                                 hasNewlyPlaced={newlyPlacedCells.has(key)}
                                 isMyOrder={isMyOrder}
                                 isSales={isSales}
+                                detailClickable={detailClickable}
                                 editMode={editMode}
                                 movedAssignmentIds={movedAssignmentIds}
                                 dropDisabled={dropDisabled}
@@ -3983,12 +4118,13 @@ export default function SchedulePage() {
                                         })
                                     : undefined
                                 }
-                                onClick={() =>
+                                onClick={() => {
+                                  if (!detailClickable) return;
                                   setSelectedCell({
                                     factoryId: factory.id,
                                     date,
-                                  })
-                                }
+                                  });
+                                }}
                               />
                             );
                           })}
@@ -4078,6 +4214,7 @@ export default function SchedulePage() {
             myOrderIds={data?.salesContext?.myOrderIds}
             etaByOrderId={etaByOrderId}
             editMode={editMode}
+            isSales={isSales}
             onEditOrder={(order) => setEditOrder(order)}
             onToggleOrderFixed={handleToggleOrderFixed}
             onToggleOrderPrioritized={handleToggleOrderPrioritized}
@@ -4099,6 +4236,12 @@ export default function SchedulePage() {
           today={data?.today}
           onClose={() => setCreateOpen(false)}
           onSubmit={handleCreateOrder}
+          onCsvImported={() => {
+            setCreateOpen(false);
+            setLoading(true);
+            setFetchError(null);
+            setRefreshKey((k) => k + 1);
+          }}
         />
       )}
 

@@ -181,6 +181,7 @@ function mapTimeline(
     status: a.status as TimelineItem["status"],
     dueDate: a.orderDueDate,
     applicantId: a.applicantId,
+    applicantUsername: a.applicantUsername,
     lastModifiedById: a.lastModifiedById,
   }));
 }

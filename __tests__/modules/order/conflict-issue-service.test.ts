@@ -391,7 +391,7 @@ describe("listConflictIssues", () => {
 
   it("SALES: passes assigneeId plus caller-supplied statuses to the repository", async () => {
     const salesCtx: RequestContext = {
-      user: { id: "SALES1", role: "SALES", username: "sales-A" },
+      user: { id: "SALES1", role: "SALES", username: "sales-1" },
       requestId: "req-s",
     };
     await listConflictIssues(salesCtx, prisma, {
@@ -505,7 +505,7 @@ describe("acceptProposal — OCC", () => {
   }
 
   const salesCtx: RequestContext = {
-    user: { id: "SALES1", role: "SALES", username: "sales-A" },
+    user: { id: "SALES1", role: "SALES", username: "sales-1" },
     requestId: "req-1",
   };
 

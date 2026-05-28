@@ -170,7 +170,7 @@ function SetPasswordContent() {
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               autoComplete="username"
-              placeholder="sales-A"
+              placeholder="sales-1"
               style={inputStyle}
             />
           </label>
