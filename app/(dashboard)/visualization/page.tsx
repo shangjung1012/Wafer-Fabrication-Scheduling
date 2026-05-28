@@ -97,9 +97,9 @@ function applyPendingIsPrioritizedByOrder(
   });
 }
 
-/** Default window: 10 calendar days starting at anchor (anchor + 9 inclusive). */
+/** Default window: 10 calendar days starting 2 days before anchor (anchor - 2 through anchor + 7). */
 function defaultTimelineRange(anchorDayYmd: string) {
-  const startDate = anchorDayYmd.slice(0, 10);
+  const startDate = toDateStr(addDays(parseISO(anchorDayYmd.slice(0, 10)), -2));
   const endDate = toDateStr(addDays(parseISO(startDate), 9));
   return { startDate, endDate };
 }
