@@ -30,7 +30,7 @@ describe("GET /api/conflict-issues", () => {
     vi.clearAllMocks();
     vi.mocked(requireAuth).mockResolvedValue({
       requestId: "test-req",
-      user: { id: "user-1", role: "SALES", username: "sales-A" },
+      user: { id: "user-1", role: "SALES", username: "sales-1" },
     });
     vi.mocked(conflictIssueService.listConflictIssues).mockResolvedValue([]);
   });

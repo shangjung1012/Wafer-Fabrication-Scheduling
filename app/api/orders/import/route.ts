@@ -1,7 +1,7 @@
 /**
  * app/api/orders/import/route.ts
  *
- * POST /api/orders/import  — bulk import orders from a CSV file (ADMIN only)
+ * POST /api/orders/import  — bulk import orders from a CSV file (SALES / ADMIN / SUPERADMIN)
  *
  * Expected CSV columns: name, type, dueDate, quantity
  */
@@ -23,7 +23,10 @@ import {
   requireRole,
 } from "@/modules/auth/rbac";
 import { createOrder } from "@/infra/db/order-repository";
+import { createOrderService } from "@/modules/order/order-service";
 import { prisma } from "@/lib/prisma";
+import { getTime } from "@/lib/get-time";
+import { format } from "date-fns";
 
 // ---------------------------------------------------------------------------
 // POST /api/orders/import
@@ -32,7 +35,9 @@ import { prisma } from "@/lib/prisma";
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireAuth(req);
-    requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
+    requireRole(ctx, ["SALES", "ADMIN", "SUPERADMIN"]);
+
+    const todayStr = format(await getTime(), "yyyy-MM-dd");
 
     const form = await req.formData();
     const file = form.get("file");
@@ -93,14 +98,25 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
+      if (format(parsedDueDate, "yyyy-MM-dd") < todayStr) {
+        errorList.push(`Row ${rowNum}: due date cannot be in the past.`);
+        continue;
+      }
+
       try {
-        const order = await createOrder(prisma, {
+        const orderInput = {
           name: name.trim(),
           type: type.trim(),
           dueDate: parsedDueDate,
           quantity,
-          applicantId: ctx.user.id,
-        });
+        };
+        const order =
+          ctx.user.role === "SALES"
+            ? await createOrderService(ctx, prisma, orderInput)
+            : await createOrder(prisma, {
+                ...orderInput,
+                applicantId: ctx.user.id,
+              });
         successes.push(order);
       } catch (rowErr) {
         const e = rowErr as { message?: string };

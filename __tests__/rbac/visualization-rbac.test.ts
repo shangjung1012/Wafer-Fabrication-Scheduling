@@ -24,9 +24,9 @@ const ctx = (
   requestId: "test",
 });
 
-const salesA = ctx("sales-A", "SALES");
-const salesB = ctx("sales-B", "SALES");
-const salesC = ctx("sales-C", "SALES");
+const sales1 = ctx("sales-1", "SALES");
+const sales2 = ctx("sales-2", "SALES");
+const sales3 = ctx("sales-3", "SALES");
 const adminA1 = ctx("admin-A1", "ADMIN");
 const adminB1 = ctx("admin-B1", "ADMIN");
 const superAdminA = ctx("sa-A", "SUPERADMIN");
@@ -35,18 +35,18 @@ const superAdminB = ctx("sa-B", "SUPERADMIN");
 const FILTERS = { startDate: "2026-05-10", endDate: "2026-05-23" };
 
 describe("Visualization RBAC", () => {
-  it("SALES sales-A → 成功取得資料並附 salesContext", async () => {
-    const data = await getTimeline(salesA, prisma, FILTERS);
+  it("SALES sales-1 → 成功取得資料並附 salesContext", async () => {
+    const data = await getTimeline(sales1, prisma, FILTERS);
     expect(data.salesContext).toBeDefined();
     expect(Array.isArray(data.salesContext!.myOrderIds)).toBe(true);
     expect(Array.isArray(data.salesContext!.pendingOrders)).toBe(true);
   });
 
-  it("SALES sales-A → 只看到有自己訂單排程的工廠", async () => {
-    const data = await getTimeline(salesA, prisma, FILTERS);
+  it("SALES sales-1 → 只看到有自己訂單排程的工廠", async () => {
+    const data = await getTimeline(sales1, prisma, FILTERS);
     if (data.salesContext!.myOrderIds.length === 0) return; // no scheduled orders in seed range
     const myOrderIdSet = new Set(data.salesContext!.myOrderIds);
-    // All factories in the view must contain at least one of sales-A's assignments
+    // All factories in the view must contain at least one of sales-1's assignments
     const factoryIdsWithMyOrders = new Set(
       data.timeline
         .filter((t) => myOrderIdSet.has(t.orderId))
@@ -57,11 +57,11 @@ describe("Visualization RBAC", () => {
     }
   });
 
-  it("SALES sales-A / sales-B / sales-C 的 myOrderIds 兩兩不重疊", async () => {
+  it("SALES sales-1 / sales-2 / sales-3 的 myOrderIds 兩兩不重疊", async () => {
     const [dataA, dataB, dataC] = await Promise.all([
-      getTimeline(salesA, prisma, FILTERS),
-      getTimeline(salesB, prisma, FILTERS),
-      getTimeline(salesC, prisma, FILTERS),
+      getTimeline(sales1, prisma, FILTERS),
+      getTimeline(sales2, prisma, FILTERS),
+      getTimeline(sales3, prisma, FILTERS),
     ]);
     const aIds = new Set(dataA.salesContext!.myOrderIds);
     const bIds = new Set(dataB.salesContext!.myOrderIds);
@@ -95,25 +95,49 @@ describe("Visualization RBAC", () => {
     expect(data.timeline.every((t) => factoryIds.has(t.factoryId))).toBe(true);
   });
 
-  it("SUPERADMIN sa-A → 只看到 Type A 工廠，不含 B/C", async () => {
+  const SEED_FACTORY_IDS = [
+    "factory-A1",
+    "factory-A2",
+    "factory-A3",
+    "factory-B1",
+    "factory-B2",
+    "factory-B3",
+    "factory-C1",
+    "factory-C2",
+    "factory-C3",
+  ] as const;
+
+  it("SUPERADMIN sa-A → 看到全部 Type A/B/C 種子工廠", async () => {
     const data = await getTimeline(superAdminA, prisma, FILTERS);
     const ids = data.factories.map((f) => f.id);
-    expect(ids).toEqual(
-      expect.arrayContaining(["factory-A1", "factory-A2", "factory-A3"]),
-    );
-    expect(ids.every((id) => id.startsWith("factory-A"))).toBe(true);
+    expect(ids).toEqual(expect.arrayContaining([...SEED_FACTORY_IDS]));
+    expect(
+      SEED_FACTORY_IDS.every((id) => ids.includes(id)),
+    ).toBe(true);
+    expect(
+      ids.some((id) => id.startsWith("factory-B") || id.startsWith("factory-C")),
+    ).toBe(true);
   });
 
-  it("SUPERADMIN sa-B → 只看到 Type B 工廠，不含 A/C", async () => {
+  it("SUPERADMIN sa-B → 同樣看到 A/B/C 種子工廠", async () => {
     const data = await getTimeline(superAdminB, prisma, FILTERS);
     const ids = data.factories.map((f) => f.id);
-    expect(ids).toEqual(
-      expect.arrayContaining(["factory-B1", "factory-B2", "factory-B3"]),
-    );
-    expect(ids.every((id) => id.startsWith("factory-B"))).toBe(true);
+    expect(ids).toEqual(expect.arrayContaining([...SEED_FACTORY_IDS]));
   });
 
-  it("SUPERADMIN sa-A 的 timeline 不含 Type B/C 的訂單", async () => {
+  it("SUPERADMIN sa-A 的 adminContext.pendingOrders 含多個 type", async () => {
+    const data = await getTimeline(superAdminA, prisma, FILTERS);
+    const pending = data.adminContext?.pendingOrders ?? [];
+    const types = new Set(pending.map((o) => o.type));
+    if (pending.length >= 2) {
+      expect(types.size).toBeGreaterThan(1);
+    }
+    for (const o of pending) {
+      expect(o.type).toMatch(/^[ABC]$/);
+    }
+  });
+
+  it("SUPERADMIN sa-A 的 timeline 僅含回傳工廠的 assignment", async () => {
     const data = await getTimeline(superAdminA, prisma, FILTERS);
     const factoryIds = new Set(data.factories.map((f) => f.id));
     expect(data.timeline.every((t) => factoryIds.has(t.factoryId))).toBe(true);

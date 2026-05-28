@@ -113,7 +113,7 @@
 | 檔案                                | 測試重點                                                   |
 | --------------------------------- | ------------------------------------------------------ |
 | `rbac/order-rbac.test.ts`         | 訂單生命週期與 **scope 隔離**（多角色流程）。                           |
-| `rbac/visualization-rbac.test.ts` | 時間軸／視覺化：`myOrderIds`、ADMIN 廠別範圍等（含 sales-A/B/C 兩兩不重疊）。 |
+| `rbac/visualization-rbac.test.ts` | 時間軸／視覺化：`myOrderIds`、ADMIN 廠別範圍等（含 sales-1/2/3 兩兩不重疊）。 |
 
 
 ---

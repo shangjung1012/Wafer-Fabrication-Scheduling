@@ -161,6 +161,34 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-CA");
 }
 
+function toDateOnlyUtc(dateStr: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  return new Date(dateStr).toISOString().slice(0, 10);
+}
+
+function addDaysToDateOnly(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Earliest selectable date for sales delay proposals (strictly after current due date). */
+function minSalesDelayDueDate(orderDueDate: string, today?: string): string {
+  const dayAfterDue = addDaysToDateOnly(toDateOnlyUtc(orderDueDate), 1);
+  if (!today) return dayAfterDue;
+  return dayAfterDue > today ? dayAfterDue : today;
+}
+
+function isValidSalesDelayDueDate(
+  orderDueDate: string,
+  newDueDate: string,
+  today?: string,
+): boolean {
+  if (newDueDate <= toDateOnlyUtc(orderDueDate)) return false;
+  if (today && newDueDate < today) return false;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -421,12 +449,16 @@ function ReplyBox({
   issueNumber,
   issueId,
   orderUpdatedAt,
+  orderDueDate,
+  currentUserRole,
   issueStatus,
   onSubmit,
 }: {
   issueNumber: number;
   issueId: string;
   orderUpdatedAt: string;
+  orderDueDate: string;
+  currentUserRole: Role;
   issueStatus: string;
   onSubmit: () => void;
 }) {
@@ -440,6 +472,14 @@ function ReplyBox({
   const [error, setError] = useState<string | null>(null);
 
   const isClosed = issueStatus === "RESOLVED" || issueStatus === "CLOSED";
+  const isSales = currentUserRole === "SALES";
+  const salesDelayMinDate = isSales
+    ? minSalesDelayDueDate(
+        orderDueDate,
+        new Date().toISOString().slice(0, 10),
+      )
+    : undefined;
+  const currentDueDateOnly = toDateOnlyUtc(orderDueDate);
 
   void issueId;
 
@@ -464,6 +504,20 @@ function ReplyBox({
       } else if (proposalKind === "DELAY_DUE_DATE") {
         if (!newDueDate) {
           setError("Please select a new due date.");
+          setSubmitting(false);
+          return;
+        }
+        if (
+          isSales &&
+          !isValidSalesDelayDueDate(
+            orderDueDate,
+            newDueDate,
+            new Date().toISOString().slice(0, 10),
+          )
+        ) {
+          setError(
+            `New due date must be after ${currentDueDateOnly} and cannot be in the past.`,
+          );
           setSubmitting(false);
           return;
         }
@@ -640,18 +694,25 @@ function ReplyBox({
             )}
 
             {proposalKind === "DELAY_DUE_DATE" && (
-              <input
-                type="date"
-                value={newDueDate}
-                onChange={(e) => setNewDueDate(e.target.value)}
-                style={{
-                  marginTop: 8,
-                  padding: "4px 8px",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 6,
-                  fontSize: 13,
-                }}
-              />
+              <div style={{ marginTop: 8 }}>
+                <input
+                  type="date"
+                  value={newDueDate}
+                  min={salesDelayMinDate}
+                  onChange={(e) => setNewDueDate(e.target.value)}
+                  style={{
+                    padding: "4px 8px",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 6,
+                    fontSize: 13,
+                  }}
+                />
+                {isSales && (
+                  <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
+                    Must be after current due date ({currentDueDateOnly}).
+                  </p>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -1449,6 +1510,8 @@ export function IssueDetailPanel({
                   issueNumber={issue.number}
                   issueId={issue.id}
                   orderUpdatedAt={issue.orderUpdatedAt}
+                  orderDueDate={issue.orderDueDate}
+                  currentUserRole={role}
                   issueStatus={issue.status}
                   onSubmit={() => void fetchIssue()}
                 />

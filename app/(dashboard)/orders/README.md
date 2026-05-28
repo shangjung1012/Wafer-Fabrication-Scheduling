@@ -14,7 +14,7 @@
 | ---------- | ---------- | -------------- |
 | `sa-A`     | SUPERADMIN | `Password123!` |
 | `admin-A1` | ADMIN      | `Password123!` |
-| `sales-A`  | SALES      | `Password123!` |
+| `sales-1`  | SALES      | `Password123!` |
 
 登入後再進 `/orders`。頁面會使用登入取得的 JWT access token 呼叫 API，並依目前帳號角色隱藏沒有權限的操作區塊。
 
@@ -29,7 +29,7 @@ UI 只顯示該角色實際有權限的 endpoint，不會顯示沒有權的（�
 | Create Order    | ✓     | —     | —          |
 | Update Order    | ✓     | ✓     | —          |
 | Delete Orders   | —     | ✓     | —          |
-| Import CSV      | —     | ✓     | ✓          |
+| Import CSV      | ✓     | ✓     | ✓          |
 | List Requests   | ✓     | ✓     | ✓          |
 | Create Request  | ✓     | —     | —          |
 | Update Request  | ✓     | —     | —          |
@@ -85,7 +85,7 @@ Update Order 對 SALES 和 ADMIN 顯示的欄位也不同：SALES 沒有 Status 
 - **Order IDs**：逗號分隔的 UUID 列表，例如 `id1, id2, id3`
 - 軟刪除，status 改成 `CANCELLED`，不是真正刪掉
 
-### Import CSV（ADMIN / SUPERADMIN）
+### Import CSV（SALES / ADMIN / SUPERADMIN）
 
 - 選 `.csv` 檔案，點 Send
 - CSV 格式：`name,type,dueDate,quantity`

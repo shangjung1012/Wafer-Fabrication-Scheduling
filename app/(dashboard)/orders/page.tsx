@@ -9,6 +9,8 @@ import {
   type ClientAuthSession,
 } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
+import { OrderCsvDropZone } from "@/components/orders/OrderCsvDropZone";
+import { importOrdersFromCsv } from "@/components/orders/order-csv";
 
 type Role = ClientAuthSession["user"]["role"];
 
@@ -336,7 +338,8 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 // ---------------------------------------------------------------------------
 // Role-access matrix
 //
-// SALES:      List Orders, Get Order, Create Order, Update Order (no status)
+// SALES:      List Orders, Get Order, Create Order, Update Order (no status),
+//             Import CSV
 //
 // ADMIN:      List Orders, Get Order, Update Order (with status), Delete Orders,
 //             Import CSV
@@ -386,10 +389,26 @@ export default function OrdersPage() {
   const [createType, setCreateType] = useState("A");
   const [createDueDate, setCreateDueDate] = useState("2026-12-31");
   const [createQty, setCreateQty] = useState("100");
+  const [createCsvFile, setCreateCsvFile] = useState<File | null>(null);
   const [createResult, setCreateResult] = useState<unknown>(null);
   const [createStatus, setCreateStatus] = useState("");
 
   const doCreateOrder = useCallback(async () => {
+    if (createCsvFile) {
+      try {
+        const result = await importOrdersFromCsv(createCsvFile);
+        setCreateResult(result);
+        setCreateStatus(result.successCount > 0 ? "200" : "400");
+        if (result.successCount > 0) setCreateCsvFile(null);
+      } catch (err) {
+        setCreateResult({
+          message: err instanceof Error ? err.message : "Import failed",
+        });
+        setCreateStatus("400");
+      }
+      return;
+    }
+
     const res = await apiFetch("/api/orders", {
       method: "POST",
       body: JSON.stringify({
@@ -401,7 +420,7 @@ export default function OrdersPage() {
     });
     setCreateResult(await res.json());
     setCreateStatus(`${res.status}`);
-  }, [createName, createType, createDueDate, createQty]);
+  }, [createName, createType, createDueDate, createQty, createCsvFile]);
 
   // ---- Update Order ----
   const [updateId, setUpdateId] = useState("");
@@ -609,7 +628,7 @@ export default function OrdersPage() {
         {isSales && (
           <span>
             As <strong>SALES</strong>: view orders, create &amp; edit your own
-            orders.
+            orders, import CSV.
           </span>
         )}
         {isAdmin && (
@@ -692,6 +711,12 @@ export default function OrdersPage() {
             value={createQty}
             onChange={(e) => setCreateQty(e.target.value)}
           />
+          <div style={{ margin: "12px 0" }}>
+            <OrderCsvDropZone
+              file={createCsvFile}
+              onFileChange={setCreateCsvFile}
+            />
+          </div>
           <Btn onClick={doCreateOrder}>Send</Btn>
           {createStatus && (
             <span style={{ marginLeft: 8, fontSize: 12, color: "#334155" }}>
