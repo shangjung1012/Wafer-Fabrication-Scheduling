@@ -336,6 +336,41 @@ export async function findOpenIssueByOrderId(
   });
 }
 
+/**
+ * Batch version: find open issues for multiple orders at once.
+ * Returns a Map<orderId, issue | null> matching the semantics of
+ * findOpenIssueByOrderId (most recent issue per order). Orders
+ * with no open issue get null.
+ */
+export async function findOpenIssuesByOrderIds(
+  db: PrismaClient,
+  orderIds: string[],
+): Promise<Map<string, { id: string; status: ConflictIssueStatus } | null>> {
+  if (orderIds.length === 0) return new Map();
+  const issues = await db.conflictIssue.findMany({
+    where: {
+      orderId: { in: orderIds },
+      status: {
+        in: [ConflictIssueStatus.OPEN, ConflictIssueStatus.IN_DISCUSSION],
+      },
+    },
+    select: { id: true, status: true, orderId: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+  const result = new Map<
+    string,
+    { id: string; status: ConflictIssueStatus } | null
+  >(orderIds.map((id) => [id, null]));
+  const seen = new Set<string>();
+  for (const issue of issues) {
+    if (!seen.has(issue.orderId)) {
+      seen.add(issue.orderId);
+      result.set(issue.orderId, { id: issue.id, status: issue.status });
+    }
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------

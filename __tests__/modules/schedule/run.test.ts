@@ -9,7 +9,9 @@ import * as core from "@/modules/schedule/core";
 
 vi.mock("@/modules/schedule/core", () => ({
   prepareSchedulingData: vi.fn(),
-  _applyScheduleTransaction: vi.fn(),
+  _applyScheduleTransaction: vi
+    .fn()
+    .mockResolvedValue({ failedIds: [], emailsToDispatch: [] }),
 }));
 
 vi.mock("@/infra/redis/schedule-store", () => ({

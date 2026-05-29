@@ -45,7 +45,9 @@ export async function executeDailyStateAdvancement(
     // 1. Fetch assignments to update with minimal payload
     const assignmentsToComplete = await tx.orderAssignment.findMany({
       where: {
-        status: AssignmentStatus.IN_PRODUCTION,
+        status: {
+          in: [AssignmentStatus.IN_PRODUCTION, AssignmentStatus.SCHEDULED],
+        },
         completionDate: { lte: currentDate },
       },
       select: { id: true, orderId: true },
@@ -55,6 +57,7 @@ export async function executeDailyStateAdvancement(
       where: {
         status: AssignmentStatus.SCHEDULED,
         productionDate: { lte: currentDate },
+        completionDate: { gt: currentDate },
       },
       select: { id: true, orderId: true },
     });
@@ -127,6 +130,15 @@ export async function executeDailyStateAdvancement(
       await tx.order.updateMany({
         where: { id: { in: orderIdsToStart } },
         data: { status: OrderStatus.IN_PRODUCTION },
+      });
+    }
+
+    // Atomically upsert system state so simulation time never desyncs from order states
+    if (patch) {
+      await tx.systemState.upsert({
+        where: { id: "global" },
+        create: { id: "global", ...patch },
+        update: patch,
       });
     }
   });

@@ -99,14 +99,18 @@ describe("POST /api/schedule/apply", () => {
     expect(data.message).toMatch(/already running/);
   });
 
-  it("should return 409 if version mismatched", async () => {
+  it("should return 409 if version mismatched (bubbled from core)", async () => {
     vi.mocked(scheduleStore.getPreview).mockResolvedValue({
       type: "A",
       version: 1,
       config: {},
       result: {},
     });
-    vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(2);
+    vi.mocked(
+      scheduleOrchestrator.applyScheduleTransactionWithIssues,
+    ).mockRejectedValue(
+      new Error("Schedule environment has changed. Please preview again."),
+    );
 
     const res = await POST(createRequest({ previewId: "valid-123" }));
     expect(res.status).toBe(409);
@@ -122,7 +126,6 @@ describe("POST /api/schedule/apply", () => {
       result: { processedOrders: [] },
     };
     vi.mocked(scheduleStore.getPreview).mockResolvedValue(payload);
-    vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(1);
 
     const res = await POST(createRequest({ previewId: "valid-123" }));
     expect(res.status).toBe(200);
@@ -135,9 +138,9 @@ describe("POST /api/schedule/apply", () => {
       result: payload.result,
       operatorId: "U1",
       runAt: new Date("2026-05-21T00:00:00Z"),
+      expectedVersion: payload.version,
+      previewId: "valid-123",
     });
-    expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith("A");
-    expect(scheduleStore.deletePreview).toHaveBeenCalledWith("valid-123");
   });
 
   it("should return 200 when the orchestrator reports failed order ids", async () => {

@@ -16,10 +16,19 @@ import {
 } from "@/infra/db/assignment-repository";
 import {
   createDailyCapacities,
-  updateDailyCapacityById,
+  bulkUpdateDailyCapacities,
 } from "@/infra/db/capacity-repository";
 import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
-import { withScheduleLock } from "@/infra/redis/schedule-store";
+import {
+  withScheduleLock,
+  getScheduleVersion,
+  incrementScheduleVersion,
+  deletePreview,
+} from "@/infra/redis/schedule-store";
+import {
+  createIssuesForFailedOrdersTx,
+  prepareIssueCreationPrep,
+} from "@/modules/order/conflict-issue-service";
 import { calculateMinimumStartDate } from "@/modules/schedule/validation-utils";
 
 export async function prepareSchedulingData(
@@ -121,7 +130,10 @@ export async function _applyScheduleTransaction(
   config: SchedulingConfig,
   strategyResult: StrategyResult,
   operatorId: string = "system-user",
-): Promise<{ failedIds: string[] }> {
+): Promise<{
+  failedIds: string[];
+  emailsToDispatch: Array<() => Promise<void>>;
+}> {
   const scheduledIds = strategyResult.processedOrders
     .filter((o) => o.status === OrderStatus.SCHEDULED)
     .map((o) => o.id);
@@ -129,6 +141,9 @@ export async function _applyScheduleTransaction(
   const failedIds = strategyResult.processedOrders
     .filter((o) => o.status === OrderStatus.FAILED)
     .map((o) => o.id);
+
+  let deferredEmails: Array<() => Promise<void>> = [];
+  let affectedFactoryTypes: Set<string> = new Set();
 
   await prisma.$transaction(async (tx) => {
     const db = tx as unknown as PrismaClient;
@@ -158,14 +173,43 @@ export async function _applyScheduleTransaction(
 
     await createDailyCapacities(db, strategyResult.newCapacities);
 
-    for (const cap of strategyResult.updatedCapacities) {
-      await updateDailyCapacityById(db, cap.id, cap.curCapacity);
-    }
+    affectedFactoryTypes = await bulkUpdateDailyCapacities(
+      db,
+      strategyResult.updatedCapacities,
+    );
 
     await createAssignments(db, strategyResult.newAssignments);
+
+    // Atomically create conflict issues for any orders that failed scheduling
+    // Prep runs INSIDE the transaction, after capacity updates, so the snapshot
+    // reflects post-schedule available capacity. Batch queries (not N+1) keep it fast.
+    if (failedIds.length > 0) {
+      const prep = await prepareIssueCreationPrep(
+        db,
+        failedIds,
+        operatorId,
+        config,
+        new Date(),
+        true,
+      );
+      const { emailsToDispatch } = await createIssuesForFailedOrdersTx(
+        db,
+        failedIds,
+        operatorId,
+        config,
+        new Date(),
+        prep,
+      );
+      deferredEmails = emailsToDispatch;
+    }
   });
 
-  return { failedIds };
+  // Increment schedule versions outside the transaction (no Redis while holding DB connection)
+  for (const factoryType of affectedFactoryTypes) {
+    await incrementScheduleVersion(factoryType);
+  }
+
+  return { failedIds, emailsToDispatch: deferredEmails };
 }
 
 export async function applyScheduleTransaction(
@@ -173,8 +217,31 @@ export async function applyScheduleTransaction(
   config: SchedulingConfig,
   strategyResult: StrategyResult,
   operatorId: string = "system-user",
-): Promise<{ failedIds: string[] }> {
+  expectedVersion?: number,
+  previewId?: string,
+): Promise<{
+  failedIds: string[];
+  emailsToDispatch: Array<() => Promise<void>>;
+}> {
   return withScheduleLock(type, async () => {
-    return _applyScheduleTransaction(type, config, strategyResult, operatorId);
+    if (expectedVersion !== undefined) {
+      const currentVersion = await getScheduleVersion(type);
+      if (expectedVersion !== currentVersion) {
+        throw new Error(
+          "Schedule environment has changed. Please preview again.",
+        );
+      }
+    }
+    const result = await _applyScheduleTransaction(
+      type,
+      config,
+      strategyResult,
+      operatorId,
+    );
+    if (expectedVersion !== undefined && previewId !== undefined) {
+      await incrementScheduleVersion(type);
+      await deletePreview(previewId);
+    }
+    return result;
   });
 }

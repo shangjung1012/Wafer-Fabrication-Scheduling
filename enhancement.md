@@ -34,10 +34,10 @@
 - **原因**：當接受某項提案時，舊版程式在 `staleOtherProposals` 內使用迴圈逐筆更新其他留言的狀態為 `STALE`。這會產生多筆獨立的資料庫更新操作 (N+1 寫入問題)。
 - **修改**：將所有的更新操作先收集為陣列，再使用 Prisma 的 `$transaction` 包裝執行。確保所有狀態更新在單一資料庫交易內完成，減少網路來回時間並提升寫入效能。
 
-## 7. 背景任務平行化處理 (Conflict Issue Service)
+## 7. 徹底消除 N+1 批次讀取 (Conflict Issue Service)
 
-- **原因**：在 `createIssuesForFailedOrders` 中，系統使用循序的 `for` 迴圈逐一處理排程失敗的訂單。若同時有大量訂單失敗，循序處理會導致長時間的阻塞，並產生大量的 N+1 循序讀取。
-- **修改**：將循序迴圈改為分批平行處理 (Chunked Parallel Processing)。將每 5 筆訂單分為一組，利用 `Promise.all` 同時執行。在提升處理吞吐量的同時，也能保護資料庫連線池避免被瞬間大量請求耗盡。
+- **原因**：在 `createIssuesForFailedOrders` 中，系統使用循序的 `for` 迴圈逐一處理排程失敗的訂單。若同時有大量訂單失敗，循序處理會導致長時間的阻塞，並產生大量的 N+1 循序讀取。每筆失敗訂單會觸發 4 次獨立的資料庫查詢 (訂單、工廠、競爭訂單、開放中的 Issue)。
+- **修改**：將循序迴圈內的查詢全數提取為批次查詢。現在 `prepareIssueCreationPrep` 僅執行 4 次批次查詢 (`findMany` with `in`)，無論失敗訂單數量多寡。資料在記憶體中按訂單過濾並組合，不再需要平行處理或 Chunked Pipeline。
 
 ## 8. 確保衝突訂單建立之效能與資料一致性 (Atomicity & Bulk Insert)
 
@@ -45,4 +45,29 @@
 - **修改**：
   - **單一連線交易**：將整個 Chunk 處理邏輯包裝進單一的 `prisma.$transaction`，改以順序處理記憶體計算，保證整個批次同生共死 (Atomicity)，且每個 Chunk 只佔用一條資料庫連線。
   - **批次寫入 (Bulk Insert)**：消滅了迴圈內的獨立 `create` 操作，將資料在記憶體中整理為陣列後，透過單次 `createMany` 批次寫入資料庫，最大化網路傳輸效率與寫入效能。
-  - **延遲副作用 (Deferred Side-effects)**：將寄送 Email 的行為封裝為 Thunks，等待資料庫交易安全 `commit` 之後才觸發，避免因 Email 寄送錯誤導致資料庫 Rollback。
+  - **延遲副作用 (Deferred Side-effects)**：將寄送 Email 的行為封裝為 Thunks，等待資料庫交易安全 `commit` 之後才觸發，避免因 Email 寄送錯誤導致資料庫 Rollback。透過 `queueMicrotask` 延遲 `.map()` 執行，確保 HTTP Response 在主執行緒阻塞之前回傳，前端不會被 Email 發送延遲卡住。
+
+## 9. 每日更新邏輯加強
+
+- **原因**：一次加一天不會出問題，一次推進多天就是出現錯誤的更新邏輯。
+- **修改**：修改判斷邏輯，很簡單的修正。
+
+## 10. 嚴格原子性與快照正確性 (Conflict Issue Service + core.ts)
+
+- **原因**：FAILED訂單產生，但對應ConflictIssue產生是另一個任務，有時會出現沒有產生的資料汙染。此外，ConflictIssue 的 contextSnapshot 中的 `totalAvailableInWindow` 記錄的是排程前的剩餘產能（18000），而非排程後的真實可用產能（200），導致前台顯示「訂單量 2500 無法裝入 18000 的產能」的不合理訊息。
+- **修改**：
+  - **嚴格原子性**：把函式嚴格包裝在一起，確保排程apply的時候可以讓FAILED跟對應的衝突物件一起產生，或至少一起失敗。
+  - **快照時機修正**：將 `prepareIssueCreationPrep` 的呼叫從 Transaction 外部移入 Transaction 內部，放在所有產能更新（`bulkUpdateDailyCapacities`、`createAssignments`）之後執行。確保 snapshot 中的 `totalAvailableInWindow` 反映的是排程後的剩餘產能，讓 deficit 計算合理。
+  - **重構測試**：修正整合測試 (`auto-issue-creation.test.ts`) 與單元測試，不再使用冗餘的 API 呼叫來檢驗建立流程，而是直接斷言 `runSchedule` 結束後資料庫所產生的原子化結果，讓測試真實反映正式環境的穩健性。
+
+## 11. 批次查詢重構 (prepareIssueCreationPrep)
+
+- **原因**：`prepareIssueCreationPrep` 為每筆失敗訂單執行 4 次獨立查詢 (`findUnique`/`findFirst`/`findMany` with 單一參數)，共 4N 次資料庫請求。雖已不在 Transaction 內執行，但 N 較大時仍會累積可觀延遲。
+- **修改**：新增 4 個批次版 repository 函式 (`findOrdersForIssueCreationBatch`、`findFactoriesForIssueSnapshotBulk`、`findOpenIssuesByOrderIds`、`findCompetingScheduledOrdersBatch`)。`prepareIssueCreationPrep` 改為先執行 4 次批次查詢收集所有資料，再於記憶體中依訂單過濾與組合。資料庫請求從 4N 降至 4 次，與 N 無關。
+
+## 12. Email 發送非同步化優化
+
+- **原因**：Email Client 初始化 (`new EmailClient(invalidUrl)`) 每次呼叫耗時約 100ms。若同時有 24 封 Email，`.map()` 會同步依序執行所有建構子，累計阻塞約 2.4 秒，導致 HTTP Response 在前端等待期間逾時或體驗不佳。
+- **修改**：
+  - **失敗快取**：`getEmailClient()` 在第一次建構失敗後設定 `emailClientInitFailed = true`，後續呼叫立即拋出 `MailConfigurationError`，不再重試建構子。將 24 × 100ms 降至 1 × 100ms。
+  - **微任務延遲 (queueMicrotask)**：將 Email 派送邏輯包裹在 `queueMicrotask` 內，確保 `return { failedIds }` 在主執行緒上優先執行，前端取得 Response 後才處理 Email 發送。

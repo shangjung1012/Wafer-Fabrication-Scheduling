@@ -1,5 +1,4 @@
 import type { PrismaClient } from "@/lib/generated/prisma";
-import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
 
 export type CreateDailyCapacityInput = {
   factoryId: string;
@@ -21,19 +20,39 @@ export async function updateDailyCapacityById(
   id: string,
   curCapacity: number,
 ): Promise<void> {
-  const exists = await db.dailyCapacity.findUnique({
-    where: { id },
-    include: { factory: true },
-  });
-
+  const exists = await db.dailyCapacity.findUnique({ where: { id } });
   if (!exists) return;
 
   await db.dailyCapacity.update({
     where: { id },
     data: { curCapacity },
   });
+}
 
-  await incrementScheduleVersion(exists.factory.productionType);
+export async function bulkUpdateDailyCapacities(
+  db: PrismaClient,
+  updates: { id: string; curCapacity: number }[],
+): Promise<Set<string>> {
+  if (updates.length === 0) return new Set();
+
+  const caps = await db.dailyCapacity.findMany({
+    where: { id: { in: updates.map((u) => u.id) } },
+    include: { factory: { select: { productionType: true } } },
+  });
+
+  const capMap = new Map(caps.map((c) => [c.id, c]));
+
+  for (const { id, curCapacity } of updates) {
+    const cap = capMap.get(id);
+    if (cap && cap.curCapacity !== curCapacity) {
+      await db.dailyCapacity.update({
+        where: { id },
+        data: { curCapacity },
+      });
+    }
+  }
+
+  return new Set(caps.map((c) => c.factory.productionType));
 }
 
 export async function findDailyCapacity(
