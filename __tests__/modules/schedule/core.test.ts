@@ -359,9 +359,9 @@ describe("Schedule Engine - Core", () => {
         mockStrategyResult as unknown as StrategyResult,
       );
 
-      // Verify prepareIssueCreationPrep was called BEFORE the transaction with skipStatusCheck: true
+      // Verify prepareIssueCreationPrep was called INSIDE the transaction with the tx client
       expect(prepareIssueCreationPrep).toHaveBeenCalledWith(
-        prisma,
+        mockTx,
         ["O2"],
         "system-user",
         dummyConfig,

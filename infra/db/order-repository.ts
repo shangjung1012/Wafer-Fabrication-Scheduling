@@ -385,6 +385,80 @@ export async function findCompetingScheduledOrders(
   return Array.from(seen.values());
 }
 
+/**
+ * Batch version: fetches multiple orders for issue creation in a single query.
+ * Returns a Map<orderId, orderData>.
+ */
+export async function findOrdersForIssueCreationBatch(
+  db: PrismaClient,
+  ids: string[],
+): Promise<
+  Map<
+    string,
+    NonNullable<Awaited<ReturnType<typeof findOrderForIssueCreation>>>
+  >
+> {
+  if (ids.length === 0) return new Map();
+  const orders = await db.order.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      quantity: true,
+      dueDate: true,
+      status: true,
+      updatedAt: true,
+      applicantId: true,
+      applicant: { select: { id: true, email: true, username: true } },
+    },
+  });
+  return new Map(orders.map((o) => [o.id, o as NonNullable<typeof o>]));
+}
+
+/**
+ * Batch version: fetch all SCHEDULED OrderAssignments across factoryIds
+ * and a date range, excluding the given orderIds. Returns raw assignment
+ * rows so the caller can filter per-order window in memory.
+ */
+export async function findCompetingScheduledOrdersBatch(
+  db: PrismaClient,
+  args: {
+    factoryIds: string[];
+    windowStart: Date;
+    windowEnd: Date;
+    excludeOrderIds: string[];
+  },
+): Promise<
+  Array<{
+    productionDate: Date;
+    factoryId: string;
+    order: {
+      id: string;
+      name: string;
+      isPrioritized: boolean;
+      isFixed: boolean;
+    };
+  }>
+> {
+  if (args.factoryIds.length === 0) return [];
+  return db.orderAssignment.findMany({
+    where: {
+      factoryId: { in: args.factoryIds },
+      status: "SCHEDULED",
+      productionDate: { gte: args.windowStart, lte: args.windowEnd },
+      orderId: { notIn: args.excludeOrderIds },
+    },
+    select: {
+      productionDate: true,
+      factoryId: true,
+      order: {
+        select: { id: true, name: true, isPrioritized: true, isFixed: true },
+      },
+    },
+  });
+}
+
 export async function bulkUpdateOrderModifiedBy(
   db: PrismaClient,
   orderIds: string[],

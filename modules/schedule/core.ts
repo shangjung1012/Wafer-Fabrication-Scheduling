@@ -145,21 +145,6 @@ export async function _applyScheduleTransaction(
   let deferredEmails: Array<() => Promise<void>> = [];
   let affectedFactoryTypes: Set<string> = new Set();
 
-  // Phase 1: Prepare issue creation data OUTSIDE the transaction (avoids holding DB connection during sequential reads)
-  let issueCreationPrep:
-    | Awaited<ReturnType<typeof prepareIssueCreationPrep>>
-    | undefined = undefined;
-  if (failedIds.length > 0) {
-    issueCreationPrep = await prepareIssueCreationPrep(
-      prisma,
-      failedIds,
-      operatorId,
-      config,
-      new Date(),
-      true,
-    );
-  }
-
   await prisma.$transaction(async (tx) => {
     const db = tx as unknown as PrismaClient;
 
@@ -196,14 +181,24 @@ export async function _applyScheduleTransaction(
     await createAssignments(db, strategyResult.newAssignments);
 
     // Atomically create conflict issues for any orders that failed scheduling
-    if (failedIds.length > 0 && issueCreationPrep) {
+    // Prep runs INSIDE the transaction, after capacity updates, so the snapshot
+    // reflects post-schedule available capacity. Batch queries (not N+1) keep it fast.
+    if (failedIds.length > 0) {
+      const prep = await prepareIssueCreationPrep(
+        db,
+        failedIds,
+        operatorId,
+        config,
+        new Date(),
+        true,
+      );
       const { emailsToDispatch } = await createIssuesForFailedOrdersTx(
         db,
         failedIds,
         operatorId,
         config,
         new Date(),
-        issueCreationPrep,
+        prep,
       );
       deferredEmails = emailsToDispatch;
     }

@@ -31,16 +31,21 @@ import {
   createManyConflictIssues,
   findConflictIssuesByOrderIds,
   createManyConflictIssueEvents,
+  findOpenIssuesByOrderIds,
 } from "@/infra/db/conflict-issue-repository";
 import {
   updateOrder,
   OrderStatus,
   findOrderForIssueCreation,
-  findCompetingScheduledOrders,
+  findOrdersForIssueCreationBatch,
+  findCompetingScheduledOrdersBatch,
   findOrderById,
   deleteOrders,
 } from "@/infra/db/order-repository";
-import { findFactoriesForIssueSnapshot } from "@/infra/db/factory-repository";
+import {
+  findFactoriesForIssueSnapshot,
+  findFactoriesForIssueSnapshotBulk,
+} from "@/infra/db/factory-repository";
 import { findDailyCapacitiesByDateRange } from "@/infra/db/capacity-repository";
 import { findUserById, findUsers } from "@/infra/db/user-repository";
 import { getTime } from "@/lib/get-time";
@@ -987,36 +992,107 @@ export async function prepareIssueCreationPrep(
   const eventsData: Prisma.ConflictIssueEventCreateManyInput[] = [];
   const metadataMap: IssueCreationPrep["metadataMap"] = new Map();
 
-  let cachedSuperAdminId: string | undefined = undefined;
+  // Phase 1: Batch-fetch all orders (1 query instead of N)
+  const ordersMap = await findOrdersForIssueCreationBatch(pr, failedOrderIds);
+  if (ordersMap.size === 0) {
+    return {
+      newIssuesData,
+      eventsData,
+      metadataMap,
+      createdCount,
+      skippedCount,
+    };
+  }
+
+  const windowStart = new Date(runConfig.startDate);
+  windowStart.setUTCHours(0, 0, 0, 0);
+
+  // Pre-compute per-order windowEnd and find global max for batch factory fetch
+  const orderMetas: Array<{
+    order: NonNullable<Awaited<ReturnType<typeof findOrderForIssueCreation>>>;
+    windowEnd: Date;
+  }> = [];
+  let globalMaxWindowEnd = windowStart;
 
   for (const orderId of failedOrderIds) {
-    const order = await findOrderForIssueCreation(pr, orderId);
+    const order = ordersMap.get(orderId);
     if (!order) continue;
     if (!skipStatusCheck && order.status !== OrderStatus.FAILED) continue;
 
-    const windowStart = new Date(runConfig.startDate);
-    windowStart.setUTCHours(0, 0, 0, 0);
     const windowEnd = calculateOrderDeadline(order.dueDate, runConfig);
     windowEnd.setUTCHours(23, 59, 59, 999);
 
-    const factories = await findFactoriesForIssueSnapshot(
-      pr,
-      order.type,
-      windowStart,
-      windowEnd,
-    );
+    orderMetas.push({ order, windowEnd });
+    if (windowEnd.getTime() > globalMaxWindowEnd.getTime()) {
+      globalMaxWindowEnd = windowEnd;
+    }
+  }
 
+  if (orderMetas.length === 0) {
+    return {
+      newIssuesData,
+      eventsData,
+      metadataMap,
+      createdCount,
+      skippedCount,
+    };
+  }
+
+  // Phase 2: Batch-fetch factories by type (1 query per unique type)
+  const types = [...new Set(orderMetas.map((m) => m.order.type))];
+  const factoriesByType = await findFactoriesForIssueSnapshotBulk(
+    pr,
+    types,
+    windowStart,
+    globalMaxWindowEnd,
+  );
+  const allFactoryIds = [
+    ...new Set(
+      [...factoriesByType.values()].flatMap((fs) => fs.map((f) => f.id)),
+    ),
+  ];
+
+  // Phase 3: Batch-fetch open issues (1 query)
+  const openIssuesMap = await findOpenIssuesByOrderIds(
+    pr,
+    orderMetas.map((m) => m.order.id),
+  );
+
+  // Phase 4: Batch-fetch competing SCHEDULED assignments (1 query)
+  const allCompetingAssignments =
+    allFactoryIds.length > 0
+      ? await findCompetingScheduledOrdersBatch(pr, {
+          factoryIds: allFactoryIds,
+          windowStart,
+          windowEnd: globalMaxWindowEnd,
+          excludeOrderIds: orderMetas.map((m) => m.order.id),
+        })
+      : [];
+
+  // Phase 5: Process each order purely in-memory (no DB queries)
+  let cachedSuperAdminId: string | undefined = undefined;
+
+  for (const { order, windowEnd: orderWindowEnd } of orderMetas) {
+    const factories = factoriesByType.get(order.type) || [];
+    const orderFactoryIds = new Set(factories.map((f) => f.id));
+
+    // Filter capacities to this order's specific window
     const capacityMap = new Map<string, CapacityDraft>();
+    const orderWindowMs = orderWindowEnd.getTime();
+    const windowStartMs = windowStart.getTime();
     for (const f of factories) {
       for (const cap of f.dailyCapacities) {
-        const dateKey = toIsoDateOnly(cap.date);
-        capacityMap.set(`${f.id}_${dateKey}`, {
-          id: cap.id,
-          factoryId: cap.factoryId,
-          date: cap.date,
-          maxCapacity: cap.maxCapacity,
-          curCapacity: cap.curCapacity,
-        });
+        const capMs = cap.date.getTime();
+        if (capMs >= windowStartMs && capMs <= orderWindowMs) {
+          const dateKey = toIsoDateOnly(cap.date);
+          capacityMap.set(`${f.id}_${dateKey}`, {
+            id: cap.id,
+            factoryId: cap.factoryId,
+            date: cap.date,
+            maxCapacity: cap.maxCapacity,
+            curCapacity: cap.curCapacity,
+          });
+        }
       }
     }
 
@@ -1027,7 +1103,7 @@ export async function prepareIssueCreationPrep(
 
     const totalAvailableInWindow = computeTotalAvailableCapacity(
       windowStart,
-      windowEnd,
+      orderWindowEnd,
       factoryInputs,
       capacityMap,
     );
@@ -1035,12 +1111,23 @@ export async function prepareIssueCreationPrep(
     const requiredQuantity = order.quantity;
     const deficit = Math.max(0, requiredQuantity - totalAvailableInWindow);
 
-    const competingOrders = await findCompetingScheduledOrders(pr, {
-      factoryIds: factories.map((f) => f.id),
-      windowStart,
-      windowEnd,
-      excludeOrderId: order.id,
-    });
+    // Filter competing assignments to this order's window and factoryIds
+    const competingOrders: Array<{
+      id: string;
+      name: string;
+      isPrioritized: boolean;
+      isFixed: boolean;
+    }> = [];
+    const seenCompeting = new Set<string>();
+    for (const a of allCompetingAssignments) {
+      if (!orderFactoryIds.has(a.factoryId)) continue;
+      const prodMs = a.productionDate.getTime();
+      if (prodMs < windowStartMs || prodMs > orderWindowMs) continue;
+      if (!seenCompeting.has(a.order.id)) {
+        seenCompeting.add(a.order.id);
+        competingOrders.push(a.order);
+      }
+    }
 
     const contextSnapshot = {
       previewRunAt: runAt.toISOString(),
@@ -1052,7 +1139,7 @@ export async function prepareIssueCreationPrep(
         splittable: runConfig.splittable,
       },
       windowStart: toIsoDateOnly(windowStart),
-      windowEnd: toIsoDateOnly(windowEnd),
+      windowEnd: toIsoDateOnly(orderWindowEnd),
       requiredQuantity,
       totalAvailableInWindow,
       deficit,
@@ -1070,7 +1157,7 @@ export async function prepareIssueCreationPrep(
       competingOrders,
     };
 
-    const existing = await findOpenIssueByOrderId(pr, order.id);
+    const existing = openIssuesMap.get(order.id);
     if (existing) {
       eventsData.push({
         issueId: existing.id,

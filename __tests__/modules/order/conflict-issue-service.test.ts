@@ -22,7 +22,9 @@ vi.mock("@/infra/db/order-repository", async () => {
   return {
     ...actual,
     findOrderForIssueCreation: vi.fn(),
+    findOrdersForIssueCreationBatch: vi.fn(),
     findCompetingScheduledOrders: vi.fn(),
+    findCompetingScheduledOrdersBatch: vi.fn(),
     updateOrder: vi.fn(),
   };
 });
@@ -39,6 +41,7 @@ vi.mock("@/infra/db/conflict-issue-repository", async () => {
     findConflictIssuesByOrderIds: vi.fn(),
     createManyConflictIssueEvents: vi.fn(),
     findOpenIssueByOrderId: vi.fn(),
+    findOpenIssuesByOrderIds: vi.fn(),
     findCommentById: vi.fn(),
     findConflictIssueById: vi.fn(),
     updateCommentProposalStatus: vi.fn(),
@@ -69,6 +72,7 @@ vi.mock("@/infra/db/factory-repository", async () => {
   return {
     ...actual,
     findFactoriesForIssueSnapshot: vi.fn(),
+    findFactoriesForIssueSnapshotBulk: vi.fn(),
   };
 });
 
@@ -153,10 +157,22 @@ describe("createIssuesForFailedOrders", () => {
     // Reasonable default mock returns
     vi.mocked(strategy.computeTotalAvailableCapacity).mockReturnValue(400);
     vi.mocked(orderRepo.findCompetingScheduledOrders).mockResolvedValue([]);
+    vi.mocked(orderRepo.findOrdersForIssueCreationBatch).mockResolvedValue(
+      new Map([["O1", makeOrder()]]),
+    );
+    vi.mocked(orderRepo.findCompetingScheduledOrdersBatch).mockResolvedValue(
+      [],
+    );
     vi.mocked(factoryRepo.findFactoriesForIssueSnapshot).mockResolvedValue([
       makeFactory(),
     ]);
+    vi.mocked(factoryRepo.findFactoriesForIssueSnapshotBulk).mockResolvedValue(
+      new Map([["Type A", [makeFactory()]]]),
+    );
     vi.mocked(conflictRepo.findOpenIssueByOrderId).mockResolvedValue(null);
+    vi.mocked(conflictRepo.findOpenIssuesByOrderIds).mockResolvedValue(
+      new Map([["O1", null]]),
+    );
     vi.mocked(conflictRepo.createConflictIssue).mockResolvedValue({
       id: "ISSUE1",
       number: 101,
@@ -226,13 +242,14 @@ describe("createIssuesForFailedOrders", () => {
   });
 
   it("skips creation and writes CAPACITY_CHANGED-style event when an OPEN issue already exists", async () => {
-    vi.mocked(orderRepo.findOrderForIssueCreation).mockResolvedValue(
-      makeOrder(),
+    vi.mocked(conflictRepo.findOpenIssuesByOrderIds).mockResolvedValue(
+      new Map([
+        [
+          "O1",
+          { id: "EXISTING1", status: conflictRepo.ConflictIssueStatus.OPEN },
+        ],
+      ]),
     );
-    vi.mocked(conflictRepo.findOpenIssueByOrderId).mockResolvedValue({
-      id: "EXISTING1",
-      status: conflictRepo.ConflictIssueStatus.OPEN,
-    });
 
     const res = await createIssuesForFailedOrders({
       failedOrderIds: ["O1"],
@@ -261,11 +278,17 @@ describe("createIssuesForFailedOrders", () => {
   });
 
   it("falls back to a factory admin id when applicantId is null", async () => {
-    vi.mocked(orderRepo.findOrderForIssueCreation).mockResolvedValue(
-      makeOrder({
-        applicantId: null as unknown as string,
-        applicant: null as unknown as NonNullable<OrderFixture>["applicant"],
-      }),
+    vi.mocked(orderRepo.findOrdersForIssueCreationBatch).mockResolvedValue(
+      new Map([
+        [
+          "O1",
+          makeOrder({
+            applicantId: null as unknown as string,
+            applicant:
+              null as unknown as NonNullable<OrderFixture>["applicant"],
+          }),
+        ],
+      ]),
     );
 
     const res = await createIssuesForFailedOrders({
@@ -347,8 +370,8 @@ describe("createIssuesForFailedOrders", () => {
   });
 
   it("skips orders whose status is no longer FAILED (no DB writes, no email, no counts)", async () => {
-    vi.mocked(orderRepo.findOrderForIssueCreation).mockResolvedValue(
-      makeOrder({ status: orderRepo.OrderStatus.SCHEDULED }),
+    vi.mocked(orderRepo.findOrdersForIssueCreationBatch).mockResolvedValue(
+      new Map([["O1", makeOrder({ status: orderRepo.OrderStatus.SCHEDULED })]]),
     );
 
     const res = await createIssuesForFailedOrders({
@@ -363,7 +386,7 @@ describe("createIssuesForFailedOrders", () => {
     expect(conflictRepo.createManyConflictIssues).not.toHaveBeenCalled();
     expect(conflictRepo.createManyConflictIssueEvents).not.toHaveBeenCalled();
     expect(mailTemplate.renderAndSend).not.toHaveBeenCalled();
-    expect(conflictRepo.findOpenIssueByOrderId).not.toHaveBeenCalled();
+    expect(conflictRepo.findOpenIssuesByOrderIds).not.toHaveBeenCalled();
   });
 });
 
