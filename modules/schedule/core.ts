@@ -16,7 +16,7 @@ import {
 } from "@/infra/db/assignment-repository";
 import {
   createDailyCapacities,
-  updateDailyCapacityById,
+  bulkUpdateDailyCapacities,
 } from "@/infra/db/capacity-repository";
 import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
 import {
@@ -25,7 +25,10 @@ import {
   incrementScheduleVersion,
   deletePreview,
 } from "@/infra/redis/schedule-store";
-import { createIssuesForFailedOrdersTx } from "@/modules/order/conflict-issue-service";
+import {
+  createIssuesForFailedOrdersTx,
+  prepareIssueCreationPrep,
+} from "@/modules/order/conflict-issue-service";
 import { calculateMinimumStartDate } from "@/modules/schedule/validation-utils";
 
 export async function prepareSchedulingData(
@@ -137,6 +140,22 @@ export async function _applyScheduleTransaction(
     .map((o) => o.id);
 
   let deferredEmails: Array<() => Promise<void>> = [];
+  let affectedFactoryTypes: Set<string> = new Set();
+
+  // Phase 1: Prepare issue creation data OUTSIDE the transaction (avoids holding DB connection during sequential reads)
+  let issueCreationPrep:
+    | Awaited<ReturnType<typeof prepareIssueCreationPrep>>
+    | undefined = undefined;
+  if (failedIds.length > 0) {
+    issueCreationPrep = await prepareIssueCreationPrep(
+      prisma,
+      failedIds,
+      operatorId,
+      config,
+      new Date(),
+      true,
+    );
+  }
 
   await prisma.$transaction(async (tx) => {
     const db = tx as unknown as PrismaClient;
@@ -166,24 +185,31 @@ export async function _applyScheduleTransaction(
 
     await createDailyCapacities(db, strategyResult.newCapacities);
 
-    for (const cap of strategyResult.updatedCapacities) {
-      await updateDailyCapacityById(db, cap.id, cap.curCapacity);
-    }
+    affectedFactoryTypes = await bulkUpdateDailyCapacities(
+      db,
+      strategyResult.updatedCapacities,
+    );
 
     await createAssignments(db, strategyResult.newAssignments);
 
     // Atomically create conflict issues for any orders that failed scheduling
-    if (failedIds.length > 0) {
+    if (failedIds.length > 0 && issueCreationPrep) {
       const { emailsToDispatch } = await createIssuesForFailedOrdersTx(
         db,
         failedIds,
         operatorId,
         config,
         new Date(),
+        issueCreationPrep,
       );
       deferredEmails = emailsToDispatch;
     }
   });
+
+  // Increment schedule versions outside the transaction (no Redis while holding DB connection)
+  for (const factoryType of affectedFactoryTypes) {
+    await incrementScheduleVersion(factoryType);
+  }
 
   // Execute emails safely outside the database transaction
   if (deferredEmails.length > 0) {

@@ -17,7 +17,10 @@ import {
 import { findFactoriesMaxCapacity } from "@/infra/db/factory-repository";
 import { getOperatingAutoSchedulerConfigs } from "@/infra/db/auto-scheduler-config-repository";
 
-import { withScheduleLock } from "@/infra/redis/schedule-store";
+import {
+  withScheduleLock,
+  incrementScheduleVersion,
+} from "@/infra/redis/schedule-store";
 import { calculateOrderDeadline } from "./validation-utils";
 
 export type AssignmentMove = {
@@ -445,6 +448,11 @@ export async function applyAssignmentMoves(
         );
       }
     });
+
+    // Invalidate OCC versions so stale previews are rejected
+    for (const type of types) {
+      await incrementScheduleVersion(type);
+    }
 
     return { applied: validActions.length };
   });

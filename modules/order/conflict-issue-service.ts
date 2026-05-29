@@ -951,30 +951,10 @@ export type CreateIssuesForFailedOrdersResult = {
   failed: number;
 };
 
-/**
- * Extracts the pure, atomic issue creation logic to allow it to be executed
- * directly inside an external database transaction (e.g., core.ts scheduling).
- */
-export async function createIssuesForFailedOrdersTx(
-  pr: PrismaClient,
-  failedOrderIds: string[],
-  actorId: string,
-  runConfig: SchedulingConfig,
-  runAt: Date,
-): Promise<{
-  createdCount: number;
-  skippedCount: number;
-  emailsToDispatch: Array<() => Promise<void>>;
-}> {
-  let createdCount = 0;
-  let skippedCount = 0;
-  // Store email dispatch promises as thunks to safely execute outside the transaction
-  const emailsToDispatch: Array<() => Promise<void>> = [];
-
-  // Memory payloads for bulk insertion
-  const newIssuesData: Prisma.ConflictIssueCreateManyInput[] = [];
-  const eventsData: Prisma.ConflictIssueEventCreateManyInput[] = [];
-  const metadataMap = new Map<
+export type IssueCreationPrep = {
+  newIssuesData: Prisma.ConflictIssueCreateManyInput[];
+  eventsData: Prisma.ConflictIssueEventCreateManyInput[];
+  metadataMap: Map<
     string,
     {
       order: NonNullable<Awaited<ReturnType<typeof findOrderForIssueCreation>>>;
@@ -982,17 +962,38 @@ export async function createIssuesForFailedOrdersTx(
       contextSnapshot: Prisma.InputJsonValue;
       uniqueRecipients: Array<{ email: string; username: string | null }>;
     }
-  >();
+  >;
+  createdCount: number;
+  skippedCount: number;
+};
 
-  // Cache the super admin ID per-chunk to avoid redundant queries
+/**
+ * Phase 1 of issue creation: reads and data preparation.
+ * Runs OUTSIDE the main DB transaction to avoid holding the connection
+ * during sequential per-order queries.
+ */
+export async function prepareIssueCreationPrep(
+  pr: PrismaClient,
+  failedOrderIds: string[],
+  actorId: string,
+  runConfig: SchedulingConfig,
+  runAt: Date,
+  skipStatusCheck: boolean = false,
+): Promise<IssueCreationPrep> {
+  let createdCount = 0;
+  let skippedCount = 0;
+
+  const newIssuesData: Prisma.ConflictIssueCreateManyInput[] = [];
+  const eventsData: Prisma.ConflictIssueEventCreateManyInput[] = [];
+  const metadataMap: IssueCreationPrep["metadataMap"] = new Map();
+
   let cachedSuperAdminId: string | undefined = undefined;
 
-  // Phase 1: Reads and Memory Preparation (Sequential processing)
   for (const orderId of failedOrderIds) {
     const order = await findOrderForIssueCreation(pr, orderId);
-    if (!order || order.status !== OrderStatus.FAILED) continue;
+    if (!order) continue;
+    if (!skipStatusCheck && order.status !== OrderStatus.FAILED) continue;
 
-    // Snapshot — window, factories, capacity, competing orders
     const windowStart = new Date(runConfig.startDate);
     windowStart.setUTCHours(0, 0, 0, 0);
     const windowEnd = calculateOrderDeadline(order.dueDate, runConfig);
@@ -1005,7 +1006,6 @@ export async function createIssuesForFailedOrdersTx(
       windowEnd,
     );
 
-    // Build a CapacityDraft map
     const capacityMap = new Map<string, CapacityDraft>();
     for (const f of factories) {
       for (const cap of f.dailyCapacities) {
@@ -1151,6 +1151,40 @@ export async function createIssuesForFailedOrdersTx(
       uniqueRecipients,
     });
   }
+
+  return { newIssuesData, eventsData, metadataMap, createdCount, skippedCount };
+}
+
+/**
+ * Phase 2+3 of issue creation: bulk writes and email prep.
+ * Runs INSIDE the DB transaction. Accepts pre-computed data from
+ * `prepareIssueCreationPrep` to avoid read-heavy connection holding.
+ */
+export async function createIssuesForFailedOrdersTx(
+  pr: PrismaClient,
+  failedOrderIds: string[],
+  actorId: string,
+  runConfig: SchedulingConfig,
+  runAt: Date,
+  prep?: IssueCreationPrep,
+): Promise<{
+  createdCount: number;
+  skippedCount: number;
+  emailsToDispatch: Array<() => Promise<void>>;
+}> {
+  const emailsToDispatch: Array<() => Promise<void>> = [];
+
+  if (!prep) {
+    prep = await prepareIssueCreationPrep(
+      pr,
+      failedOrderIds,
+      actorId,
+      runConfig,
+      runAt,
+    );
+  }
+  const { newIssuesData, eventsData, metadataMap } = prep;
+  let { createdCount, skippedCount } = prep;
 
   // Phase 2: Bulk Insert Issues (createMany)
   if (newIssuesData.length > 0) {

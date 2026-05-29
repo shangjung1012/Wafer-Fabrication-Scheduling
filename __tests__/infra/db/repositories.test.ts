@@ -5,7 +5,10 @@ import {
   bulkUpdateOrderStatus,
   OrderStatus,
 } from "@/infra/db/order-repository";
-import { updateDailyCapacityById } from "@/infra/db/capacity-repository";
+import {
+  updateDailyCapacityById,
+  bulkUpdateDailyCapacities,
+} from "@/infra/db/capacity-repository";
 import { updateFactory } from "@/infra/db/factory-repository";
 import * as scheduleStore from "@/infra/redis/schedule-store";
 import type { PrismaClient } from "@/lib/generated/prisma";
@@ -87,21 +90,43 @@ describe("Repository Version Invalidation Hooks", () => {
   });
 
   describe("capacity-repository", () => {
-    it("updateDailyCapacityById should increment version for factory type", async () => {
+    it("updateDailyCapacityById should NOT call incrementScheduleVersion (moved to caller)", async () => {
       const mockDb = {
         dailyCapacity: {
-          findUnique: vi.fn().mockResolvedValue({
-            factory: { productionType: "Type A" },
-          }),
+          findUnique: vi.fn().mockResolvedValue({ id: "C1" }),
           update: vi.fn().mockResolvedValue({}),
         },
       } as unknown as PrismaClient;
 
       await updateDailyCapacityById(mockDb, "C1", 100);
 
-      expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
-        "Type A",
-      );
+      expect(scheduleStore.incrementScheduleVersion).not.toHaveBeenCalled();
+    });
+
+    it("bulkUpdateDailyCapacities should return affected factory types without calling Redis", async () => {
+      const mockDb = {
+        dailyCapacity: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              id: "C1",
+              factory: { productionType: "Type A" },
+            },
+          ]),
+          update: vi.fn().mockResolvedValue({}),
+        },
+      } as unknown as PrismaClient;
+
+      const result = await bulkUpdateDailyCapacities(mockDb, [
+        { id: "C1", curCapacity: 100 },
+      ]);
+
+      expect(result).toBeInstanceOf(Set);
+      expect(Array.from(result)).toEqual(["Type A"]);
+      expect(mockDb.dailyCapacity.update).toHaveBeenCalledWith({
+        where: { id: "C1" },
+        data: { curCapacity: 100 },
+      });
+      expect(scheduleStore.incrementScheduleVersion).not.toHaveBeenCalled();
     });
   });
 

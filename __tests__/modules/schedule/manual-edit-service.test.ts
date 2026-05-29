@@ -75,6 +75,7 @@ vi.mock("@/infra/db/capacity-repository", () => ({
 
 vi.mock("@/infra/redis/schedule-store", () => ({
   withScheduleLock: vi.fn(async (keys, cb) => cb()),
+  incrementScheduleVersion: vi.fn(),
 }));
 
 describe("applyAssignmentMoves", () => {

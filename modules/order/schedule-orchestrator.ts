@@ -94,17 +94,10 @@ export async function applyScheduleTransactionWithIssues(input: {
   expectedVersion?: number;
   previewId?: string;
 }): Promise<{ failedIds: string[] }> {
-  const {
-    type,
-    config,
-    result,
-    operatorId,
-    runAt,
-    expectedVersion,
-    previewId,
-  } = input;
+  const { type, config, result, operatorId, expectedVersion, previewId } =
+    input;
 
-  const applyResult = await applyScheduleTransaction(
+  return applyScheduleTransaction(
     type,
     config,
     result,
@@ -112,14 +105,4 @@ export async function applyScheduleTransactionWithIssues(input: {
     expectedVersion,
     previewId,
   );
-
-  fireIssueCreation({
-    failedOrderIds: applyResult.failedIds,
-    actorId: operatorId,
-    runConfig: config,
-    runAt,
-    label: "applyScheduleTransactionWithIssues",
-  });
-
-  return applyResult;
 }
