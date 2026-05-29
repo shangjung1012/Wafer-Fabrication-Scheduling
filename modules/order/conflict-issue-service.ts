@@ -980,7 +980,7 @@ export async function prepareIssueCreationPrep(
   runAt: Date,
   skipStatusCheck: boolean = false,
 ): Promise<IssueCreationPrep> {
-  let createdCount = 0;
+  const createdCount = 0;
   let skippedCount = 0;
 
   const newIssuesData: Prisma.ConflictIssueCreateManyInput[] = [];
@@ -1183,8 +1183,8 @@ export async function createIssuesForFailedOrdersTx(
       runAt,
     );
   }
-  const { newIssuesData, eventsData, metadataMap } = prep;
-  let { createdCount, skippedCount } = prep;
+  const { newIssuesData, eventsData, metadataMap, skippedCount } = prep;
+  let { createdCount } = prep;
 
   // Phase 2: Bulk Insert Issues (createMany)
   if (newIssuesData.length > 0) {
