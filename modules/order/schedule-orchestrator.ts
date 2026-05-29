@@ -17,46 +17,14 @@
  * the original route-level code so unexpected throws are logged, not lost.
  */
 
-import { prisma } from "@/lib/prisma";
 import { runSchedule } from "@/modules/schedule/run";
 import { applyScheduleTransaction } from "@/modules/schedule/core";
 import { type SchedulingConfig } from "@/modules/schedule/strategy";
 import { type StrategyResult } from "@/modules/schedule/strategy";
-import { createIssuesForFailedOrders } from "@/modules/order/conflict-issue-service";
 
 /**
- * Fire `createIssuesForFailedOrders` without awaiting. Identical defensive
- * `.catch` to what the route handlers used to do — unexpected top-level
- * throws are logged but never bubble up to the caller.
- */
-function fireIssueCreation(input: {
-  failedOrderIds: string[];
-  actorId: string;
-  runConfig: SchedulingConfig;
-  runAt: Date;
-  label: string;
-}): void {
-  if (input.failedOrderIds.length === 0) return;
-
-  void createIssuesForFailedOrders({
-    failedOrderIds: input.failedOrderIds,
-    actorId: input.actorId,
-    runConfig: input.runConfig,
-    runAt: input.runAt,
-    prisma,
-  }).catch((err) => {
-    console.error(
-      `[${input.label}] createIssuesForFailedOrders unexpected error:`,
-      err,
-    );
-  });
-}
-
-/**
- * Runs the scheduling engine (`runSchedule`) and, on completion, fires off
- * ConflictIssue creation for any newly-FAILED orders as a fire-and-forget
- * side-effect. Returns the same `{ failedIds }` shape that `runSchedule`
- * returns so callers are drop-in compatible.
+ * Runs the scheduling engine (`runSchedule`) and dispatches deferred emails
+ * fire-and-forget for any newly-FAILED orders.
  */
 export async function runScheduleWithIssues(input: {
   type: string;
@@ -66,17 +34,22 @@ export async function runScheduleWithIssues(input: {
 }): Promise<{ failedIds: string[] }> {
   const { type, config, currentDate, operatorId } = input;
 
-  const result = await runSchedule(type, config, currentDate, operatorId);
+  const { failedIds, emailsToDispatch } = await runSchedule(
+    type,
+    config,
+    currentDate,
+    operatorId,
+  );
 
-  fireIssueCreation({
-    failedOrderIds: result.failedIds,
-    actorId: operatorId,
-    runConfig: config,
-    runAt: currentDate,
-    label: "runScheduleWithIssues",
-  });
+  if (emailsToDispatch.length > 0) {
+    queueMicrotask(() => {
+      Promise.allSettled(emailsToDispatch.map((fn) => fn())).catch((err) => {
+        console.error("[runScheduleWithIssues] Error dispatching emails:", err);
+      });
+    });
+  }
 
-  return result;
+  return { failedIds };
 }
 
 /**
@@ -97,7 +70,7 @@ export async function applyScheduleTransactionWithIssues(input: {
   const { type, config, result, operatorId, expectedVersion, previewId } =
     input;
 
-  return applyScheduleTransaction(
+  const { failedIds, emailsToDispatch } = await applyScheduleTransaction(
     type,
     config,
     result,
@@ -105,4 +78,18 @@ export async function applyScheduleTransactionWithIssues(input: {
     expectedVersion,
     previewId,
   );
+
+  // Dispatch emails fire-and-forget (not awaited) so the frontend isn't blocked
+  if (emailsToDispatch.length > 0) {
+    queueMicrotask(() => {
+      Promise.allSettled(emailsToDispatch.map((fn) => fn())).catch((err) => {
+        console.error(
+          "[applyScheduleTransactionWithIssues] Error dispatching emails:",
+          err,
+        );
+      });
+    });
+  }
+
+  return { failedIds };
 }

@@ -15,7 +15,10 @@ export async function runSchedule(
   config: SchedulingConfig,
   currentDate?: Date,
   operatorId: string = "system-user",
-): Promise<{ failedIds: string[] }> {
+): Promise<{
+  failedIds: string[];
+  emailsToDispatch: Array<() => Promise<void>>;
+}> {
   return withScheduleLock(type, async () => {
     const actualDate = currentDate ?? (await getTime());
 

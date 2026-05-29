@@ -130,7 +130,10 @@ export async function _applyScheduleTransaction(
   config: SchedulingConfig,
   strategyResult: StrategyResult,
   operatorId: string = "system-user",
-): Promise<{ failedIds: string[] }> {
+): Promise<{
+  failedIds: string[];
+  emailsToDispatch: Array<() => Promise<void>>;
+}> {
   const scheduledIds = strategyResult.processedOrders
     .filter((o) => o.status === OrderStatus.SCHEDULED)
     .map((o) => o.id);
@@ -211,17 +214,7 @@ export async function _applyScheduleTransaction(
     await incrementScheduleVersion(factoryType);
   }
 
-  // Execute emails safely outside the database transaction
-  if (deferredEmails.length > 0) {
-    Promise.allSettled(deferredEmails.map((fn) => fn())).catch((err) => {
-      console.error(
-        "[_applyScheduleTransaction] Error dispatching emails:",
-        err,
-      );
-    });
-  }
-
-  return { failedIds };
+  return { failedIds, emailsToDispatch: deferredEmails };
 }
 
 export async function applyScheduleTransaction(
@@ -231,7 +224,10 @@ export async function applyScheduleTransaction(
   operatorId: string = "system-user",
   expectedVersion?: number,
   previewId?: string,
-): Promise<{ failedIds: string[] }> {
+): Promise<{
+  failedIds: string[];
+  emailsToDispatch: Array<() => Promise<void>>;
+}> {
   return withScheduleLock(type, async () => {
     if (expectedVersion !== undefined) {
       const currentVersion = await getScheduleVersion(type);
