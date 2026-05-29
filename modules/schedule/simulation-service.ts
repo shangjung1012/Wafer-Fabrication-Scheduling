@@ -41,9 +41,8 @@ export async function handleSimulationTimeAdvance(
     if (patch) {
       await upsertSystemState(prisma, patch);
     }
-  }
-
-  if (advancedTwoHoursOrMore) {
-    await triggerAutoSchedule(newTime);
+    if (advancedTwoHoursOrMore) {
+      await triggerAutoSchedule(newTime);
+    }
   }
 }

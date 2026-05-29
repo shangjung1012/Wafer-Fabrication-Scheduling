@@ -10,12 +10,7 @@ import {
   type SchedulingConfig,
   type StrategyResult,
 } from "@/modules/schedule/strategy";
-import {
-  getScheduleVersion,
-  getPreview,
-  deletePreview,
-  incrementScheduleVersion,
-} from "@/infra/redis/schedule-store";
+import { getPreview } from "@/infra/redis/schedule-store";
 import { getTime } from "@/lib/get-time";
 
 function revivePreviewDates(raw: Record<string, unknown>): {
@@ -109,27 +104,15 @@ export async function POST(request: Request) {
     const version = previewPayload.version as number;
     const { config, result } = revivePreviewDates(previewPayload);
 
-    const currentVersion = await getScheduleVersion(type);
-
-    if (version !== currentVersion) {
-      return NextResponse.json(
-        {
-          code: "CONFLICT",
-          message: "Schedule environment has changed. Please preview again.",
-        },
-        { status: 409 },
-      );
-    }
-
     await applyScheduleTransactionWithIssues({
       type,
       config,
       result,
       operatorId: ctx.user.id,
       runAt: await getTime(),
+      expectedVersion: version,
+      previewId,
     });
-    await incrementScheduleVersion(type);
-    await deletePreview(previewId);
 
     return NextResponse.json({ message: "Schedule applied successfully" });
   } catch (error: unknown) {

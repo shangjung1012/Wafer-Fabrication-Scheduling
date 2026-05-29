@@ -19,7 +19,12 @@ import {
   updateDailyCapacityById,
 } from "@/infra/db/capacity-repository";
 import { AssignmentStatus, OrderStatus } from "@/lib/generated/prisma";
-import { withScheduleLock } from "@/infra/redis/schedule-store";
+import {
+  withScheduleLock,
+  getScheduleVersion,
+  incrementScheduleVersion,
+  deletePreview,
+} from "@/infra/redis/schedule-store";
 import { createIssuesForFailedOrdersTx } from "@/modules/order/conflict-issue-service";
 import { calculateMinimumStartDate } from "@/modules/schedule/validation-utils";
 
@@ -198,8 +203,28 @@ export async function applyScheduleTransaction(
   config: SchedulingConfig,
   strategyResult: StrategyResult,
   operatorId: string = "system-user",
+  expectedVersion?: number,
+  previewId?: string,
 ): Promise<{ failedIds: string[] }> {
   return withScheduleLock(type, async () => {
-    return _applyScheduleTransaction(type, config, strategyResult, operatorId);
+    if (expectedVersion !== undefined) {
+      const currentVersion = await getScheduleVersion(type);
+      if (expectedVersion !== currentVersion) {
+        throw new Error(
+          "Schedule environment has changed. Please preview again.",
+        );
+      }
+    }
+    const result = await _applyScheduleTransaction(
+      type,
+      config,
+      strategyResult,
+      operatorId,
+    );
+    if (expectedVersion !== undefined && previewId !== undefined) {
+      await incrementScheduleVersion(type);
+      await deletePreview(previewId);
+    }
+    return result;
   });
 }
