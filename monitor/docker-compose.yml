@@ -1,0 +1,100 @@
+services:
+  postgres-exporter:
+    image: ${POSTGRES_EXPORTER_IMAGE:-prometheuscommunity/postgres-exporter:v0.17.1}
+    container_name: wafer_monitor_postgres_exporter
+    environment:
+      DATA_SOURCE_URI: ${POSTGRES_EXPORTER_DATA_SOURCE_URI}
+      DATA_SOURCE_USER: ${POSTGRES_USER}
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD}
+    command:
+      - "--extend.query-path=/etc/postgres_exporter/queries.yml"
+    volumes:
+      - ./postgres/queries.yml:/etc/postgres_exporter/queries.yml:ro
+    ports:
+      - "${POSTGRES_EXPORTER_PORT:-9187}:9187"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  redis-exporter:
+    image: ${REDIS_EXPORTER_IMAGE:-oliver006/redis_exporter:v1.74.0}
+    container_name: wafer_monitor_redis_exporter
+    environment:
+      REDIS_ADDR: ${REDIS_EXPORTER_REDIS_ADDR}
+    ports:
+      - "${REDIS_EXPORTER_PORT:-9121}:9121"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  blackbox-exporter:
+    image: ${BLACKBOX_EXPORTER_IMAGE:-prom/blackbox-exporter:v0.27.0}
+    container_name: wafer_monitor_blackbox_exporter
+    command:
+      - "--config.file=/etc/blackbox_exporter/config.yml"
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    ports:
+      - "${BLACKBOX_EXPORTER_PORT:-9115}:9115"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v3.4.1}
+    container_name: wafer_monitor_prometheus
+    entrypoint:
+      - "/bin/sh"
+    environment:
+      MONITOR_SCRAPE_INTERVAL: ${MONITOR_SCRAPE_INTERVAL:-15s}
+      MONITOR_EVALUATION_INTERVAL: ${MONITOR_EVALUATION_INTERVAL:-15s}
+      MONITOR_HTTP_TARGETS: ${MONITOR_HTTP_TARGETS}
+      POSTGRES_EXPORTER_TARGET: ${POSTGRES_EXPORTER_TARGET:-postgres-exporter:9187}
+      REDIS_EXPORTER_TARGET: ${REDIS_EXPORTER_TARGET:-redis-exporter:9121}
+      BLACKBOX_EXPORTER_TARGET: ${BLACKBOX_EXPORTER_TARGET:-blackbox-exporter:9115}
+      PROMETHEUS_RETENTION: ${PROMETHEUS_RETENTION:-15d}
+      PROMETHEUS_EXTERNAL_URL: ${PROMETHEUS_EXTERNAL_URL:-http://localhost:9090}
+    command:
+      - "/etc/prometheus/render-and-run.sh"
+    volumes:
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./prometheus/render-and-run.sh:/etc/prometheus/render-and-run.sh:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      - postgres-exporter
+      - redis-exporter
+      - blackbox-exporter
+    restart: unless-stopped
+
+  grafana:
+    image: ${GRAFANA_IMAGE:-grafana/grafana-oss:11.6.1}
+    container_name: wafer_monitor_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+      PROMETHEUS_URL: ${GRAFANA_PROMETHEUS_URL:-http://prometheus:9090}
+      GRAFANA_POSTGRES_HOST: ${GRAFANA_POSTGRES_HOST}
+      GRAFANA_POSTGRES_PORT: ${GRAFANA_POSTGRES_PORT:-5432}
+      GRAFANA_POSTGRES_SSLMODE: ${GRAFANA_POSTGRES_SSLMODE:-disable}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:

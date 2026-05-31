@@ -1,0 +1,162 @@
+wafer_orders:
+  query: |
+    SELECT
+      status::text AS status,
+      type,
+      count(*)::float AS total,
+      COALESCE(sum(quantity), 0)::float AS quantity
+    FROM "order"
+    GROUP BY status, type
+  metrics:
+    - status:
+        usage: LABEL
+        description: Order status.
+    - type:
+        usage: LABEL
+        description: Wafer production type.
+    - total:
+        usage: GAUGE
+        description: Number of orders by status and production type.
+    - quantity:
+        usage: GAUGE
+        description: Total order quantity by status and production type.
+
+wafer_orders_due:
+  query: |
+    SELECT
+      type,
+      bucket,
+      count(*)::float AS total,
+      COALESCE(sum(quantity), 0)::float AS quantity
+    FROM (
+      SELECT
+        type,
+        quantity,
+        CASE
+          WHEN "dueDate" < now() THEN 'overdue'
+          WHEN "dueDate" < now() + interval '7 days' THEN 'due_7_days'
+          ELSE 'later'
+        END AS bucket
+      FROM "order"
+      WHERE status NOT IN ('COMPLETED', 'CANCELLED')
+    ) orders_due
+    GROUP BY type, bucket
+  metrics:
+    - type:
+        usage: LABEL
+        description: Wafer production type.
+    - bucket:
+        usage: LABEL
+        description: Due date bucket for active orders.
+    - total:
+        usage: GAUGE
+        description: Number of active orders in the due date bucket.
+    - quantity:
+        usage: GAUGE
+        description: Total active order quantity in the due date bucket.
+
+wafer_assignments:
+  query: |
+    SELECT
+      oa.status::text AS status,
+      f."productionType" AS type,
+      count(*)::float AS total,
+      COALESCE(sum(oa."assignedQuantity"), 0)::float AS quantity
+    FROM "order_assignment" oa
+    JOIN "factory" f ON f.id = oa."factoryId"
+    GROUP BY oa.status, f."productionType"
+  metrics:
+    - status:
+        usage: LABEL
+        description: Assignment status.
+    - type:
+        usage: LABEL
+        description: Wafer production type.
+    - total:
+        usage: GAUGE
+        description: Number of assignments by status and production type.
+    - quantity:
+        usage: GAUGE
+        description: Total assigned quantity by status and production type.
+
+wafer_daily_capacity:
+  query: |
+    SELECT
+      f."productionType" AS type,
+      dc."factoryId" AS factory_id,
+      to_char(dc.date, 'YYYY-MM-DD') AS day,
+      dc."maxCapacity"::float AS max_capacity,
+      dc."curCapacity"::float AS remaining_capacity,
+      GREATEST(dc."maxCapacity" - dc."curCapacity", 0)::float AS used_capacity,
+      CASE
+        WHEN dc."maxCapacity" > 0
+          THEN (GREATEST(dc."maxCapacity" - dc."curCapacity", 0)::float / dc."maxCapacity")
+        ELSE 0
+      END AS utilization_ratio
+    FROM "daily_capacity" dc
+    JOIN "factory" f ON f.id = dc."factoryId"
+    WHERE dc.date >= date_trunc('day', now())
+      AND dc.date < date_trunc('day', now()) + interval '14 days'
+  metrics:
+    - type:
+        usage: LABEL
+        description: Wafer production type.
+    - factory_id:
+        usage: LABEL
+        description: Factory id.
+    - day:
+        usage: LABEL
+        description: Capacity date.
+    - max_capacity:
+        usage: GAUGE
+        description: Daily maximum capacity.
+    - remaining_capacity:
+        usage: GAUGE
+        description: Daily remaining capacity.
+    - used_capacity:
+        usage: GAUGE
+        description: Daily used capacity.
+    - utilization_ratio:
+        usage: GAUGE
+        description: Daily capacity utilization ratio.
+
+wafer_conflict_issues:
+  query: |
+    SELECT
+      status::text AS status,
+      count(*)::float AS total
+    FROM "conflict_issue"
+    GROUP BY status
+  metrics:
+    - status:
+        usage: LABEL
+        description: Conflict issue status.
+    - total:
+        usage: GAUGE
+        description: Number of conflict issues by status.
+
+wafer_scheduler_config:
+  query: |
+    SELECT
+      type,
+      CASE WHEN "isOperating" THEN 1 ELSE 0 END::float AS operating,
+      "frozenDays"::float AS frozen_days,
+      "productionDays"::float AS production_days,
+      "bufferDays"::float AS buffer_days
+    FROM "auto_scheduler_config"
+  metrics:
+    - type:
+        usage: LABEL
+        description: Wafer production type.
+    - operating:
+        usage: GAUGE
+        description: Whether the auto scheduler is operating.
+    - frozen_days:
+        usage: GAUGE
+        description: Frozen days configured for the scheduler.
+    - production_days:
+        usage: GAUGE
+        description: Production days configured for the scheduler.
+    - buffer_days:
+        usage: GAUGE
+        description: Buffer days configured for the scheduler.
