@@ -22,11 +22,12 @@ import {
   notFoundResponse,
   requireRole,
 } from "@/modules/auth/rbac";
-import { createOrder } from "@/infra/db/order-repository";
 import type { OrderRow } from "@/infra/db/order-repository";
 import { createOrderService } from "@/modules/order/order-service";
-import { validateOrderQuantity } from "@/modules/order/order-validation";
-import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
+import {
+  validateOrderQuantity,
+  validateOrderType,
+} from "@/modules/order/order-validation";
 import { prisma } from "@/lib/prisma";
 import { getTime } from "@/lib/get-time";
 import { isBeforeDateOnly } from "@/lib/date-utils";
@@ -93,6 +94,13 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
+      try {
+        validateOrderType(type.trim());
+      } catch {
+        errorList.push(`Row ${rowNum}: "type" must be one of A, B, C.`);
+        continue;
+      }
+
       // Validate dueDate parses to a valid date
       const parsedDueDate = new Date(dueDate);
       if (isNaN(parsedDueDate.getTime())) {
@@ -114,16 +122,7 @@ export async function POST(req: NextRequest) {
           dueDate: parsedDueDate,
           quantity,
         };
-        const order =
-          ctx.user.role === "SALES"
-            ? await createOrderService(ctx, prisma, orderInput)
-            : await createOrder(prisma, {
-                ...orderInput,
-                applicantId: ctx.user.id,
-              });
-        if (ctx.user.role !== "SALES") {
-          await incrementScheduleVersion(order.type);
-        }
+        const order = await createOrderService(ctx, prisma, orderInput);
         successes.push(order);
       } catch (rowErr) {
         const e = rowErr as { message?: string };

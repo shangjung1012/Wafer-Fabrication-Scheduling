@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "@/app/api/schedule/run/route";
 import { requireAuth, UnauthorizedError } from "@/modules/auth/require-auth";
+import { resolveActorScope } from "@/modules/auth/scope";
 import * as scheduleEngine from "@/modules/schedule/run";
 import * as conflictIssueService from "@/modules/order/conflict-issue-service";
 import * as getTimeModule from "@/lib/get-time";
@@ -16,6 +17,14 @@ vi.mock("@/modules/auth/require-auth", () => ({
     code = "UNAUTHORIZED";
   },
 }));
+
+vi.mock("@/modules/auth/scope", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/modules/auth/scope")>();
+  return {
+    ...actual,
+    resolveActorScope: vi.fn(),
+  };
+});
 
 vi.mock("@/modules/schedule/run", () => ({
   runSchedule: vi.fn(),
@@ -44,6 +53,11 @@ describe("POST /api/schedule/run", () => {
     vi.mocked(requireAuth).mockResolvedValue({
       requestId: "test-req",
       user: { id: "user-1", role: "SUPERADMIN" },
+    });
+    vi.mocked(resolveActorScope).mockResolvedValue({
+      role: "SUPERADMIN",
+      userId: "user-1",
+      group: "A",
     });
 
     vi.mocked(scheduleEngine.runSchedule).mockResolvedValue({
@@ -85,7 +99,7 @@ describe("POST /api/schedule/run", () => {
 
   it("should return 401 if not authenticated", async () => {
     vi.mocked(requireAuth).mockRejectedValueOnce(new UnauthorizedError());
-    const req = createRequest({ type: "Type A" });
+    const req = createRequest({ type: "A" });
     const res = await POST(req);
     expect(res.status).toBe(401);
   });
@@ -95,9 +109,29 @@ describe("POST /api/schedule/run", () => {
       requestId: "test-req",
       user: { id: "user-1", role: "SALES" },
     });
-    const req = createRequest({ type: "Type A" });
+    const req = createRequest({ type: "A" });
     const res = await POST(req);
     expect(res.status).toBe(403);
+  });
+
+  it("should return 403 when an admin schedules another production type", async () => {
+    vi.mocked(requireAuth).mockResolvedValueOnce({
+      requestId: "test-req",
+      user: { id: "admin-a", role: "ADMIN" },
+    });
+    vi.mocked(resolveActorScope).mockResolvedValueOnce({
+      role: "ADMIN",
+      userId: "admin-a",
+      factoryIds: ["factory-A1"],
+      productionType: "A",
+      group: "A",
+    });
+
+    const req = createRequest({ type: "B" });
+    const res = await POST(req);
+
+    expect(res.status).toBe(403);
+    expect(scheduleEngine.runSchedule).not.toHaveBeenCalled();
   });
 
   it("should return 400 if body is invalid", async () => {
@@ -110,7 +144,7 @@ describe("POST /api/schedule/run", () => {
     vi.mocked(scheduleEngine.runSchedule).mockRejectedValueOnce(
       new Error("already running"),
     );
-    const req = createRequest({ type: "Type A" });
+    const req = createRequest({ type: "A" });
     const res = await POST(req);
     expect(res.status).toBe(409);
     const json = await res.json();
@@ -118,7 +152,7 @@ describe("POST /api/schedule/run", () => {
   });
 
   it("should run schedule on success", async () => {
-    const req = createRequest({ type: "Type A" });
+    const req = createRequest({ type: "A" });
     const res = await POST(req);
 
     expect(res.status).toBe(200);
@@ -126,7 +160,7 @@ describe("POST /api/schedule/run", () => {
     expect(json.message).toBe("Schedule run successfully");
 
     expect(scheduleEngine.runSchedule).toHaveBeenCalledWith(
-      "Type A",
+      "A",
       expect.any(Object),
       expect.any(Date),
       "user-1",
@@ -139,7 +173,7 @@ describe("POST /api/schedule/run", () => {
       emailsToDispatch: [],
     } as unknown as Awaited<ReturnType<typeof scheduleEngine.runSchedule>>);
 
-    const req = createRequest({ type: "Type A" });
+    const req = createRequest({ type: "A" });
     const res = await POST(req);
 
     expect(res.status).toBe(200);
@@ -147,7 +181,7 @@ describe("POST /api/schedule/run", () => {
     expect(json.message).toBe("Schedule run successfully");
 
     expect(scheduleEngine.runSchedule).toHaveBeenCalledWith(
-      "Type A",
+      "A",
       expect.any(Object),
       expect.any(Date),
       "user-1",
@@ -159,7 +193,7 @@ describe("POST /api/schedule/run", () => {
       new Error("Engine failed"),
     );
 
-    const req = createRequest({ type: "Type A" });
+    const req = createRequest({ type: "A" });
     const res = await POST(req);
 
     expect(res.status).toBe(500);

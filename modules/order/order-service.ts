@@ -23,7 +23,10 @@ import {
 import { upsertDailyCapacityDelta } from "@/infra/db/capacity-repository";
 import { findFactoriesMaxCapacity } from "@/infra/db/factory-repository";
 import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
-import { validateOrderQuantity } from "@/modules/order/order-validation";
+import {
+  validateOrderQuantity,
+  validateOrderType,
+} from "@/modules/order/order-validation";
 import { assertOrderStatusTransition } from "@/modules/order/order-status";
 
 // ---------------------------------------------------------------------------
@@ -107,15 +110,22 @@ export async function createOrderService(
   db: PrismaClient,
   input: CreateOrderServiceInput,
 ): Promise<OrderRow> {
-  requireRole(ctx, ["SALES"]);
+  requireRole(ctx, ["SALES", "ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
   validateOrderQuantity(input.quantity);
+  const type = validateOrderType(input.type);
+
+  if (scope.role === "ADMIN" && getScopeGroup(scope) !== type) {
+    throw new ForbiddenError(
+      "You can only create orders in your production group.",
+    );
+  }
 
   const order = await createOrder(db, {
     dueDate: input.dueDate,
     quantity: input.quantity,
     name: input.name,
-    type: input.type,
+    type,
     applicantId: scope.userId,
   });
   await incrementScheduleVersion(order.type);
@@ -185,6 +195,15 @@ export async function updateOrderService(
   if (input.quantity !== undefined) validateOrderQuantity(input.quantity);
   if (input.status !== undefined) {
     assertOrderStatusTransition(order.status, input.status);
+  }
+
+  if (input.status === OrderStatus.CANCELLED) {
+    const result = await cancelOrdersAndReleaseCapacity(db, [id]);
+    if (result.count === 0) orderNotFound();
+    const cancelledOrder = await findOrderById(db, id);
+    if (!cancelledOrder) orderNotFound();
+    await incrementScheduleVersion(order.type);
+    return cancelledOrder;
   }
 
   const adminInput: UpdateOrderInput = {

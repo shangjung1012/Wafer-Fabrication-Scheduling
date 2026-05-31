@@ -118,6 +118,22 @@ describe("POST /api/schedule/apply", () => {
     expect(data.message).toMatch(/Schedule environment has changed/);
   });
 
+  it("should return 403 when an admin applies a preview for another production type", async () => {
+    vi.mocked(scheduleStore.getPreview).mockResolvedValue({
+      type: "B",
+      version: 1,
+      config: {},
+      result: {},
+    });
+
+    const res = await POST(createRequest({ previewId: "valid-123" }));
+
+    expect(res.status).toBe(403);
+    expect(
+      scheduleOrchestrator.applyScheduleTransactionWithIssues,
+    ).not.toHaveBeenCalled();
+  });
+
   it("should apply schedule, increment version, delete preview", async () => {
     const payload = {
       type: "A",

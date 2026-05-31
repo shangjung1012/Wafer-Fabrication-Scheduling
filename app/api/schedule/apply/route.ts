@@ -12,6 +12,9 @@ import {
 } from "@/modules/schedule/strategy";
 import { getPreview } from "@/infra/redis/schedule-store";
 import { getTime } from "@/lib/get-time";
+import { prisma } from "@/lib/prisma";
+import { ForbiddenError } from "@/modules/auth/rbac";
+import { assertCanManageScheduleType } from "@/modules/schedule/access-control";
 
 function revivePreviewDates(raw: Record<string, unknown>): {
   config: SchedulingConfig;
@@ -103,6 +106,7 @@ export async function POST(request: Request) {
     const type = previewPayload.type as string;
     const version = previewPayload.version as number;
     const { config, result } = revivePreviewDates(previewPayload);
+    await assertCanManageScheduleType(ctx, prisma, type);
 
     await applyScheduleTransactionWithIssues({
       type,
@@ -133,6 +137,12 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof CsrfError) {
+      return NextResponse.json(
+        { code: error.code, message: error.message },
+        { status: error.status },
+      );
+    }
+    if (error instanceof ForbiddenError) {
       return NextResponse.json(
         { code: error.code, message: error.message },
         { status: error.status },

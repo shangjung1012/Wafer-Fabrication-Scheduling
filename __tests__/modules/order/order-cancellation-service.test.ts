@@ -8,7 +8,10 @@ import type { RequestContext } from "@/modules/auth/request-context";
 import * as orderRepo from "@/infra/db/order-repository";
 import * as capacityRepo from "@/infra/db/capacity-repository";
 import * as factoryRepo from "@/infra/db/factory-repository";
-import { deleteOrdersService } from "@/modules/order/order-service";
+import {
+  deleteOrdersService,
+  updateOrderService,
+} from "@/modules/order/order-service";
 
 vi.mock("@/modules/auth/scope", () => ({
   resolveActorScope: vi.fn(async (ctx: RequestContext) => ({
@@ -29,6 +32,7 @@ vi.mock("@/infra/db/order-repository", async (importOriginal) => {
   return {
     ...actual,
     findOrderById: vi.fn(),
+    updateOrder: vi.fn(),
     deleteOrders: vi.fn(),
   };
 });
@@ -127,5 +131,66 @@ describe("deleteOrdersService reliability", () => {
       data: { status: AssignmentStatus.CANCELLED },
     });
     expect(orderRepo.deleteOrders).toHaveBeenCalledWith(tx, ["O1"]);
+  });
+
+  it("releases scheduled capacity when an admin cancels one order through update", async () => {
+    const productionDate = new Date("2026-06-10T00:00:00.000Z");
+    const tx = {
+      orderAssignment: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "A1",
+            factoryId: "F1",
+            productionDate,
+            assignedQuantity: 500,
+          },
+        ]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const db = {
+      $transaction: vi.fn(async (fn) => fn(tx)),
+    } as unknown as PrismaClient;
+    const scheduledOrder = {
+      id: "O1",
+      status: OrderStatus.SCHEDULED,
+      dueDate: new Date("2026-12-31T00:00:00.000Z"),
+      quantity: 500,
+      applicantId: "sales-1",
+      name: "Order 1",
+      type: "A",
+      isFixed: false,
+      isPrioritized: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastModifiedById: null,
+    };
+
+    vi.mocked(orderRepo.findOrderById)
+      .mockResolvedValueOnce(scheduledOrder)
+      .mockResolvedValueOnce({
+        ...scheduledOrder,
+        status: OrderStatus.CANCELLED,
+      });
+    vi.mocked(factoryRepo.findFactoriesMaxCapacity).mockResolvedValue([
+      { id: "F1", maxCapacity: 10000 },
+    ]);
+    vi.mocked(orderRepo.deleteOrders).mockResolvedValue({ count: 1 });
+
+    const result = await updateOrderService(adminCtx, db, "O1", {
+      status: OrderStatus.CANCELLED,
+    });
+
+    expect(result.status).toBe(OrderStatus.CANCELLED);
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    expect(capacityRepo.upsertDailyCapacityDelta).toHaveBeenCalledWith(
+      tx,
+      "F1",
+      productionDate,
+      500,
+      10000,
+    );
+    expect(orderRepo.deleteOrders).toHaveBeenCalledWith(tx, ["O1"]);
+    expect(orderRepo.updateOrder).not.toHaveBeenCalled();
   });
 });

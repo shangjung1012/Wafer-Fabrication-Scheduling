@@ -86,6 +86,50 @@ describe("order-service schedule version invalidation", () => {
     expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith("A");
   });
 
+  it("rejects unknown production types when creating an order", async () => {
+    await expect(
+      createOrderService(salesCtx, db, {
+        name: "Order 1",
+        type: "X",
+        dueDate: new Date("2026-12-31T00:00:00.000Z"),
+        quantity: 100,
+      }),
+    ).rejects.toThrow("type must be one of A, B, C");
+
+    expect(orderRepo.createOrder).not.toHaveBeenCalled();
+    expect(scheduleStore.incrementScheduleVersion).not.toHaveBeenCalled();
+  });
+
+  it("allows admins to create orders in their own production type", async () => {
+    vi.mocked(orderRepo.createOrder).mockResolvedValue({
+      id: "O1",
+      status: OrderStatus.PENDING,
+      dueDate: new Date("2026-12-31T00:00:00.000Z"),
+      quantity: 100,
+      applicantId: "admin-1",
+      name: "Admin order",
+      type: "A",
+      isFixed: false,
+      isPrioritized: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastModifiedById: null,
+    });
+
+    const order = await createOrderService(adminCtx, db, {
+      name: "Admin order",
+      type: "A",
+      dueDate: new Date("2026-12-31T00:00:00.000Z"),
+      quantity: 100,
+    });
+
+    expect(order.applicantId).toBe("admin-1");
+    expect(orderRepo.createOrder).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ type: "A", applicantId: "admin-1" }),
+    );
+  });
+
   it("increments the schedule version only for schedule-affecting updates", async () => {
     vi.mocked(orderRepo.findOrderById).mockResolvedValue({
       id: "O1",
