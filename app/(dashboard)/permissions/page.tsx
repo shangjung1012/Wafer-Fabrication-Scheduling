@@ -7,9 +7,12 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import {
   CheckCircle2,
   Mail,
+  Pencil,
   RefreshCw,
   RotateCw,
+  Save,
   ShieldAlert,
+  Trash2,
   UserPlus,
   X,
   XCircle,
@@ -37,6 +40,13 @@ type ApiResult = {
 };
 
 type InviteForm = {
+  email: string;
+  role: Role;
+  group: string;
+};
+
+type EditForm = {
+  username: string;
   email: string;
   role: Role;
   group: string;
@@ -140,9 +150,22 @@ export default function PermissionsPage() {
   );
   const [textFilter, setTextFilter] = useState("");
   const [loading, setLoading] = useState<
-    "list" | "invite" | `resend:${string}` | null
+    | "list"
+    | "invite"
+    | `resend:${string}`
+    | `update:${string}`
+    | `delete:${string}`
+    | null
   >(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({
+    username: "",
+    email: "",
+    role: "SALES",
+    group: "",
+  });
 
   const isSuperAdmin = session?.user.role === "SUPERADMIN";
   const inviteGroup = form.group.trim() || session?.user.group || "";
@@ -305,6 +328,139 @@ export default function PermissionsPage() {
     }
   };
 
+  const beginEdit = (user: UserRow) => {
+    if (!isSuperAdmin) return;
+    setNotice(null);
+    setEditingId(user.id);
+    setEditForm({
+      username: user.username ?? "",
+      email: user.email,
+      role: user.role,
+      group: user.group ?? session.user.group ?? "",
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({ username: "", email: "", role: "SALES", group: "" });
+  };
+
+  const handleUpdate = async (user: UserRow) => {
+    if (!isSuperAdmin) return;
+
+    const email = editForm.email.trim();
+    const group = editForm.group.trim();
+    const username = editForm.username.trim();
+    const pending = !user.username;
+
+    if (!email || !group) {
+      setNotice({ kind: "error", message: "Email and group are required." });
+      return;
+    }
+    if (user.username && !username) {
+      setNotice({
+        kind: "error",
+        message: "Username is required for active accounts.",
+      });
+      return;
+    }
+
+    setLoading(`update:${user.id}`);
+    setNotice(null);
+
+    try {
+      const response = await apiFetch(
+        `/api/users/${encodeURIComponent(user.id)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            email,
+            role: editForm.role,
+            group,
+            ...(!pending && username ? { username } : {}),
+          }),
+        },
+      );
+      const result = await parseResponse(response);
+      if (!response.ok) {
+        setNotice({
+          kind: "error",
+          message:
+            (result.body as { message?: string } | null)?.message ??
+            `Update failed (${result.status})`,
+        });
+        return;
+      }
+
+      setItems((current) =>
+        current.map((item) =>
+          item.id === user.id
+            ? {
+                ...item,
+                email,
+                role: editForm.role,
+                group,
+                username: pending ? item.username : username || item.username,
+              }
+            : item,
+        ),
+      );
+      cancelEdit();
+      setNotice({ kind: "success", message: `${email} updated.` });
+      void loadUsers(roleFilter);
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleDelete = async (user: UserRow) => {
+    if (!isSuperAdmin) return;
+    if (user.id === session.user.id) {
+      setNotice({
+        kind: "error",
+        message: "You cannot delete your own account.",
+      });
+      return;
+    }
+    setNotice(null);
+    setDeleteTarget(user);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    const user = deleteTarget;
+
+    setLoading(`delete:${user.id}`);
+    setNotice(null);
+
+    try {
+      const response = await apiFetch(
+        `/api/users/${encodeURIComponent(user.id)}`,
+        {
+          method: "DELETE",
+        },
+      );
+      const result = await parseResponse(response);
+      if (!response.ok) {
+        setNotice({
+          kind: "error",
+          message:
+            (result.body as { message?: string } | null)?.message ??
+            `Delete failed (${result.status})`,
+        });
+        return;
+      }
+
+      setItems((current) => current.filter((item) => item.id !== user.id));
+      if (editingId === user.id) cancelEdit();
+      setDeleteTarget(null);
+      setNotice({ kind: "success", message: `${user.email} removed.` });
+    } finally {
+      setLoading(null);
+    }
+  };
+
   const filtered = items.filter((u) => {
     if (roleFilter && u.role !== roleFilter) return false;
     if (groupFilter && (u.group ?? "") !== groupFilter) return false;
@@ -392,6 +548,50 @@ export default function PermissionsPage() {
               >
                 <X size={14} />
               </button>
+            </div>
+          )}
+
+          {deleteTarget && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-account-title"
+              style={modalOverlayStyle}
+            >
+              <div style={modalPanelStyle}>
+                <div style={modalIconStyle}>
+                  <Trash2 size={18} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2 id="delete-account-title" style={modalTitleStyle}>
+                    Remove account
+                  </h2>
+                  <p style={modalTextStyle}>
+                    Remove {deleteTarget.email}? This action cannot be undone.
+                  </p>
+                  <div style={modalActionsStyle}>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(null)}
+                      disabled={loading === `delete:${deleteTarget.id}`}
+                      style={secondaryButtonStyle}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmDelete}
+                      disabled={loading === `delete:${deleteTarget.id}`}
+                      style={{ ...primaryButtonStyle, ...dangerPrimaryStyle }}
+                    >
+                      <Trash2 size={16} />
+                      {loading === `delete:${deleteTarget.id}`
+                        ? "Removing..."
+                        : "Remove"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -603,37 +803,168 @@ export default function PermissionsPage() {
                         </select>
                       </div>
                     </th>
-                    <th style={thStyle}></th>
+                    <th style={thStyle}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((user) => {
                     const pending = !user.username;
                     const resendLoading = loading === `resend:${user.id}`;
+                    const updateLoading = loading === `update:${user.id}`;
+                    const deleteLoading = loading === `delete:${user.id}`;
+                    const isEditing = editingId === user.id;
+                    const isSelf = user.id === session.user.id;
                     return (
                       <tr key={user.id} style={trStyle}>
-                        <td style={tdStyle}>{user.email}</td>
-                        <td style={tdStyle}>{user.username ?? "-"}</td>
                         <td style={tdStyle}>
-                          <RoleBadge role={user.role} />
+                          {isEditing ? (
+                            <input
+                              required
+                              type="email"
+                              value={editForm.email}
+                              onChange={(event) =>
+                                setEditForm((current) => ({
+                                  ...current,
+                                  email: event.target.value,
+                                }))
+                              }
+                              style={tableInputStyle}
+                            />
+                          ) : (
+                            user.email
+                          )}
                         </td>
-                        <td style={tdStyle}>{user.group ?? "-"}</td>
+                        <td style={tdStyle}>
+                          {isEditing ? (
+                            <input
+                              value={editForm.username}
+                              disabled={pending}
+                              onChange={(event) =>
+                                setEditForm((current) => ({
+                                  ...current,
+                                  username: event.target.value,
+                                }))
+                              }
+                              placeholder={
+                                pending ? "Set via invitation" : "Username"
+                              }
+                              style={tableInputStyle}
+                            />
+                          ) : (
+                            (user.username ?? "-")
+                          )}
+                        </td>
+                        <td style={tdStyle}>
+                          {isEditing ? (
+                            <select
+                              value={editForm.role}
+                              onChange={(event) =>
+                                setEditForm((current) => ({
+                                  ...current,
+                                  role: event.target.value as Role,
+                                }))
+                              }
+                              style={tableInputStyle}
+                            >
+                              {visibleRoles.map((role) => (
+                                <option key={role} value={role}>
+                                  {role}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <RoleBadge role={user.role} />
+                          )}
+                        </td>
+                        <td style={tdStyle}>
+                          {isEditing ? (
+                            <input
+                              required
+                              value={editForm.group}
+                              onChange={(event) =>
+                                setEditForm((current) => ({
+                                  ...current,
+                                  group: event.target.value,
+                                }))
+                              }
+                              style={tableInputStyle}
+                            />
+                          ) : (
+                            (user.group ?? "-")
+                          )}
+                        </td>
                         <td style={tdStyle}>
                           <StatusBadge pending={pending} />
                         </td>
                         <td style={{ ...tdStyle, textAlign: "right" }}>
-                          {isSuperAdmin && pending ? (
-                            <button
-                              type="button"
-                              onClick={() => handleResend(user)}
-                              disabled={resendLoading}
-                              style={iconButtonStyle}
-                              title="Resend invitation"
-                            >
-                              <RotateCw size={14} />
-                              {resendLoading ? "Sending" : "Resend"}
-                            </button>
-                          ) : null}
+                          <div style={actionGroupStyle}>
+                            {isEditing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdate(user)}
+                                  disabled={updateLoading}
+                                  style={iconButtonStyle}
+                                  title="Save changes"
+                                >
+                                  <Save size={14} />
+                                  {updateLoading ? "Saving" : "Save"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelEdit}
+                                  disabled={updateLoading}
+                                  style={iconButtonStyle}
+                                  title="Cancel editing"
+                                >
+                                  <X size={14} />
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {pending ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResend(user)}
+                                    disabled={resendLoading}
+                                    style={iconButtonStyle}
+                                    title="Resend invitation"
+                                  >
+                                    <RotateCw size={14} />
+                                    {resendLoading ? "Sending" : "Resend"}
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => beginEdit(user)}
+                                  style={iconButtonStyle}
+                                  title="Edit account"
+                                >
+                                  <Pencil size={14} />
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(user)}
+                                  disabled={deleteLoading || isSelf}
+                                  style={{
+                                    ...iconButtonStyle,
+                                    ...dangerButtonStyle,
+                                    ...(isSelf ? disabledButtonStyle : {}),
+                                  }}
+                                  title={
+                                    isSelf
+                                      ? "You cannot delete your own account"
+                                      : "Remove account"
+                                  }
+                                >
+                                  <Trash2 size={14} />
+                                  {deleteLoading ? "Removing" : "Remove"}
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -783,6 +1114,32 @@ const iconButtonStyle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
   cursor: "pointer",
+};
+
+const dangerButtonStyle: React.CSSProperties = {
+  borderColor: "#fecaca",
+  color: "#991b1b",
+  background: "#fff",
+};
+
+const disabledButtonStyle: React.CSSProperties = {
+  opacity: 0.55,
+  cursor: "not-allowed",
+};
+
+const actionGroupStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 6,
+  flexWrap: "wrap",
+};
+
+const tableInputStyle: React.CSSProperties = {
+  ...inputStyle,
+  minWidth: 132,
+  padding: "6px 8px",
+  fontSize: 13,
 };
 
 const warningStyle: React.CSSProperties = {
