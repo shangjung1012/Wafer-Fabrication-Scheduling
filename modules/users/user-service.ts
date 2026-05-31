@@ -3,7 +3,8 @@
  *
  * Business logic for User management.
  * - SUPERADMIN: full CRUD over ADMIN + SALES users in their group (root)
- * - ADMIN: CRUD over SALES users in their group only; cannot create/promote to ADMIN
+ * - ADMIN: can list/create SALES users in their group only; account updates and
+ *   deletion are reserved for SUPERADMIN.
  */
 
 import type { PrismaClient, UserRole } from "@/lib/generated/prisma/client";
@@ -105,7 +106,7 @@ export async function updateUserService(
   targetId: string,
   input: UpdateUserServiceInput,
 ): Promise<{ id: string }> {
-  requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
+  requireRole(ctx, ["SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
   const adminGroup = getScopeGroup(scope);
 
@@ -117,17 +118,6 @@ export async function updateUserService(
     throw new ForbiddenError(
       `User '${targetId}' belongs to type '${target.group}', not your type '${adminGroup}'.`,
     );
-  }
-
-  if (scope.role === "ADMIN") {
-    if (target.role !== "SALES") {
-      throw new ForbiddenError("Admins can only update SALES users.");
-    }
-    if (input.role && input.role !== "SALES") {
-      throw new ForbiddenError(
-        "Admins cannot promote users to ADMIN or SUPERADMIN.",
-      );
-    }
   }
 
   if (input.group !== undefined && input.group !== adminGroup) {
@@ -153,7 +143,7 @@ export async function deleteUserService(
   db: PrismaClient,
   targetId: string,
 ): Promise<{ id: string }> {
-  requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
+  requireRole(ctx, ["SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
   const adminGroup = getScopeGroup(scope);
 
@@ -169,10 +159,6 @@ export async function deleteUserService(
     throw new ForbiddenError(
       `User '${targetId}' belongs to type '${target.group}', not your type '${adminGroup}'.`,
     );
-  }
-
-  if (scope.role === "ADMIN" && target.role !== "SALES") {
-    throw new ForbiddenError("Admins can only delete SALES users.");
   }
 
   const result = await deleteUser(db, targetId);
