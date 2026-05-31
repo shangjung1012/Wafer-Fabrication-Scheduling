@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import {
   CLIENT_AUTH_SESSION_EVENT,
@@ -40,5 +40,20 @@ function getServerSnapshot(): ClientAuthSessionSnapshot {
 }
 
 export function useClientAuthSession(): ClientAuthSessionSnapshot {
-  return useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot);
+  const snapshot = useSyncExternalStore(
+    subscribe,
+    getClientSnapshot,
+    getServerSnapshot,
+  );
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setHydrated(true);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return hydrated ? snapshot : undefined;
 }
