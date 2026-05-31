@@ -44,11 +44,20 @@ const adminCtx: RequestContext = {
   user: { id: "admin-1", role: "ADMIN" },
 };
 
-const db = {} as PrismaClient;
+const tx = {
+  orderAssignment: {
+    findMany: vi.fn().mockResolvedValue([]),
+    updateMany: vi.fn(),
+  },
+};
+const db = {
+  $transaction: vi.fn(async (fn) => fn(tx)),
+} as unknown as PrismaClient;
 
 describe("order-service schedule version invalidation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    tx.orderAssignment.findMany.mockResolvedValue([]);
   });
 
   it("increments the schedule version when creating an order", async () => {

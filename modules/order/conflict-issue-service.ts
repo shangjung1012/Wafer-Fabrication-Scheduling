@@ -40,7 +40,6 @@ import {
   findOrdersForIssueCreationBatch,
   findCompetingScheduledOrdersBatch,
   findOrderById,
-  deleteOrders,
 } from "@/infra/db/order-repository";
 import {
   findFactoriesForIssueSnapshot,
@@ -60,6 +59,7 @@ import {
 import { renderAndSend } from "@/modules/mail/mail-template";
 import { issueCreatedTemplate } from "@/modules/mail/templates/issue-created";
 import { cancelRequestTemplate } from "@/modules/mail/templates/cancel-request";
+import { cancelOrdersAndReleaseCapacity } from "@/modules/order/order-service";
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -605,7 +605,7 @@ export async function updateIssueStatus(
     ) {
       conflict("Cannot cancel order on a resolved or closed issue.");
     }
-    await deleteOrders(db, [issue.orderId]);
+    await cancelOrdersAndReleaseCapacity(db, [issue.orderId]);
     await updateConflictIssue(db, issueId, {
       status: ConflictIssueStatus.CLOSED,
       resolution: ConflictResolution.CANCELLED,

@@ -6,6 +6,7 @@
  */
 
 import type { PrismaClient } from "@/lib/generated/prisma";
+import { AssignmentStatus } from "@/lib/generated/prisma";
 import type { RequestContext } from "@/modules/auth/request-context";
 import { requireRole, ForbiddenError } from "@/modules/auth/rbac";
 import { resolveActorScope, getScopeGroup } from "@/modules/auth/scope";
@@ -19,6 +20,8 @@ import {
   type UpdateOrderInput,
   OrderStatus,
 } from "@/infra/db/order-repository";
+import { upsertDailyCapacityDelta } from "@/infra/db/capacity-repository";
+import { findFactoriesMaxCapacity } from "@/infra/db/factory-repository";
 import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
 import { validateOrderQuantity } from "@/modules/order/order-validation";
 import { assertOrderStatusTransition } from "@/modules/order/order-status";
@@ -215,9 +218,53 @@ export async function deleteOrdersService(
     }
   }
 
-  const result = await deleteOrders(db, ids);
+  const result = await cancelOrdersAndReleaseCapacity(db, ids);
   for (const type of new Set(orders.map((o) => o!.type))) {
     await incrementScheduleVersion(type);
   }
   return result;
+}
+
+export async function cancelOrdersAndReleaseCapacity(
+  db: PrismaClient,
+  ids: string[],
+): Promise<{ count: number }> {
+  return db.$transaction(async (tx) => {
+    const scheduledAssignments = await tx.orderAssignment.findMany({
+      where: {
+        orderId: { in: ids },
+        status: AssignmentStatus.SCHEDULED,
+      },
+      select: {
+        id: true,
+        factoryId: true,
+        productionDate: true,
+        assignedQuantity: true,
+      },
+    });
+
+    if (scheduledAssignments.length > 0) {
+      const factories = await findFactoriesMaxCapacity(tx as PrismaClient);
+      const factoryMaxById = new Map(
+        factories.map((f) => [f.id, f.maxCapacity]),
+      );
+
+      for (const assignment of scheduledAssignments) {
+        await upsertDailyCapacityDelta(
+          tx as PrismaClient,
+          assignment.factoryId,
+          assignment.productionDate,
+          assignment.assignedQuantity,
+          factoryMaxById.get(assignment.factoryId) ?? 0,
+        );
+      }
+
+      await tx.orderAssignment.updateMany({
+        where: { id: { in: scheduledAssignments.map((a) => a.id) } },
+        data: { status: AssignmentStatus.CANCELLED },
+      });
+    }
+
+    return deleteOrders(tx as PrismaClient, ids);
+  });
 }
