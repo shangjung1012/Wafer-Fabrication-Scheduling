@@ -8,6 +8,10 @@ import { z } from "zod";
 import { runScheduleWithIssues } from "@/modules/order/schedule-orchestrator";
 import { type SchedulingConfig } from "@/modules/schedule/strategy";
 import { getTime } from "@/lib/get-time";
+import { prisma } from "@/lib/prisma";
+import { ForbiddenError } from "@/modules/auth/rbac";
+import { assertCanManageScheduleType } from "@/modules/schedule/access-control";
+import { OrderTypeSchema } from "@/modules/order/order-validation";
 
 const SchedulingConfigSchema = z
   .object({
@@ -34,7 +38,7 @@ const SchedulingConfigSchema = z
 
 const RunScheduleSchema = z
   .object({
-    type: z.string().min(1, "Type is required"),
+    type: OrderTypeSchema,
     config: SchedulingConfigSchema,
   })
   .strict();
@@ -66,6 +70,7 @@ export async function POST(request: Request) {
     }
 
     const { type, config } = parsed.data;
+    await assertCanManageScheduleType(ctx, prisma, type);
 
     // Only the lock winner pays the cost of resolving the simulation/current date.
     const currentDate = await getTime();
@@ -92,6 +97,12 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof CsrfError) {
+      return NextResponse.json(
+        { code: error.code, message: error.message },
+        { status: error.status },
+      );
+    }
+    if (error instanceof ForbiddenError) {
       return NextResponse.json(
         { code: error.code, message: error.message },
         { status: error.status },

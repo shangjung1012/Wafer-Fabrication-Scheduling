@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/schedule/preview/route";
 import * as auth from "@/modules/auth/require-auth";
+import { resolveActorScope } from "@/modules/auth/scope";
 import * as schedulePreview from "@/modules/schedule/preview";
 import * as scheduleStore from "@/infra/redis/schedule-store";
 import { OrderStatus, AssignmentStatus } from "@/lib/generated/prisma";
@@ -14,6 +15,14 @@ vi.mock("@/modules/auth/require-auth", () => ({
     status = 403;
   },
 }));
+
+vi.mock("@/modules/auth/scope", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/modules/auth/scope")>();
+  return {
+    ...actual,
+    resolveActorScope: vi.fn(),
+  };
+});
 
 vi.mock("@/modules/schedule/preview", () => ({
   previewSchedule: vi.fn(),
@@ -34,6 +43,13 @@ vi.mock("crypto", () => ({
 describe("POST /api/schedule/preview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveActorScope).mockResolvedValue({
+      role: "ADMIN",
+      userId: "U1",
+      factoryIds: ["factory-A1"],
+      productionType: "A",
+      group: "A",
+    });
   });
 
   const createRequest = (body: Record<string, unknown>) =>
@@ -47,8 +63,26 @@ describe("POST /api/schedule/preview", () => {
       user: { role: "SALES", id: "U1" },
     } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
 
-    const res = await POST(createRequest({ type: "Type A" }));
+    const res = await POST(createRequest({ type: "A" }));
     expect(res.status).toBe(403);
+  });
+
+  it("should return 403 when an admin previews another production type", async () => {
+    vi.mocked(auth.requireAuth).mockResolvedValue({
+      user: { role: "ADMIN", id: "U1" },
+    } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
+    vi.mocked(resolveActorScope).mockResolvedValueOnce({
+      role: "ADMIN",
+      userId: "U1",
+      factoryIds: ["factory-A1"],
+      productionType: "A",
+      group: "A",
+    });
+
+    const res = await POST(createRequest({ type: "B" }));
+
+    expect(res.status).toBe(403);
+    expect(schedulePreview.previewSchedule).not.toHaveBeenCalled();
   });
 
   it("should generate a preview, save it to redis, and format the response correctly", async () => {
@@ -99,7 +133,7 @@ describe("POST /api/schedule/preview", () => {
     );
 
     const reqBody = {
-      type: "Type A",
+      type: "A",
       config: {
         startDate: mockDate.toISOString(),
       },
@@ -157,7 +191,7 @@ describe("POST /api/schedule/preview", () => {
     );
 
     const reqBody = {
-      type: "Type A",
+      type: "A",
       config: {
         startDate: mockDate.toISOString(),
       },

@@ -1,6 +1,7 @@
 import { OrderStatus, AssignmentStatus } from "@/lib/generated/prisma/client";
 import { type SchedulingConfig } from "./config";
 import { calculateOrderDeadline } from "./validation-utils";
+import { DEFAULT_DAILY_CAPACITY } from "@/modules/schedule/constants";
 
 export type { SchedulingConfig };
 
@@ -179,7 +180,7 @@ export const greedyBestFitStrategy: IScheduleStrategy = {
 
         if (!cap) {
           const factory = factoryMapById.get(assignment.factoryId);
-          const maxCap = factory ? factory.maxCapacity : 10000; // Fallback
+          const maxCap = factory ? factory.maxCapacity : DEFAULT_DAILY_CAPACITY;
           cap = {
             factoryId: assignment.factoryId,
             date: new Date(assignment.productionDate),

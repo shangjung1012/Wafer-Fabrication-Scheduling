@@ -40,7 +40,6 @@ import {
   findOrdersForIssueCreationBatch,
   findCompetingScheduledOrdersBatch,
   findOrderById,
-  deleteOrders,
 } from "@/infra/db/order-repository";
 import {
   findFactoriesForIssueSnapshot,
@@ -50,6 +49,8 @@ import { findDailyCapacitiesByDateRange } from "@/infra/db/capacity-repository";
 import { findUserById, findUsers } from "@/infra/db/user-repository";
 import { getTime } from "@/lib/get-time";
 import { calculateOrderDeadline } from "@/modules/schedule/validation-utils";
+import { validateOrderQuantity } from "@/modules/order/order-validation";
+import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
 import {
   computeTotalAvailableCapacity,
   type CapacityDraft,
@@ -58,6 +59,7 @@ import {
 import { renderAndSend } from "@/modules/mail/mail-template";
 import { issueCreatedTemplate } from "@/modules/mail/templates/issue-created";
 import { cancelRequestTemplate } from "@/modules/mail/templates/cancel-request";
+import { cancelOrdersAndReleaseCapacity } from "@/modules/order/order-service";
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -378,6 +380,7 @@ export async function acceptProposal(
         },
       );
     }
+    validateOrderQuantity(proposalData.proposal.newQuantity);
     safeFields.quantity = proposalData.proposal.newQuantity;
     resolution = ConflictResolution.REDUCED_QUANTITY;
   } else if (kind === "DELAY_DUE_DATE") {
@@ -424,6 +427,7 @@ export async function acceptProposal(
     comment.issue.orderId,
     safeFields as Parameters<typeof updateOrder>[2],
   );
+  await incrementScheduleVersion(order.type);
 
   // Fetch updated order for after snapshot
   const orderAfter = {
@@ -601,7 +605,7 @@ export async function updateIssueStatus(
     ) {
       conflict("Cannot cancel order on a resolved or closed issue.");
     }
-    await deleteOrders(db, [issue.orderId]);
+    await cancelOrdersAndReleaseCapacity(db, [issue.orderId]);
     await updateConflictIssue(db, issueId, {
       status: ConflictIssueStatus.CLOSED,
       resolution: ConflictResolution.CANCELLED,

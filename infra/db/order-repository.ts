@@ -143,8 +143,6 @@ export async function createOrder(
   });
 }
 
-import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
-
 export async function updateOrder(
   db: PrismaClient,
   id: string,
@@ -152,11 +150,11 @@ export async function updateOrder(
 ): Promise<OrderRow | null> {
   const exists = await db.order.findUnique({
     where: { id },
-    select: { id: true, type: true },
+    select: { id: true },
   });
   if (!exists) return null;
 
-  const result = await db.order.update({
+  return db.order.update({
     where: { id },
     data: {
       ...(input.status !== undefined ? { status: input.status } : {}),
@@ -174,38 +172,16 @@ export async function updateOrder(
     },
     select: orderSelect,
   });
-
-  if (
-    input.status !== undefined ||
-    input.dueDate !== undefined ||
-    input.quantity !== undefined ||
-    input.isFixed !== undefined ||
-    input.isPrioritized !== undefined
-  ) {
-    await incrementScheduleVersion(exists.type);
-  }
-
-  return result;
 }
 
 export async function deleteOrders(
   db: PrismaClient,
   ids: string[],
 ): Promise<{ count: number }> {
-  const orders = await db.order.findMany({
-    where: { id: { in: ids } },
-    select: { type: true },
-  });
-  const types = Array.from(new Set(orders.map((o) => o.type)));
-
   const result = await db.order.updateMany({
     where: { id: { in: ids } },
     data: { status: OrderStatus.CANCELLED },
   });
-
-  for (const type of types) {
-    await incrementScheduleVersion(type);
-  }
 
   return { count: result.count };
 }
@@ -214,19 +190,8 @@ export async function bulkUpdateOrderStatus(
   db: PrismaClient,
   updates: { id: string; status: OrderStatus }[],
 ): Promise<void> {
-  const ids = updates.map((u) => u.id);
-  const orders = await db.order.findMany({
-    where: { id: { in: ids } },
-    select: { type: true },
-  });
-  const types = Array.from(new Set(orders.map((o) => o.type)));
-
   for (const { id, status } of updates) {
     await db.order.update({ where: { id }, data: { status } });
-  }
-
-  for (const type of types) {
-    await incrementScheduleVersion(type);
   }
 }
 

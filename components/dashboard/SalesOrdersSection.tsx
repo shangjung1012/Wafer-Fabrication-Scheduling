@@ -36,6 +36,7 @@ const STATUS_STYLE: Record<string, string> = {
   IN_PRODUCTION: "bg-green-100 text-green-700 border-green-200",
   COMPLETED: "bg-gray-100 text-gray-600 border-gray-200",
   CANCELLED: "bg-red-100 text-red-700 border-red-200",
+  FAILED: "bg-orange-100 text-orange-700 border-orange-200",
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -182,6 +183,7 @@ export function SalesOrdersSection({
                 "IN_PRODUCTION",
                 "COMPLETED",
                 "CANCELLED",
+                "FAILED",
               ].map((value) => (
                 <option key={value} value={value}>
                   {value}

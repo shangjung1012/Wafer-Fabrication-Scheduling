@@ -130,6 +130,7 @@ const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   IN_PRODUCTION: { bg: "#dcfce7", color: "#166534" },
   COMPLETED: { bg: "#f3f4f6", color: "#374151" },
   CANCELLED: { bg: "#fee2e2", color: "#991b1b" },
+  FAILED: { bg: "#ffedd5", color: "#9a3412" },
 };
 
 function OrderTable({ data }: { data: unknown }) {
@@ -780,6 +781,7 @@ export default function OrdersPage() {
                 <option value="IN_PRODUCTION">IN_PRODUCTION</option>
                 <option value="COMPLETED">COMPLETED</option>
                 <option value="CANCELLED">CANCELLED</option>
+                <option value="FAILED">FAILED</option>
               </select>
             </label>
           )}
