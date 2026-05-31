@@ -5,11 +5,16 @@ import { POST as loginPost } from "@/app/api/auth/login/route";
 import { POST as logoutPost } from "@/app/api/auth/logout/route";
 import { POST as refreshPost } from "@/app/api/auth/refresh/route";
 import { GET as usersGet } from "@/app/api/users/route";
+import {
+  DELETE as userDelete,
+  PATCH as userPatch,
+} from "@/app/api/users/[id]/route";
 import { hashPassword } from "@/modules/auth/password-service";
 
 const PASSWORD = "Password123!";
 const TEST_USER_IDS = [
   "route-test-sa-A",
+  "route-test-admin-A",
   "route-test-sales-A",
   "route-test-sales-B",
 ];
@@ -38,6 +43,23 @@ function authedNextRequest(url: string, cookie?: string): NextRequest {
   });
 }
 
+function authedJsonNextRequest(
+  url: string,
+  cookie: string,
+  method: "PATCH" | "DELETE",
+  body?: unknown,
+): NextRequest {
+  return new NextRequest(url, {
+    method,
+    headers: {
+      Cookie: cookie,
+      Origin: "http://localhost",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 async function cleanupRouteTestUsers(): Promise<void> {
   await prisma.refreshToken.deleteMany({
     where: { userId: { in: TEST_USER_IDS } },
@@ -57,6 +79,14 @@ async function seedRouteTestUsers(): Promise<void> {
         email: "route-test-sa-a@mail.shangjung.com",
         password,
         role: "SUPERADMIN",
+        group: "A",
+      },
+      {
+        id: "route-test-admin-A",
+        username: "route-test-admin-A",
+        email: "route-test-admin-a@mail.shangjung.com",
+        password,
+        role: "ADMIN",
         group: "A",
       },
       {
@@ -156,6 +186,105 @@ describe("auth API route flow", () => {
     await expect(response.json()).resolves.toMatchObject({
       code: "FORBIDDEN",
     });
+  });
+
+  it("allows SUPERADMIN to update a user account", async () => {
+    const loginResponse = await loginPost(
+      jsonRequest("http://localhost/api/auth/login", {
+        username: "route-test-sa-A",
+        password: PASSWORD,
+      }),
+    );
+    const cookies = cookieHeader(loginResponse);
+
+    const response = await userPatch(
+      authedJsonNextRequest(
+        "http://localhost/api/users/route-test-sales-A",
+        cookies,
+        "PATCH",
+        {
+          username: "route-test-sales-A-renamed",
+          email: "route-test-sales-a-renamed@mail.shangjung.com",
+          role: "SALES",
+          group: "A",
+        },
+      ),
+      { params: Promise.resolve({ id: "route-test-sales-A" }) },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      id: "route-test-sales-A",
+    });
+    await expect(
+      prisma.user.findUnique({
+        where: { id: "route-test-sales-A" },
+        select: { username: true, email: true, role: true, group: true },
+      }),
+    ).resolves.toMatchObject({
+      username: "route-test-sales-A-renamed",
+      email: "route-test-sales-a-renamed@mail.shangjung.com",
+      role: "SALES",
+      group: "A",
+    });
+  });
+
+  it("rejects ADMIN account updates and removals", async () => {
+    const loginResponse = await loginPost(
+      jsonRequest("http://localhost/api/auth/login", {
+        username: "route-test-admin-A",
+        password: PASSWORD,
+      }),
+    );
+    const cookies = cookieHeader(loginResponse);
+
+    const patchResponse = await userPatch(
+      authedJsonNextRequest(
+        "http://localhost/api/users/route-test-sales-A",
+        cookies,
+        "PATCH",
+        { email: "route-test-sales-a-renamed@mail.shangjung.com" },
+      ),
+      { params: Promise.resolve({ id: "route-test-sales-A" }) },
+    );
+    expect(patchResponse.status).toBe(403);
+
+    const deleteResponse = await userDelete(
+      authedJsonNextRequest(
+        "http://localhost/api/users/route-test-sales-A",
+        cookies,
+        "DELETE",
+      ),
+      { params: Promise.resolve({ id: "route-test-sales-A" }) },
+    );
+    expect(deleteResponse.status).toBe(403);
+  });
+
+  it("allows SUPERADMIN to remove a user account", async () => {
+    const loginResponse = await loginPost(
+      jsonRequest("http://localhost/api/auth/login", {
+        username: "route-test-sa-A",
+        password: PASSWORD,
+      }),
+    );
+    const cookies = cookieHeader(loginResponse);
+
+    const response = await userDelete(
+      authedJsonNextRequest(
+        "http://localhost/api/users/route-test-sales-A",
+        cookies,
+        "DELETE",
+      ),
+      { params: Promise.resolve({ id: "route-test-sales-A" }) },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      id: "route-test-sales-A",
+    });
+    await expect(
+      prisma.user.findUnique({ where: { id: "route-test-sales-A" } }),
+    ).resolves.toBeNull();
   });
 
   it("logs out by revoking the refresh token", async () => {

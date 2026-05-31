@@ -48,6 +48,7 @@ describe("POST /api/schedule/run", () => {
 
     vi.mocked(scheduleEngine.runSchedule).mockResolvedValue({
       failedIds: [],
+      emailsToDispatch: [],
     } as unknown as Awaited<ReturnType<typeof scheduleEngine.runSchedule>>);
 
     vi.mocked(
@@ -132,32 +133,25 @@ describe("POST /api/schedule/run", () => {
     );
   });
 
-  it("should fire-and-forget createIssuesForFailedOrders when there are failed IDs", async () => {
+  it("should return success when there are failed IDs", async () => {
     vi.mocked(scheduleEngine.runSchedule).mockResolvedValueOnce({
       failedIds: ["X1"],
+      emailsToDispatch: [],
     } as unknown as Awaited<ReturnType<typeof scheduleEngine.runSchedule>>);
 
     const req = createRequest({ type: "Type A" });
     const res = await POST(req);
 
     expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.message).toBe("Schedule run successfully");
 
-    // Wait a microtask so the fire-and-forget kicks
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(
-      conflictIssueService.createIssuesForFailedOrders,
-    ).toHaveBeenCalledTimes(1);
-    expect(
-      conflictIssueService.createIssuesForFailedOrders,
-    ).toHaveBeenCalledWith({
-      failedOrderIds: ["X1"],
-      actorId: "user-1",
-      runConfig: expect.any(Object),
-      runAt: expect.any(Date),
-      prisma: expect.anything(),
-    });
+    expect(scheduleEngine.runSchedule).toHaveBeenCalledWith(
+      "Type A",
+      expect.any(Object),
+      expect.any(Date),
+      "user-1",
+    );
   });
 
   it("should return 500 if engine throws an unhandled error", async () => {

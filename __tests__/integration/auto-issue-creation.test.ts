@@ -188,21 +188,8 @@ describe("Auto ConflictIssue creation — Database Integration", () => {
         expect(failedOrder?.status).toBe(OrderStatus.FAILED);
 
         // ---------------------------------------------------------------------
-        // 3. Invoke the fire-and-forget service directly (the routes do this in
-        //    production after the schedule transaction commits). Option A from
-        //    the proposal — deterministic and tests the real DB integration.
-        // ---------------------------------------------------------------------
-        const firstResult = await createIssuesForFailedOrders({
-          failedOrderIds: failedIds,
-          actorId: admin.id,
-          runConfig: config,
-          runAt,
-          prisma,
-        });
-
-        expect(firstResult.created).toBe(1);
-        expect(firstResult.skippedAsDuplicate).toBe(0);
-
+        // 3. Verify Creation Intent: The atomic issue creation from the scheduler
+        //    Ensure `runSchedule` directly created the issue and its OPENED event.
         // -------- Assertions on ConflictIssue row --------
         const issues = await prisma.conflictIssue.findMany({
           where: { orderId: order.id },

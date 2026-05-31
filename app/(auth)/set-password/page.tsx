@@ -342,7 +342,7 @@ const primaryButtonStyle: CSSProperties = {
 };
 
 const disabledButtonStyle: CSSProperties = {
-  borderColor: "#cbd5e1",
+  border: "1px solid #cbd5e1",
   background: "#94a3b8",
   color: "#f8fafc",
   cursor: "not-allowed",

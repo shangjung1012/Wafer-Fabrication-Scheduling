@@ -8,11 +8,14 @@ import * as orderRepo from "@/infra/db/order-repository";
 import * as factoryRepo from "@/infra/db/factory-repository";
 import * as assignmentRepo from "@/infra/db/assignment-repository";
 import * as capacityRepo from "@/infra/db/capacity-repository";
+import * as conflictIssueRepo from "@/infra/db/conflict-issue-repository";
+import * as mailTemplate from "@/modules/mail/mail-template";
 import { OrderStatus, AssignmentStatus } from "@/lib/generated/prisma/client";
 import {
   type SchedulingConfig,
   type StrategyResult,
 } from "@/modules/schedule/strategy";
+import { prepareIssueCreationPrep } from "@/modules/order/conflict-issue-service";
 
 const mockTx = {};
 
@@ -38,14 +41,41 @@ vi.mock("@/infra/db/assignment-repository", () => ({
 
 vi.mock("@/infra/db/capacity-repository", () => ({
   createDailyCapacities: vi.fn(),
-  updateDailyCapacityById: vi.fn(),
+  bulkUpdateDailyCapacities: vi.fn(),
 }));
 
 vi.mock("@/infra/redis/schedule-store", () => ({
   withScheduleLock: vi.fn(async (type, cb) => {
     return cb();
   }),
+  incrementScheduleVersion: vi.fn(),
 }));
+
+vi.mock("@/infra/db/conflict-issue-repository", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/infra/db/conflict-issue-repository")
+  >("@/infra/db/conflict-issue-repository");
+  return {
+    ...actual,
+    createManyConflictIssues: vi.fn(),
+    findConflictIssuesByOrderIds: vi.fn(),
+    createManyConflictIssueEvents: vi.fn(),
+  };
+});
+
+vi.mock("@/modules/mail/mail-template", () => ({
+  renderAndSend: vi.fn(),
+}));
+
+vi.mock("@/modules/order/conflict-issue-service", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/modules/order/conflict-issue-service")
+  >("@/modules/order/conflict-issue-service");
+  return {
+    ...actual,
+    prepareIssueCreationPrep: vi.fn(),
+  };
+});
 
 describe("Schedule Engine - Core", () => {
   beforeEach(() => {
@@ -177,6 +207,10 @@ describe("Schedule Engine - Core", () => {
         splittable: true,
       };
 
+      vi.mocked(capacityRepo.bulkUpdateDailyCapacities).mockResolvedValue(
+        new Set(["Type A"]),
+      );
+
       await applyScheduleTransaction(
         "Type A",
         dummyConfig,
@@ -204,15 +238,168 @@ describe("Schedule Engine - Core", () => {
         mockStrategyResult.newCapacities,
       );
 
-      expect(capacityRepo.updateDailyCapacityById).toHaveBeenCalledWith(
+      expect(capacityRepo.bulkUpdateDailyCapacities).toHaveBeenCalledWith(
         mockTx,
-        "C1",
-        0,
+        mockStrategyResult.updatedCapacities,
       );
 
       expect(assignmentRepo.createAssignments).toHaveBeenCalledWith(
         mockTx,
         mockStrategyResult.newAssignments,
+      );
+
+      // version increments happen outside the transaction
+      const scheduleStore = await import("@/infra/redis/schedule-store");
+      expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
+        "Type A",
+      );
+    });
+
+    it("should handle failed orders by preparing issue data before the transaction and creating conflict issues inside it", async () => {
+      const mockStrategyResult = {
+        processedOrders: [
+          { id: "O1", status: OrderStatus.SCHEDULED },
+          { id: "O2", status: OrderStatus.FAILED },
+        ],
+        newAssignments: [
+          {
+            orderId: "O1",
+            factoryId: "F1",
+            productionDate: new Date(),
+            assignedQuantity: 100,
+            status: AssignmentStatus.SCHEDULED,
+          },
+        ],
+        updatedCapacities: [
+          {
+            id: "C1",
+            factoryId: "F1",
+            date: new Date(),
+            maxCapacity: 100,
+            curCapacity: 0,
+          },
+        ],
+        newCapacities: [
+          {
+            factoryId: "F2",
+            date: new Date(),
+            maxCapacity: 200,
+            curCapacity: 100,
+          },
+        ],
+      };
+
+      const dummyConfig: SchedulingConfig = {
+        startDate: new Date(),
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GLOBAL_OPTIMIZE",
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+
+      const mockPrepData = {
+        newIssuesData: [
+          {
+            orderId: "O2",
+            title: 'Cannot schedule "Order Two" — short by 600 units',
+            status: "OPEN",
+            createdById: "system-user",
+            assigneeId: "SALES1",
+            contextSnapshot: {},
+          },
+        ],
+        eventsData: [],
+        metadataMap: new Map([
+          [
+            "O2",
+            {
+              order: {
+                id: "O2",
+                name: "Order Two",
+                quantity: 1000,
+                dueDate: new Date(),
+                updatedAt: new Date(),
+              },
+              deficit: 600,
+              contextSnapshot: {},
+              uniqueRecipients: [
+                { email: "sales@test.com", username: "sales-user" },
+              ],
+            },
+          ],
+        ]),
+        createdCount: 0,
+        skippedCount: 0,
+      };
+
+      vi.mocked(conflictIssueRepo.createManyConflictIssues).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(
+        conflictIssueRepo.findConflictIssuesByOrderIds,
+      ).mockResolvedValue([{ id: "ISSUE1", orderId: "O2", number: 101 }]);
+      vi.mocked(
+        conflictIssueRepo.createManyConflictIssueEvents,
+      ).mockResolvedValue(undefined);
+      vi.mocked(mailTemplate.renderAndSend).mockResolvedValue(undefined);
+      vi.mocked(prepareIssueCreationPrep).mockResolvedValue(
+        mockPrepData as unknown as Awaited<
+          ReturnType<typeof prepareIssueCreationPrep>
+        >,
+      );
+      vi.mocked(capacityRepo.bulkUpdateDailyCapacities).mockResolvedValue(
+        new Set(["Type A"]),
+      );
+
+      await applyScheduleTransaction(
+        "Type A",
+        dummyConfig,
+        mockStrategyResult as unknown as StrategyResult,
+      );
+
+      // Verify prepareIssueCreationPrep was called INSIDE the transaction with the tx client
+      expect(prepareIssueCreationPrep).toHaveBeenCalledWith(
+        mockTx,
+        ["O2"],
+        "system-user",
+        dummyConfig,
+        expect.any(Date),
+        true,
+      );
+
+      // Verify transaction was called
+      expect(prisma.$transaction).toHaveBeenCalled();
+
+      // Verify applyScheduleOrdersUpdate was called with both SCHEDULED and FAILED IDs
+      expect(orderRepo.applyScheduleOrdersUpdate).toHaveBeenCalledWith(
+        mockTx,
+        ["O1"],
+        ["O2"],
+        "system-user",
+      );
+
+      // Verify createManyConflictIssues was called inside the transaction with prep data
+      expect(conflictIssueRepo.createManyConflictIssues).toHaveBeenCalledWith(
+        mockTx,
+        mockPrepData.newIssuesData,
+      );
+
+      // Verify findConflictIssuesByOrderIds was called (to get DB-generated IDs)
+      expect(
+        conflictIssueRepo.findConflictIssuesByOrderIds,
+      ).toHaveBeenCalledWith(mockTx, ["O2"]);
+
+      // Verify createManyConflictIssueEvents was called (for OPENED events)
+      expect(
+        conflictIssueRepo.createManyConflictIssueEvents,
+      ).toHaveBeenCalled();
+
+      // Verify OCC version was incremented for affected factory types
+      const scheduleStore = await import("@/infra/redis/schedule-store");
+      expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
+        "Type A",
       );
     });
   });

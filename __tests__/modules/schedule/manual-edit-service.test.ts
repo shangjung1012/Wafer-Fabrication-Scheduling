@@ -33,6 +33,16 @@ vi.mock("@/lib/prisma", () => ({
     order: {
       update: vi.fn(),
       updateMany: vi.fn(),
+      findMany: vi.fn().mockImplementation(async ({ where }) => {
+        const ids = where?.id?.in ?? [];
+        return ids.map(() => ({ type: "TYPE_A" }));
+      }),
+    },
+    orderAssignment: {
+      findMany: vi.fn().mockImplementation(async ({ where }) => {
+        const ids = where?.id?.in ?? [];
+        return ids.map(() => ({ order: { type: "TYPE_A" } }));
+      }),
     },
   },
 }));
@@ -65,6 +75,7 @@ vi.mock("@/infra/db/capacity-repository", () => ({
 
 vi.mock("@/infra/redis/schedule-store", () => ({
   withScheduleLock: vi.fn(async (keys, cb) => cb()),
+  incrementScheduleVersion: vi.fn(),
 }));
 
 describe("applyAssignmentMoves", () => {

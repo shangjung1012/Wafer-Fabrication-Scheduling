@@ -100,6 +100,60 @@ export async function findFactoriesForIssueSnapshot(
   });
 }
 
+/**
+ * Batch version: load ACTIVE factories for multiple types at once.
+ * Returns a Map<productionType, factories[]> so the caller can process
+ * per-type in memory without re-querying.
+ */
+export async function findFactoriesForIssueSnapshotBulk(
+  db: PrismaClient,
+  types: string[],
+  windowStart: Date,
+  windowEnd: Date,
+) {
+  if (types.length === 0)
+    return new Map<
+      string,
+      Awaited<ReturnType<typeof findFactoriesForIssueSnapshot>>
+    >();
+  const factories = await db.factory.findMany({
+    where: {
+      productionType: { in: types },
+      status: FactoryStatus.ACTIVE,
+    },
+    select: {
+      id: true,
+      productionType: true,
+      maxCapacity: true,
+      admins: {
+        select: { id: true, email: true, username: true },
+      },
+      dailyCapacities: {
+        where: {
+          date: { gte: windowStart, lte: windowEnd },
+        },
+        select: {
+          id: true,
+          factoryId: true,
+          date: true,
+          maxCapacity: true,
+          curCapacity: true,
+        },
+      },
+    },
+  });
+  const map = new Map<
+    string,
+    Awaited<ReturnType<typeof findFactoriesForIssueSnapshot>>
+  >();
+  for (const f of factories) {
+    const type = f.productionType;
+    if (!map.has(type)) map.set(type, []);
+    map.get(type)!.push(f);
+  }
+  return map;
+}
+
 export async function findFactoriesMaxCapacity(db: PrismaClient) {
   return db.factory.findMany({ select: { id: true, maxCapacity: true } });
 }

@@ -10,13 +10,56 @@ import {
   type SchedulingConfig,
   type StrategyResult,
 } from "@/modules/schedule/strategy";
-import {
-  getScheduleVersion,
-  getPreview,
-  deletePreview,
-  incrementScheduleVersion,
-} from "@/infra/redis/schedule-store";
+import { getPreview } from "@/infra/redis/schedule-store";
 import { getTime } from "@/lib/get-time";
+
+function revivePreviewDates(raw: Record<string, unknown>): {
+  config: SchedulingConfig;
+  result: StrategyResult;
+} {
+  const config = raw.config as Record<string, unknown>;
+  const result = raw.result as Record<string, unknown>;
+
+  if (typeof config.startDate === "string")
+    config.startDate = new Date(config.startDate);
+  if (typeof config.endDate === "string")
+    config.endDate = new Date(config.endDate);
+
+  const processedOrders =
+    (result.processedOrders as Record<string, unknown>[]) ?? [];
+  for (const order of processedOrders) {
+    if (typeof order.dueDate === "string")
+      order.dueDate = new Date(order.dueDate);
+    if (typeof order.createdAt === "string")
+      order.createdAt = new Date(order.createdAt);
+    const assignments = (order.assignments as Record<string, unknown>[]) ?? [];
+    for (const a of assignments) {
+      if (typeof a.productionDate === "string")
+        a.productionDate = new Date(a.productionDate);
+    }
+  }
+
+  const newAssignments =
+    (result.newAssignments as Record<string, unknown>[]) ?? [];
+  for (const a of newAssignments) {
+    if (typeof a.productionDate === "string")
+      a.productionDate = new Date(a.productionDate);
+    if (typeof a.completionDate === "string")
+      a.completionDate = new Date(a.completionDate);
+  }
+
+  for (const key of ["updatedCapacities", "newCapacities"] as const) {
+    const items = (result[key] as Record<string, unknown>[]) ?? [];
+    for (const item of items) {
+      if (typeof item.date === "string") item.date = new Date(item.date);
+    }
+  }
+
+  return {
+    config: config as unknown as SchedulingConfig,
+    result: result as unknown as StrategyResult,
+  };
+}
 
 const ApplyScheduleSchema = z.object({
   previewId: z.string().min(1, "Preview ID is required"),
@@ -58,21 +101,8 @@ export async function POST(request: Request) {
     }
 
     const type = previewPayload.type as string;
-    const config = previewPayload.config as SchedulingConfig;
     const version = previewPayload.version as number;
-    const result = previewPayload.result as StrategyResult;
-
-    const currentVersion = await getScheduleVersion(type);
-
-    if (version !== currentVersion) {
-      return NextResponse.json(
-        {
-          code: "CONFLICT",
-          message: "Schedule environment has changed. Please preview again.",
-        },
-        { status: 409 },
-      );
-    }
+    const { config, result } = revivePreviewDates(previewPayload);
 
     await applyScheduleTransactionWithIssues({
       type,
@@ -80,9 +110,9 @@ export async function POST(request: Request) {
       result,
       operatorId: ctx.user.id,
       runAt: await getTime(),
+      expectedVersion: version,
+      previewId,
     });
-    await incrementScheduleVersion(type);
-    await deletePreview(previewId);
 
     return NextResponse.json({ message: "Schedule applied successfully" });
   } catch (error: unknown) {

@@ -35,6 +35,7 @@ export class MailSendError extends Error {
 }
 
 let emailClient: EmailClient | undefined;
+let emailClientInitFailed = false;
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -45,16 +46,28 @@ function requiredEnv(name: string): string {
 }
 
 function getEmailClient(): EmailClient {
-  if (!emailClient) {
-    emailClient = new EmailClient(
-      requiredEnv("AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING"),
+  if (emailClientInitFailed) {
+    throw new MailConfigurationError(
+      "AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING is invalid.",
     );
+  }
+  if (!emailClient) {
+    const connectionString = requiredEnv(
+      "AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING",
+    );
+    try {
+      emailClient = new EmailClient(connectionString);
+    } catch (err) {
+      emailClientInitFailed = true;
+      throw err;
+    }
   }
   return emailClient;
 }
 
 export function resetMailClientForTests(): void {
   emailClient = undefined;
+  emailClientInitFailed = false;
 }
 
 export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
