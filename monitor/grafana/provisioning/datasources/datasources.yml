@@ -1,0 +1,25 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: ${PROMETHEUS_URL}
+    isDefault: true
+    editable: true
+
+  - name: Wafer PostgreSQL
+    uid: wafer-postgres
+    type: postgres
+    access: proxy
+    url: ${GRAFANA_POSTGRES_HOST}:${GRAFANA_POSTGRES_PORT}
+    user: ${POSTGRES_USER}
+    database: ${POSTGRES_DB}
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
+    jsonData:
+      sslmode: ${GRAFANA_POSTGRES_SSLMODE}
+      postgresVersion: 1700
+      timescaledb: false
+    editable: true

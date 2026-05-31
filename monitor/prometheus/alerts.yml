@@ -1,0 +1,65 @@
+groups:
+  - name: wafer-monitoring
+    rules:
+      - alert: WaferPageDown
+        expr: probe_success{job="app_pages"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Application page is unavailable"
+          description: "{{ $labels.instance }} has failed HTTP probing for at least 2 minutes."
+
+      - alert: WaferPostgresExporterDown
+        expr: up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL exporter is unavailable"
+          description: "Prometheus cannot scrape the PostgreSQL exporter."
+
+      - alert: WaferRedisExporterDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis exporter is unavailable"
+          description: "Prometheus cannot scrape the Redis exporter."
+
+      - alert: WaferPostgresDown
+        expr: pg_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is unavailable"
+          description: "The PostgreSQL exporter cannot connect to the wafer database."
+
+      - alert: WaferRedisDown
+        expr: redis_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is unavailable"
+          description: "The Redis exporter cannot connect to Redis."
+
+      - alert: WaferOverdueOrders
+        expr: sum(wafer_orders_due_total{bucket="overdue"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "There are overdue wafer orders"
+          description: "At least one active order is past its due date."
+
+      - alert: WaferHighCapacityUtilization
+        expr: avg(wafer_daily_capacity_utilization_ratio) by (type) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High capacity utilization"
+          description: "Production type {{ $labels.type }} has average daily capacity utilization over 90%."
