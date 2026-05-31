@@ -50,6 +50,8 @@ import { findDailyCapacitiesByDateRange } from "@/infra/db/capacity-repository";
 import { findUserById, findUsers } from "@/infra/db/user-repository";
 import { getTime } from "@/lib/get-time";
 import { calculateOrderDeadline } from "@/modules/schedule/validation-utils";
+import { validateOrderQuantity } from "@/modules/order/order-validation";
+import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
 import {
   computeTotalAvailableCapacity,
   type CapacityDraft,
@@ -378,6 +380,7 @@ export async function acceptProposal(
         },
       );
     }
+    validateOrderQuantity(proposalData.proposal.newQuantity);
     safeFields.quantity = proposalData.proposal.newQuantity;
     resolution = ConflictResolution.REDUCED_QUANTITY;
   } else if (kind === "DELAY_DUE_DATE") {
@@ -424,6 +427,7 @@ export async function acceptProposal(
     comment.issue.orderId,
     safeFields as Parameters<typeof updateOrder>[2],
   );
+  await incrementScheduleVersion(order.type);
 
   // Fetch updated order for after snapshot
   const orderAfter = {

@@ -22,14 +22,13 @@ import type {
   PendingOrderInfo,
   OrderRisk,
 } from "./types";
+import { STANDARD_PRODUCTION_TYPES } from "@/modules/schedule/constants";
 
 export type TimelineFilters = {
   factoryId?: string;
   startDate?: string;
   endDate?: string;
 };
-
-const STANDARD_PRODUCTION_TYPES = ["A", "B", "C"] as const;
 
 export async function getTimeline(
   ctx: RequestContext,

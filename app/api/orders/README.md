@@ -8,13 +8,13 @@
 
 ### Orders
 
-| Method | Path                 | 說明                                           | 權限               |
-| ------ | -------------------- | ---------------------------------------------- | ------------------ |
-| GET    | `/api/orders`        | 列出訂單（可帶 `?status=` `?keyword=` filter） | ALL                |
-| GET    | `/api/orders/:id`    | 取得單筆訂單                                   | ALL                |
-| POST   | `/api/orders`        | 建立訂單（單筆）                               | SALES              |
-| PUT    | `/api/orders/:id`    | 修改訂單欄位                                   | SALES / ADMIN      |
-| DELETE | `/api/orders`        | 批次軟刪除訂單（body: `{ids:[...]}`）          | ADMIN              |
+| Method | Path                 | 說明                                           | 權限                       |
+| ------ | -------------------- | ---------------------------------------------- | -------------------------- |
+| GET    | `/api/orders`        | 列出訂單（可帶 `?status=` `?keyword=` filter） | ALL                        |
+| GET    | `/api/orders/:id`    | 取得單筆訂單                                   | ALL                        |
+| POST   | `/api/orders`        | 建立訂單（單筆）                               | SALES                      |
+| PUT    | `/api/orders/:id`    | 修改訂單欄位                                   | SALES / ADMIN              |
+| DELETE | `/api/orders`        | 批次軟刪除訂單（body: `{ids:[...]}`）          | ADMIN                      |
 | POST   | `/api/orders/import` | 匯入 CSV 批次建立訂單                          | SALES / ADMIN / SUPERADMIN |
 
 ---
@@ -30,7 +30,7 @@
   type: string; // production group: "A" | "B" | "C"
   status: OrderStatus; // PENDING | SCHEDULED | IN_PRODUCTION | COMPLETED | CANCELLED | FAILED
   dueDate: Date;
-  quantity: number;
+  quantity: number; // 25 到 2500 片
   applicantId: string; // SALES user who created it
   lastModifiedById: string | null;
   createdAt: Date;
@@ -53,7 +53,7 @@ PENDING ─┬─► SCHEDULED ─► IN_PRODUCTION ─► COMPLETED
 - `SCHEDULED → IN_PRODUCTION`：任一 `OrderAssignment` 進入 IN_PRODUCTION
 - `SCHEDULED → CANCELLED`：admin 取消
 - `IN_PRODUCTION → COMPLETED`：所有未取消的 assignment 全部完成
-- `CANCELLED` / `COMPLETED` / `FAILED` 為終態
+- `CANCELLED` / `COMPLETED` 為終態；`FAILED` 可經 ConflictIssue 提案回到可排程狀態
 
 ---
 
@@ -147,7 +147,7 @@ CustomerOrderB,B,2026-07-15,200
 ```
 
 - `dueDate` 必須是合法日期字串
-- `quantity` 必須是正整數
+- `quantity` 必須是 25 到 2500 之間的整數
 - 欄位缺失或格式錯誤的 row 會進 `errorList`，不影響其他 row
 - 回傳：`{ successCount: number, errorList: string[] }`
 

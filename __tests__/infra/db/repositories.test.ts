@@ -17,31 +17,29 @@ vi.mock("@/infra/redis/schedule-store", () => ({
   incrementScheduleVersion: vi.fn(),
 }));
 
-describe("Repository Version Invalidation Hooks", () => {
+describe("Repository side effects", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe("order-repository", () => {
-    it("updateOrder should increment version if status, dueDate, or quantity changes", async () => {
+    it("updateOrder should not call Redis version invalidation", async () => {
       const mockDb = {
         order: {
-          findUnique: vi.fn().mockResolvedValue({ id: "O1", type: "Type A" }),
+          findUnique: vi.fn().mockResolvedValue({ id: "O1" }),
           update: vi.fn().mockResolvedValue({ id: "O1", type: "Type A" }),
         },
       } as unknown as PrismaClient;
 
       await updateOrder(mockDb, "O1", { status: OrderStatus.SCHEDULED });
 
-      expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
-        "Type A",
-      );
+      expect(scheduleStore.incrementScheduleVersion).not.toHaveBeenCalled();
     });
 
-    it("updateOrder should NOT increment version if only name changes", async () => {
+    it("updateOrder should update name without version invalidation", async () => {
       const mockDb = {
         order: {
-          findUnique: vi.fn().mockResolvedValue({ id: "O1", type: "Type A" }),
+          findUnique: vi.fn().mockResolvedValue({ id: "O1" }),
           update: vi.fn().mockResolvedValue({ id: "O1", type: "Type A" }),
         },
       } as unknown as PrismaClient;
@@ -51,30 +49,21 @@ describe("Repository Version Invalidation Hooks", () => {
       expect(scheduleStore.incrementScheduleVersion).not.toHaveBeenCalled();
     });
 
-    it("deleteOrders should increment version for affected types", async () => {
+    it("deleteOrders should not call Redis version invalidation", async () => {
       const mockDb = {
         order: {
-          findMany: vi
-            .fn()
-            .mockResolvedValue([{ type: "Type A" }, { type: "Type B" }]),
           updateMany: vi.fn().mockResolvedValue({ count: 2 }),
         },
       } as unknown as PrismaClient;
 
       await deleteOrders(mockDb, ["O1", "O2"]);
 
-      expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
-        "Type A",
-      );
-      expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
-        "Type B",
-      );
+      expect(scheduleStore.incrementScheduleVersion).not.toHaveBeenCalled();
     });
 
-    it("bulkUpdateOrderStatus should increment version for affected types", async () => {
+    it("bulkUpdateOrderStatus should not call Redis version invalidation", async () => {
       const mockDb = {
         order: {
-          findMany: vi.fn().mockResolvedValue([{ type: "Type A" }]),
           update: vi.fn().mockResolvedValue({ id: "O1" }),
         },
       } as unknown as PrismaClient;
@@ -83,9 +72,7 @@ describe("Repository Version Invalidation Hooks", () => {
         { id: "O1", status: OrderStatus.SCHEDULED },
       ]);
 
-      expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
-        "Type A",
-      );
+      expect(scheduleStore.incrementScheduleVersion).not.toHaveBeenCalled();
     });
   });
 

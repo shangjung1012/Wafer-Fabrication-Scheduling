@@ -19,6 +19,9 @@ import {
   type UpdateOrderInput,
   OrderStatus,
 } from "@/infra/db/order-repository";
+import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
+import { validateOrderQuantity } from "@/modules/order/order-validation";
+import { assertOrderStatusTransition } from "@/modules/order/order-status";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -29,6 +32,16 @@ function orderNotFound(): never {
     status: 404,
     code: "NOT_FOUND",
   });
+}
+
+function affectsSchedule(input: UpdateOrderInput): boolean {
+  return (
+    input.status !== undefined ||
+    input.dueDate !== undefined ||
+    input.quantity !== undefined ||
+    input.isFixed !== undefined ||
+    input.isPrioritized !== undefined
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -93,14 +106,17 @@ export async function createOrderService(
 ): Promise<OrderRow> {
   requireRole(ctx, ["SALES"]);
   const scope = await resolveActorScope(ctx, db);
+  validateOrderQuantity(input.quantity);
 
-  return createOrder(db, {
+  const order = await createOrder(db, {
     dueDate: input.dueDate,
     quantity: input.quantity,
     name: input.name,
     type: input.type,
     applicantId: scope.userId,
   });
+  await incrementScheduleVersion(order.type);
+  return order;
 }
 
 export type UpdateOrderServiceInput = {
@@ -147,8 +163,14 @@ export async function updateOrderService(
       name: input.name,
       lastModifiedById: scope.userId,
     };
+    if (salesInput.quantity !== undefined) {
+      validateOrderQuantity(salesInput.quantity);
+    }
     const result = await updateOrder(db, id, salesInput);
     if (!result) orderNotFound();
+    if (affectsSchedule(salesInput)) {
+      await incrementScheduleVersion(order.type);
+    }
     return result;
   }
 
@@ -157,11 +179,20 @@ export async function updateOrderService(
     throw new ForbiddenError("This order is not in your production group.");
   }
 
-  const result = await updateOrder(db, id, {
+  if (input.quantity !== undefined) validateOrderQuantity(input.quantity);
+  if (input.status !== undefined) {
+    assertOrderStatusTransition(order.status, input.status);
+  }
+
+  const adminInput: UpdateOrderInput = {
     ...input,
     lastModifiedById: scope.userId,
-  });
+  };
+  const result = await updateOrder(db, id, adminInput);
   if (!result) orderNotFound();
+  if (affectsSchedule(adminInput)) {
+    await incrementScheduleVersion(order.type);
+  }
   return result;
 }
 
@@ -184,5 +215,9 @@ export async function deleteOrdersService(
     }
   }
 
-  return deleteOrders(db, ids);
+  const result = await deleteOrders(db, ids);
+  for (const type of new Set(orders.map((o) => o!.type))) {
+    await incrementScheduleVersion(type);
+  }
+  return result;
 }

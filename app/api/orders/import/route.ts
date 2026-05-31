@@ -23,10 +23,13 @@ import {
   requireRole,
 } from "@/modules/auth/rbac";
 import { createOrder } from "@/infra/db/order-repository";
+import type { OrderRow } from "@/infra/db/order-repository";
 import { createOrderService } from "@/modules/order/order-service";
+import { validateOrderQuantity } from "@/modules/order/order-validation";
+import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
 import { prisma } from "@/lib/prisma";
 import { getTime } from "@/lib/get-time";
-import { format } from "date-fns";
+import { isBeforeDateOnly } from "@/lib/date-utils";
 
 // ---------------------------------------------------------------------------
 // POST /api/orders/import
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
     const ctx = await requireAuth(req);
     requireRole(ctx, ["SALES", "ADMIN", "SUPERADMIN"]);
 
-    const todayStr = format(await getTime(), "yyyy-MM-dd");
+    const today = await getTime();
 
     const form = await req.formData();
     const file = form.get("file");
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
       skipEmptyLines: true,
     });
 
-    const successes: unknown[] = [];
+    const successes: OrderRow[] = [];
     const errorList: string[] = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -80,11 +83,12 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Validate quantity is a positive integer
       const quantity = Number(quantityRaw);
-      if (!Number.isInteger(quantity) || quantity <= 0) {
+      try {
+        validateOrderQuantity(quantity);
+      } catch {
         errorList.push(
-          `Row ${rowNum}: "quantity" must be a positive integer (got "${quantityRaw}").`,
+          `Row ${rowNum}: "quantity" must be an integer between 25 and 2500 (got "${quantityRaw}").`,
         );
         continue;
       }
@@ -98,7 +102,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      if (format(parsedDueDate, "yyyy-MM-dd") < todayStr) {
+      if (isBeforeDateOnly(parsedDueDate, today)) {
         errorList.push(`Row ${rowNum}: due date cannot be in the past.`);
         continue;
       }
@@ -117,6 +121,9 @@ export async function POST(req: NextRequest) {
                 ...orderInput,
                 applicantId: ctx.user.id,
               });
+        if (ctx.user.role !== "SALES") {
+          await incrementScheduleVersion(order.type);
+        }
         successes.push(order);
       } catch (rowErr) {
         const e = rowErr as { message?: string };

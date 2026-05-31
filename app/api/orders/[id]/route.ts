@@ -21,10 +21,11 @@ import {
   notFoundResponse,
 } from "@/modules/auth/rbac";
 import { getOrder, updateOrderService } from "@/modules/order/order-service";
+import { OrderQuantitySchema } from "@/modules/order/order-validation";
 import { OrderStatus } from "@/infra/db/order-repository";
 import { prisma } from "@/lib/prisma";
 import { getTime } from "@/lib/get-time";
-import { format } from "date-fns";
+import { isBeforeDateOnly } from "@/lib/date-utils";
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -34,7 +35,7 @@ const UpdateOrderBodySchema = z
   .object({
     status: z.nativeEnum(OrderStatus).optional(),
     dueDate: z.string().datetime().optional(),
-    quantity: z.number().int().positive().optional(),
+    quantity: OrderQuantitySchema.optional(),
     name: z.string().min(1).optional(),
     isFixed: z.boolean().optional(),
     isPrioritized: z.boolean().optional(),
@@ -102,8 +103,7 @@ export async function PUT(
     }
 
     if (data.dueDate) {
-      const todayStr = format(await getTime(), "yyyy-MM-dd");
-      if (format(new Date(data.dueDate), "yyyy-MM-dd") < todayStr) {
+      if (isBeforeDateOnly(new Date(data.dueDate), await getTime())) {
         return badRequestResponse("Due date cannot be in the past.");
       }
     }
