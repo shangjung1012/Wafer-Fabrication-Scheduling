@@ -1085,6 +1085,13 @@ const primaryButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
+const dangerPrimaryStyle: React.CSSProperties = {
+  width: "auto",
+  minWidth: 112,
+  borderColor: "#dc2626",
+  background: "#dc2626",
+};
+
 const secondaryButtonStyle: React.CSSProperties = {
   minHeight: 32,
   display: "inline-flex",
@@ -1229,4 +1236,60 @@ const toastCloseButtonStyle: React.CSSProperties = {
   color: "inherit",
   cursor: "pointer",
   padding: 0,
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 60,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+  background: "rgba(15, 23, 42, 0.42)",
+};
+
+const modalPanelStyle: React.CSSProperties = {
+  width: "min(460px, 100%)",
+  display: "flex",
+  gap: 12,
+  border: "1px solid #fecaca",
+  borderRadius: 8,
+  padding: 16,
+  background: "#fff",
+  boxShadow: "0 24px 70px rgba(15, 23, 42, 0.24)",
+};
+
+const modalIconStyle: React.CSSProperties = {
+  width: 36,
+  height: 36,
+  flex: "0 0 auto",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 8,
+  background: "#fef2f2",
+  color: "#b91c1c",
+};
+
+const modalTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#0f172a",
+  fontSize: 16,
+  fontWeight: 750,
+};
+
+const modalTextStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  color: "#475569",
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+
+const modalActionsStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 8,
+  marginTop: 16,
+  flexWrap: "wrap",
 };
