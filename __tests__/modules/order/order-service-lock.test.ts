@@ -78,7 +78,7 @@ import { resolveActorScope, getScopeGroup } from "@/modules/auth/scope";
 import { requireRole } from "@/modules/auth/rbac";
 
 const mockCtx = {
-  user: { id: "admin-1", role: "ADMIN", username: "admin-a1" },
+  user: { id: "admin-1", role: "ADMIN" as const, username: "admin-a1" },
   requestId: "req-1",
 };
 
@@ -91,7 +91,7 @@ const mockAdminScope = {
 };
 
 const mockSalesCtx = {
-  user: { id: "sales-1", role: "SALES", username: "sales-a" },
+  user: { id: "sales-1", role: "SALES" as const, username: "sales-a" },
   requestId: "req-2",
 };
 

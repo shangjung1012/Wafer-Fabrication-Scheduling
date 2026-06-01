@@ -217,6 +217,7 @@ export async function findPendingOrdersForSales(
       quantity: true,
       dueDate: true,
       createdAt: true,
+      isFixed: true,
       isPrioritized: true,
     },
     orderBy: { dueDate: "asc" },
@@ -230,6 +231,7 @@ export async function findPendingOrdersForSales(
     quantity: r.quantity,
     dueDate: format(r.dueDate, "yyyy-MM-dd"),
     createdAt: format(r.createdAt, "yyyy-MM-dd"),
+    isFixed: r.isFixed,
     isPrioritized: r.isPrioritized,
   }));
 }

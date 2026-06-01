@@ -2,6 +2,7 @@
  * Tests for PUT /api/orders/[id] — concurrency 409 mapping.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 import { PUT } from "@/app/api/orders/[id]/route";
 import * as auth from "@/modules/auth/require-auth";
 import * as orderService from "@/modules/order/order-service";
@@ -79,8 +80,8 @@ vi.mock("@/lib/get-time", () => ({
 const createRequest = (
   id: string,
   body: Record<string, unknown>,
-): [Request, { params: Promise<{ id: string }> }] => [
-  new Request(`http://localhost/api/orders/${id}`, {
+): [NextRequest, { params: Promise<{ id: string }> }] => [
+  new NextRequest(`http://localhost/api/orders/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

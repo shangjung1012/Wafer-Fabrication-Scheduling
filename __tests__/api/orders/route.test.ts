@@ -2,6 +2,7 @@
  * Tests for DELETE /api/orders — concurrency 409 mapping.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 import { DELETE } from "@/app/api/orders/route";
 import * as auth from "@/modules/auth/require-auth";
 import * as orderService from "@/modules/order/order-service";
@@ -77,8 +78,8 @@ vi.mock("@/lib/get-time", () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-const createDeleteRequest = (ids: string[]): Request =>
-  new Request("http://localhost/api/orders", {
+const createDeleteRequest = (ids: string[]): NextRequest =>
+  new NextRequest("http://localhost/api/orders", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),
