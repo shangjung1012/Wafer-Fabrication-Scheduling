@@ -39,6 +39,7 @@ const UpdateOrderBodySchema = z
     name: z.string().min(1).optional(),
     isFixed: z.boolean().optional(),
     isPrioritized: z.boolean().optional(),
+    expectedScheduleVersion: z.number().int().optional(),
   })
   .strict();
 
@@ -113,9 +114,20 @@ export async function PUT(
       dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
       isFixed: data.isFixed,
       isPrioritized: data.isPrioritized,
+      expectedScheduleVersion: data.expectedScheduleVersion,
     });
     return NextResponse.json(order);
   } catch (err) {
+    if (
+      err instanceof Error &&
+      (err.message?.includes("already running") ||
+        err.message?.includes("environment has changed"))
+    ) {
+      return NextResponse.json(
+        { code: "CONFLICT", message: err.message },
+        { status: 409 },
+      );
+    }
     if (err instanceof UnauthorizedError)
       return unauthorizedResponse(err.message);
     if (err instanceof CsrfError) return csrfResponse(err.message);

@@ -23,6 +23,7 @@ vi.mock("@/modules/auth/scope", () => ({
 }));
 
 vi.mock("@/infra/redis/schedule-store", () => ({
+  withScheduleLock: vi.fn(async (_types: unknown, fn: () => Promise<unknown>) => fn()),
   incrementScheduleVersion: vi.fn(),
 }));
 

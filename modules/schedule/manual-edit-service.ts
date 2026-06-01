@@ -20,6 +20,7 @@ import { getOperatingAutoSchedulerConfigs } from "@/infra/db/auto-scheduler-conf
 import {
   withScheduleLock,
   incrementScheduleVersion,
+  getScheduleVersion,
 } from "@/infra/redis/schedule-store";
 import { calculateOrderDeadline } from "./validation-utils";
 
@@ -90,6 +91,7 @@ export async function applyAssignmentMoves(
   db: PrismaClient,
   moves: AssignmentMove[],
   actorUserId: string,
+  expectedVersions?: Record<string, number>,
 ): Promise<AssignmentMoveResult> {
   if (moves.length === 0) {
     return { applied: 0 };
@@ -101,6 +103,19 @@ export async function applyAssignmentMoves(
   }
 
   return withScheduleLock(types, async () => {
+    if (expectedVersions) {
+      for (const type of types) {
+        if (expectedVersions[type] !== undefined) {
+          const current = await getScheduleVersion(type);
+          if (current !== expectedVersions[type]) {
+            throw new Error(
+              `environment has changed: schedule was modified for type ${type}, please reload`,
+            );
+          }
+        }
+      }
+    }
+
     const violations: ManualEditViolation[] = [];
 
     // 1. Fetch data

@@ -22,7 +22,11 @@ import {
 } from "@/infra/db/order-repository";
 import { upsertDailyCapacityDelta } from "@/infra/db/capacity-repository";
 import { findFactoriesMaxCapacity } from "@/infra/db/factory-repository";
-import { incrementScheduleVersion } from "@/infra/redis/schedule-store";
+import {
+  withScheduleLock,
+  incrementScheduleVersion,
+  getScheduleVersion,
+} from "@/infra/redis/schedule-store";
 import {
   validateOrderQuantity,
   validateOrderType,
@@ -139,6 +143,7 @@ export type UpdateOrderServiceInput = {
   name?: string;
   isFixed?: boolean;
   isPrioritized?: boolean;
+  expectedScheduleVersion?: number;
 };
 
 export async function updateOrderService(
@@ -179,11 +184,24 @@ export async function updateOrderService(
     if (salesInput.quantity !== undefined) {
       validateOrderQuantity(salesInput.quantity);
     }
+    if (affectsSchedule(salesInput)) {
+      return withScheduleLock(order.type, async () => {
+        if (input.expectedScheduleVersion !== undefined) {
+          const current = await getScheduleVersion(order.type);
+          if (current !== input.expectedScheduleVersion) {
+            throw new Error(
+              `environment has changed: schedule was modified for type ${order.type}, please reload`,
+            );
+          }
+        }
+        const result = await updateOrder(db, id, salesInput);
+        if (!result) orderNotFound();
+        await incrementScheduleVersion(order.type);
+        return result;
+      });
+    }
     const result = await updateOrder(db, id, salesInput);
     if (!result) orderNotFound();
-    if (affectsSchedule(salesInput)) {
-      await incrementScheduleVersion(order.type);
-    }
     return result;
   }
 
@@ -198,23 +216,46 @@ export async function updateOrderService(
   }
 
   if (input.status === OrderStatus.CANCELLED) {
-    const result = await cancelOrdersAndReleaseCapacity(db, [id]);
-    if (result.count === 0) orderNotFound();
-    const cancelledOrder = await findOrderById(db, id);
-    if (!cancelledOrder) orderNotFound();
-    await incrementScheduleVersion(order.type);
-    return cancelledOrder;
+    return withScheduleLock(order.type, async () => {
+      if (input.expectedScheduleVersion !== undefined) {
+        const current = await getScheduleVersion(order.type);
+        if (current !== input.expectedScheduleVersion) {
+          throw new Error(
+            `environment has changed: schedule was modified for type ${order.type}, please reload`,
+          );
+        }
+      }
+      const result = await cancelOrdersAndReleaseCapacity(db, [id]);
+      if (result.count === 0) orderNotFound();
+      const cancelledOrder = await findOrderById(db, id);
+      if (!cancelledOrder) orderNotFound();
+      await incrementScheduleVersion(order.type);
+      return cancelledOrder;
+    });
   }
 
   const adminInput: UpdateOrderInput = {
     ...input,
     lastModifiedById: scope.userId,
   };
+  if (affectsSchedule(adminInput)) {
+    return withScheduleLock(order.type, async () => {
+      if (input.expectedScheduleVersion !== undefined) {
+        const current = await getScheduleVersion(order.type);
+        if (current !== input.expectedScheduleVersion) {
+          throw new Error(
+            `environment has changed: schedule was modified for type ${order.type}, please reload`,
+          );
+        }
+      }
+      const result = await updateOrder(db, id, adminInput);
+      if (!result) orderNotFound();
+      await incrementScheduleVersion(order.type);
+      return result;
+    });
+  }
   const result = await updateOrder(db, id, adminInput);
   if (!result) orderNotFound();
-  if (affectsSchedule(adminInput)) {
-    await incrementScheduleVersion(order.type);
-  }
   return result;
 }
 
@@ -237,11 +278,14 @@ export async function deleteOrdersService(
     }
   }
 
-  const result = await cancelOrdersAndReleaseCapacity(db, ids);
-  for (const type of new Set(orders.map((o) => o!.type))) {
-    await incrementScheduleVersion(type);
-  }
-  return result;
+  const types = Array.from(new Set(orders.map((o) => o!.type)));
+  return withScheduleLock(types, async () => {
+    const result = await cancelOrdersAndReleaseCapacity(db, ids);
+    for (const type of types) {
+      await incrementScheduleVersion(type);
+    }
+    return result;
+  });
 }
 
 export async function cancelOrdersAndReleaseCapacity(

@@ -68,16 +68,20 @@ export type PendingOrderInfo = {
   dueDate: string; // YYYY-MM-DD
   createdAt: string; // YYYY-MM-DD
   risk: OrderRisk;
+  isFixed: boolean;
   isPrioritized: boolean;
 };
 
 export type SalesContext = {
   myOrderIds: string[];
   pendingOrders: PendingOrderInfo[];
+  /** Redis schedule versions by production type (A/B/C); used for OCC on order edits. */
+  scheduleVersions: Record<string, number>;
 };
 
 export type AdminContext = {
   pendingOrders: PendingOrderInfo[];
+  scheduleVersions: Record<string, number>;
 };
 
 export type TimelineResponse = {

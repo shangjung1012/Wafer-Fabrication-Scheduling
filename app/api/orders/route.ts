@@ -157,6 +157,12 @@ export async function DELETE(req: NextRequest) {
     const result = await deleteOrdersService(ctx, prisma, parsed.data.ids);
     return NextResponse.json(result);
   } catch (err) {
+    if (err instanceof Error && err.message?.includes("already running")) {
+      return NextResponse.json(
+        { code: "CONFLICT", message: err.message },
+        { status: 409 },
+      );
+    }
     if (err instanceof UnauthorizedError)
       return unauthorizedResponse(err.message);
     if (err instanceof CsrfError) return csrfResponse(err.message);
