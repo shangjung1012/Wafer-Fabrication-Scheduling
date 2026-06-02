@@ -494,7 +494,7 @@ export default function PermissionsPage() {
       title="Permissions"
       subtitle="Manage user accounts and roles."
       onBack={handleLogout}
-      leftSectionSurfaceClassName="flex flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
+      leftSectionSurfaceClassName="flex min-h-0 flex-1 flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
       leftSection={
         <>
           {notice && (
@@ -570,404 +570,409 @@ export default function PermissionsPage() {
             </div>
           )}
 
-          <section style={panelStyle}>
-            <div style={sectionHeaderStyle}>
-              <div>
-                <h2 style={sectionTitleStyle}>Add User</h2>
-                <p style={sectionMetaStyle}>Quickly invite a new account.</p>
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+            <section style={addUserPanelStyle}>
+              <div style={sectionHeaderStyle}>
+                <div>
+                  <h2 style={sectionTitleStyle}>Add User</h2>
+                  <p style={sectionMetaStyle}>Quickly invite a new account.</p>
+                </div>
+                <Mail size={18} color="#475569" />
               </div>
-              <Mail size={18} color="#475569" />
-            </div>
 
-            <form onSubmit={handleInvite} style={formGridStyle}>
-              <label style={fieldStyle}>
-                <span style={labelStyle}>Email</span>
-                <input
-                  required
-                  type="email"
-                  value={form.email}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      email: event.target.value,
-                    }))
-                  }
-                  placeholder="person@example.com"
-                  style={inputStyle}
-                />
-              </label>
+              <form onSubmit={handleInvite} style={formGridStyle}>
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Email</span>
+                  <input
+                    required
+                    type="email"
+                    value={form.email}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        email: event.target.value,
+                      }))
+                    }
+                    placeholder="person@example.com"
+                    style={inputStyle}
+                  />
+                </label>
 
-              <label style={fieldStyle}>
-                <span style={labelStyle}>Role</span>
-                <select
-                  value={form.role}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      role: event.target.value as Role,
-                    }))
-                  }
-                  style={inputStyle}
-                >
-                  {visibleRoles.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Role</span>
+                  <select
+                    value={form.role}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        role: event.target.value as Role,
+                      }))
+                    }
+                    style={inputStyle}
+                  >
+                    {visibleRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <label style={fieldStyle}>
-                <span style={labelStyle}>
-                  Group{form.role === "ADMIN" ? " *" : ""}
-                </span>
-                <input
-                  required={form.role === "ADMIN"}
-                  value={form.group || ""}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      group: event.target.value,
-                    }))
-                  }
-                  placeholder={form.role === "ADMIN" ? "A" : "Optional"}
-                  style={inputStyle}
-                />
-              </label>
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>
+                    Group{form.role === "ADMIN" ? " *" : ""}
+                  </span>
+                  <input
+                    required={form.role === "ADMIN"}
+                    value={form.group || ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        group: event.target.value,
+                      }))
+                    }
+                    placeholder={form.role === "ADMIN" ? "A" : "Optional"}
+                    style={inputStyle}
+                  />
+                </label>
 
-              <div style={{ display: "flex", alignItems: "end" }}>
-                <button
-                  type="submit"
-                  disabled={loading === "invite"}
-                  style={primaryButtonStyle}
-                >
-                  <UserPlus size={16} />
-                  {loading === "invite" ? "Sending..." : "Add User"}
-                </button>
+                <div style={{ display: "flex", alignItems: "end" }}>
+                  <button
+                    type="submit"
+                    disabled={loading === "invite"}
+                    style={primaryButtonStyle}
+                  >
+                    <UserPlus size={16} />
+                    {loading === "invite" ? "Sending..." : "Add User"}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section style={userListPanelStyle}>
+              <div style={{ ...sectionHeaderStyle, flexShrink: 0 }}>
+                <div>
+                  <h2 style={sectionTitleStyle}>User List</h2>
+                  <p style={sectionMetaStyle}>
+                    Filter and manage existing accounts.
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    placeholder="Search email or username"
+                    value={textFilter}
+                    onChange={(e) => setTextFilter(e.target.value)}
+                    style={{
+                      padding: "6px 8px",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: 6,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => loadUsers(roleFilter)}
+                    disabled={loading === "list"}
+                    style={secondaryButtonStyle}
+                  >
+                    <RefreshCw size={15} />
+                    Refresh
+                  </button>
+                </div>
               </div>
-            </form>
-          </section>
 
-          <section style={panelStyle}>
-            <div style={sectionHeaderStyle}>
-              <div>
-                <h2 style={sectionTitleStyle}>User List</h2>
-                <p style={sectionMetaStyle}>
-                  Filter and manage existing accounts.
-                </p>
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  placeholder="Search email or username"
-                  value={textFilter}
-                  onChange={(e) => setTextFilter(e.target.value)}
-                  style={{
-                    padding: "6px 8px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: 6,
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => loadUsers(roleFilter)}
-                  disabled={loading === "list"}
-                  style={secondaryButtonStyle}
-                >
-                  <RefreshCw size={15} />
-                  Refresh
-                </button>
-              </div>
-            </div>
-
-            <div style={userListScrollWrapStyle}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thHeadStyle}>Email</th>
-                    <th style={thHeadStyle}>Username</th>
-                    <th style={thHeadStyle}>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                        }}
-                      >
-                        <span>Role</span>
-                        <select
-                          value={roleFilter}
-                          onChange={(e) => {
-                            const val = e.target.value as Role | "";
-                            setRoleFilter(val);
-                            void loadUsers(val);
-                          }}
+              <div style={userListScrollWrapStyle}>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thHeadStyle}>Email</th>
+                      <th style={thHeadStyle}>Username</th>
+                      <th style={thHeadStyle}>
+                        <div
                           style={{
-                            padding: "5px 8px",
-                            fontSize: 13,
-                            border: "1px solid #cbd5e1",
-                            borderRadius: 6,
-                            background: "#fff",
-                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
                           }}
                         >
-                          <option value="">All roles</option>
-                          {visibleRoles.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </th>
-                    <th style={thHeadStyle}>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                        }}
-                      >
-                        <span>Group</span>
-                        <select
-                          value={groupFilter}
-                          onChange={(e) => setGroupFilter(e.target.value)}
+                          <span>Role</span>
+                          <select
+                            value={roleFilter}
+                            onChange={(e) => {
+                              const val = e.target.value as Role | "";
+                              setRoleFilter(val);
+                              void loadUsers(val);
+                            }}
+                            style={{
+                              padding: "5px 8px",
+                              fontSize: 13,
+                              border: "1px solid #cbd5e1",
+                              borderRadius: 6,
+                              background: "#fff",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <option value="">All roles</option>
+                            {visibleRoles.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </th>
+                      <th style={thHeadStyle}>
+                        <div
                           style={{
-                            padding: "5px 8px",
-                            fontSize: 13,
-                            border: "1px solid #cbd5e1",
-                            borderRadius: 6,
-                            background: "#fff",
-                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
                           }}
                         >
-                          <option value="">All groups</option>
-                          {groupOptions.map((g) => (
-                            <option key={g} value={g}>
-                              {g}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </th>
-                    <th style={thHeadStyle}>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                        }}
-                      >
-                        <span>Status</span>
-                        <select
-                          value={statusFilter}
-                          onChange={(e) =>
-                            setStatusFilter(
-                              e.target.value as "" | "ACTIVE" | "PENDING",
-                            )
-                          }
+                          <span>Group</span>
+                          <select
+                            value={groupFilter}
+                            onChange={(e) => setGroupFilter(e.target.value)}
+                            style={{
+                              padding: "5px 8px",
+                              fontSize: 13,
+                              border: "1px solid #cbd5e1",
+                              borderRadius: 6,
+                              background: "#fff",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <option value="">All groups</option>
+                            {groupOptions.map((g) => (
+                              <option key={g} value={g}>
+                                {g}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </th>
+                      <th style={thHeadStyle}>
+                        <div
                           style={{
-                            padding: "5px 8px",
-                            fontSize: 13,
-                            border: "1px solid #cbd5e1",
-                            borderRadius: 6,
-                            background: "#fff",
-                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
                           }}
                         >
-                          <option value="">All</option>
-                          <option value="ACTIVE">ACTIVE</option>
-                          <option value="PENDING">PENDING</option>
-                        </select>
-                      </div>
-                    </th>
-                    <th style={thHeadStyle}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((user) => {
-                    const pending = !user.username;
-                    const resendLoading = loading === `resend:${user.id}`;
-                    const updateLoading = loading === `update:${user.id}`;
-                    const deleteLoading = loading === `delete:${user.id}`;
-                    const isEditing = editingId === user.id;
-                    const isSelf = user.id === session.user.id;
-                    return (
-                      <tr key={user.id} style={trStyle}>
-                        <td style={tdStyle}>
-                          {isEditing ? (
-                            <input
-                              required
-                              type="email"
-                              value={editForm.email}
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  email: event.target.value,
-                                }))
-                              }
-                              style={tableInputStyle}
-                            />
-                          ) : (
-                            user.email
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          {isEditing ? (
-                            <input
-                              value={editForm.username}
-                              disabled={pending}
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  username: event.target.value,
-                                }))
-                              }
-                              placeholder={
-                                pending ? "Set via invitation" : "Username"
-                              }
-                              style={tableInputStyle}
-                            />
-                          ) : (
-                            (user.username ?? "-")
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          {isEditing ? (
-                            <select
-                              value={editForm.role}
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  role: event.target.value as Role,
-                                }))
-                              }
-                              style={tableInputStyle}
-                            >
-                              {visibleRoles.map((role) => (
-                                <option key={role} value={role}>
-                                  {role}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <RoleBadge role={user.role} />
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          {isEditing ? (
-                            <input
-                              required={editForm.role === "ADMIN"}
-                              value={editForm.group}
-                              placeholder={
-                                editForm.role === "ADMIN" ? "" : "Optional"
-                              }
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  group: event.target.value,
-                                }))
-                              }
-                              style={tableInputStyle}
-                            />
-                          ) : (
-                            (user.group ?? "-")
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          <StatusBadge pending={pending} />
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: "right" }}>
-                          <div style={actionGroupStyle}>
+                          <span>Status</span>
+                          <select
+                            value={statusFilter}
+                            onChange={(e) =>
+                              setStatusFilter(
+                                e.target.value as "" | "ACTIVE" | "PENDING",
+                              )
+                            }
+                            style={{
+                              padding: "5px 8px",
+                              fontSize: 13,
+                              border: "1px solid #cbd5e1",
+                              borderRadius: 6,
+                              background: "#fff",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <option value="">All</option>
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="PENDING">PENDING</option>
+                          </select>
+                        </div>
+                      </th>
+                      <th style={thHeadStyle}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((user) => {
+                      const pending = !user.username;
+                      const resendLoading = loading === `resend:${user.id}`;
+                      const updateLoading = loading === `update:${user.id}`;
+                      const deleteLoading = loading === `delete:${user.id}`;
+                      const isEditing = editingId === user.id;
+                      const isSelf = user.id === session.user.id;
+                      return (
+                        <tr key={user.id} style={trStyle}>
+                          <td style={tdStyle}>
                             {isEditing ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdate(user)}
-                                  disabled={updateLoading}
-                                  style={iconButtonStyle}
-                                  title="Save changes"
-                                >
-                                  <Save size={14} />
-                                  {updateLoading ? "Saving" : "Save"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={cancelEdit}
-                                  disabled={updateLoading}
-                                  style={iconButtonStyle}
-                                  title="Cancel editing"
-                                >
-                                  <X size={14} />
-                                  Cancel
-                                </button>
-                              </>
+                              <input
+                                required
+                                type="email"
+                                value={editForm.email}
+                                onChange={(event) =>
+                                  setEditForm((current) => ({
+                                    ...current,
+                                    email: event.target.value,
+                                  }))
+                                }
+                                style={tableInputStyle}
+                              />
                             ) : (
-                              <>
-                                {pending ? (
+                              user.email
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {isEditing ? (
+                              <input
+                                value={editForm.username}
+                                disabled={pending}
+                                onChange={(event) =>
+                                  setEditForm((current) => ({
+                                    ...current,
+                                    username: event.target.value,
+                                  }))
+                                }
+                                placeholder={
+                                  pending ? "Set via invitation" : "Username"
+                                }
+                                style={tableInputStyle}
+                              />
+                            ) : (
+                              (user.username ?? "-")
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {isEditing ? (
+                              <select
+                                value={editForm.role}
+                                onChange={(event) =>
+                                  setEditForm((current) => ({
+                                    ...current,
+                                    role: event.target.value as Role,
+                                  }))
+                                }
+                                style={tableInputStyle}
+                              >
+                                {visibleRoles.map((role) => (
+                                  <option key={role} value={role}>
+                                    {role}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <RoleBadge role={user.role} />
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {isEditing ? (
+                              <input
+                                required={editForm.role === "ADMIN"}
+                                value={editForm.group}
+                                placeholder={
+                                  editForm.role === "ADMIN" ? "" : "Optional"
+                                }
+                                onChange={(event) =>
+                                  setEditForm((current) => ({
+                                    ...current,
+                                    group: event.target.value,
+                                  }))
+                                }
+                                style={tableInputStyle}
+                              />
+                            ) : (
+                              (user.group ?? "-")
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            <StatusBadge pending={pending} />
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: "right" }}>
+                            <div style={actionGroupStyle}>
+                              {isEditing ? (
+                                <>
                                   <button
                                     type="button"
-                                    onClick={() => handleResend(user)}
-                                    disabled={resendLoading}
+                                    onClick={() => handleUpdate(user)}
+                                    disabled={updateLoading}
                                     style={iconButtonStyle}
-                                    title="Resend invitation"
+                                    title="Save changes"
                                   >
-                                    <RotateCw size={14} />
-                                    {resendLoading ? "Sending" : "Resend"}
+                                    <Save size={14} />
+                                    {updateLoading ? "Saving" : "Save"}
                                   </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  onClick={() => beginEdit(user)}
-                                  style={iconButtonStyle}
-                                  title="Edit account"
-                                >
-                                  <Pencil size={14} />
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDelete(user)}
-                                  disabled={
-                                    deleteLoading ||
-                                    isSelf ||
-                                    user.role === "SUPERADMIN"
-                                  }
-                                  style={{
-                                    ...iconButtonStyle,
-                                    ...dangerButtonStyle,
-                                    ...(isSelf || user.role === "SUPERADMIN"
-                                      ? disabledButtonStyle
-                                      : {}),
-                                  }}
-                                  title={
-                                    isSelf
-                                      ? "You cannot delete your own account"
-                                      : user.role === "SUPERADMIN"
-                                        ? "SUPERADMIN accounts cannot be deleted"
-                                        : "Remove account"
-                                  }
-                                >
-                                  <Trash2 size={14} />
-                                  {deleteLoading ? "Removing" : "Remove"}
-                                </button>
-                              </>
-                            )}
-                          </div>
+                                  <button
+                                    type="button"
+                                    onClick={cancelEdit}
+                                    disabled={updateLoading}
+                                    style={iconButtonStyle}
+                                    title="Cancel editing"
+                                  >
+                                    <X size={14} />
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  {pending ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleResend(user)}
+                                      disabled={resendLoading}
+                                      style={iconButtonStyle}
+                                      title="Resend invitation"
+                                    >
+                                      <RotateCw size={14} />
+                                      {resendLoading ? "Sending" : "Resend"}
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => beginEdit(user)}
+                                    style={iconButtonStyle}
+                                    title="Edit account"
+                                  >
+                                    <Pencil size={14} />
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelete(user)}
+                                    disabled={
+                                      deleteLoading ||
+                                      isSelf ||
+                                      user.role === "SUPERADMIN"
+                                    }
+                                    style={{
+                                      ...iconButtonStyle,
+                                      ...dangerButtonStyle,
+                                      ...(isSelf || user.role === "SUPERADMIN"
+                                        ? disabledButtonStyle
+                                        : {}),
+                                    }}
+                                    title={
+                                      isSelf
+                                        ? "You cannot delete your own account"
+                                        : user.role === "SUPERADMIN"
+                                          ? "SUPERADMIN accounts cannot be deleted"
+                                          : "Remove account"
+                                    }
+                                  >
+                                    <Trash2 size={14} />
+                                    {deleteLoading ? "Removing" : "Remove"}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filtered.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          style={{ ...tdStyle, color: "#475569" }}
+                        >
+                          No users found.
                         </td>
                       </tr>
-                    );
-                  })}
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td colSpan={6} style={{ ...tdStyle, color: "#475569" }}>
-                        No users found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
         </>
       }
       rightSection={<></>}
@@ -1011,12 +1016,15 @@ const tableInputStyle: React.CSSProperties = {
 
 /** Scrollable viewport for long user lists; keeps filters + table chrome usable. */
 const userListScrollWrapStyle: React.CSSProperties = {
+  flex: 1,
+  minHeight: 0,
   overflowX: "auto",
   overflowY: "auto",
   WebkitOverflowScrolling: "touch",
-  maxHeight: "min(28rem, calc(100dvh - 17rem))",
+  overscrollBehavior: "contain",
   borderRadius: 6,
   border: "1px solid #eef2f7",
+  paddingBottom: 12,
 };
 
 const thHeadStyle: React.CSSProperties = {

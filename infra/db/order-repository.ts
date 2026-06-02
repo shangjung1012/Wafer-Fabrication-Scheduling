@@ -195,26 +195,36 @@ export async function bulkUpdateOrderStatus(
   }
 }
 
+// pg driver caps bound parameters at 65,535; chunk large ID lists to stay within that limit.
+const UPDATE_CHUNK_SIZE = 10_000;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size)
+    chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
 export async function applyScheduleOrdersUpdate(
   db: PrismaClient,
   scheduledIds: string[],
   failedIds: string[],
   operatorId: string,
 ): Promise<void> {
-  if (scheduledIds.length > 0) {
+  for (const ids of chunk(scheduledIds, UPDATE_CHUNK_SIZE)) {
     await db.order.updateMany({
       where: {
-        id: { in: scheduledIds },
+        id: { in: ids },
         status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
       },
       data: { status: OrderStatus.SCHEDULED, lastModifiedById: operatorId },
     });
   }
 
-  if (failedIds.length > 0) {
+  for (const ids of chunk(failedIds, UPDATE_CHUNK_SIZE)) {
     await db.order.updateMany({
       where: {
-        id: { in: failedIds },
+        id: { in: ids },
         status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
       },
       data: { status: OrderStatus.FAILED, lastModifiedById: operatorId },

@@ -10,6 +10,16 @@ export type CreateAssignmentInput = {
   status: AssignmentStatus;
 };
 
+// pg driver caps bound parameters at 65,535; chunk large lists to stay within that limit.
+const CHUNK_SIZE = 10_000;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size)
+    chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
 export async function deleteScheduledAssignments(
   db: PrismaClient,
   orderIds: string[],
@@ -21,16 +31,18 @@ export async function deleteScheduledAssignments(
   const dateFilter: { gte?: Date; lte?: Date } = {};
   if (startDate) dateFilter.gte = startDate;
   if (endDate) dateFilter.lte = endDate;
+  const dateCondition =
+    Object.keys(dateFilter).length > 0 ? { productionDate: dateFilter } : {};
 
-  await db.orderAssignment.deleteMany({
-    where: {
-      orderId: { in: orderIds },
-      status: AssignmentStatus.SCHEDULED,
-      ...(Object.keys(dateFilter).length > 0
-        ? { productionDate: dateFilter }
-        : {}),
-    },
-  });
+  for (const ids of chunk(orderIds, CHUNK_SIZE)) {
+    await db.orderAssignment.deleteMany({
+      where: {
+        orderId: { in: ids },
+        status: AssignmentStatus.SCHEDULED,
+        ...dateCondition,
+      },
+    });
+  }
 }
 
 export async function createAssignments(
@@ -38,7 +50,9 @@ export async function createAssignments(
   assignments: CreateAssignmentInput[],
 ): Promise<void> {
   if (assignments.length === 0) return;
-  await db.orderAssignment.createMany({ data: assignments });
+  for (const batch of chunk(assignments, CHUNK_SIZE)) {
+    await db.orderAssignment.createMany({ data: batch });
+  }
 }
 
 export async function findAssignmentsByIds(db: PrismaClient, ids: string[]) {
