@@ -38,8 +38,13 @@ function Section({
   children: React.ReactNode;
   badge?: string;
 }>) {
-  const badgeBg =
-    badge === "SALES" ? "#dcfce7" : badge === "ADMIN" ? "#dbeafe" : "#f3e8ff";
+  let badgeBg = "#f3e8ff";
+  if (badge === "SALES") {
+    badgeBg = "#dcfce7";
+  } else if (badge === "ADMIN") {
+    badgeBg = "#dbeafe";
+  }
+
   const badgeColor =
     badge === "SALES" ? "#166534" : badge === "ADMIN" ? "#1e40af" : "#6b21a8";
   return (
