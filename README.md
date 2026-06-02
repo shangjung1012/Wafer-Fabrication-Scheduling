@@ -11,16 +11,18 @@ wafer-fabrication-scheduling/
 │   ├── (dashboard)/        # Orders / visualization / users UI
 │   ├── api/                # API endpoints (Next.js App Router)
 │   │   ├── auth/           # Login, refresh, logout, invitations
+│   │   ├── assignments/    # Manual assignment move / pending order placement API
+│   │   ├── conflict-issues/ # Scheduling conflict and cancellation issue workflow
 │   │   ├── docs/           # Swagger UI (http://localhost:3000/docs)
 │   │   ├── orders/
-│   │   ├── requests/       # Order change request API
 │   │   ├── schedule/       # Schedule runner API
+│   │   ├── system/         # Health, simulation clock, auto-scheduler config
 │   │   ├── users/          # User invitation/listing API
 │   │   └── visualization/  # Timeline data API
 ├── modules/                # Business logic layer
 │   ├── auth/               # JWT auth, RBAC, invitations
 │   ├── mail/               # Azure Email adapter
-│   ├── order/              # Order/request services
+│   ├── order/              # Order and conflict issue services
 │   ├── schedule/           # Scheduling engine
 │   ├── users/              # User listing/invitation service
 │   └── visualization/      # Timeline/read model service
