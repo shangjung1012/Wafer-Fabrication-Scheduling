@@ -502,7 +502,13 @@ export default function OrdersPage() {
   // Role badge colour
   // ---------------------------------------------------------------------------
 
-  const roleBg = isSales ? "#dcfce7" : isAdmin ? "#dbeafe" : "#f3e8ff";
+  let roleBg = "#f3e8ff";
+  if (isSales) {
+    roleBg = "#dcfce7";
+  } else if (isAdmin) {
+    roleBg = "#dbeafe";
+  }
+
   const roleColor = isSales ? "#166534" : isAdmin ? "#1e40af" : "#6b21a8";
   const roleBadgeStyle: React.CSSProperties = {
     fontSize: 12,
