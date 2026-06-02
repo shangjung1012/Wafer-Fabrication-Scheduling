@@ -61,7 +61,8 @@ describe("POST /api/schedule/preview", () => {
   it("should return 403 for non-admins", async () => {
     vi.mocked(auth.requireAuth).mockResolvedValue({
       user: { role: "SALES", id: "U1" },
-    } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
+      requestId: "req-1",
+    });
 
     const res = await POST(createRequest({ type: "A" }));
     expect(res.status).toBe(403);
@@ -70,7 +71,8 @@ describe("POST /api/schedule/preview", () => {
   it("should return 403 when an admin previews another production type", async () => {
     vi.mocked(auth.requireAuth).mockResolvedValue({
       user: { role: "ADMIN", id: "U1" },
-    } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
+      requestId: "req-1",
+    });
     vi.mocked(resolveActorScope).mockResolvedValueOnce({
       role: "ADMIN",
       userId: "U1",
@@ -88,7 +90,8 @@ describe("POST /api/schedule/preview", () => {
   it("should generate a preview, save it to redis, and format the response correctly", async () => {
     vi.mocked(auth.requireAuth).mockResolvedValue({
       user: { role: "ADMIN", id: "U1" },
-    } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
+      requestId: "req-1",
+    });
 
     const mockDate = new Date("2024-01-01T00:00:00.000Z");
     const mockStrategyResult = {
@@ -163,7 +166,8 @@ describe("POST /api/schedule/preview", () => {
   it("should extract failedOrderIds correctly when order is FAILED", async () => {
     vi.mocked(auth.requireAuth).mockResolvedValue({
       user: { role: "ADMIN", id: "U1" },
-    } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
+      requestId: "req-1",
+    });
 
     const mockDate = new Date("2024-01-01T00:00:00.000Z");
     const mockStrategyResult = {
