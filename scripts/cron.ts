@@ -23,7 +23,22 @@ function validateConfiguration(): void {
   }
 }
 
-validateConfiguration();
+// === Entry point guard — side-effects only run when executed directly, not when imported by tests ===
+if (process.argv[1]?.endsWith("cron.ts")) {
+  validateConfiguration();
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+
+  console.log(`[Cron] Worker started with timezone ${tz}.`);
+
+  cron.schedule("0 2-22/2 * * *", () => track(runAutoSchedulerCron()), {
+    timezone: tz,
+  });
+  cron.schedule("0 0 * * *", () => track(runDailyExecutionCron()), {
+    timezone: tz,
+  });
+}
 
 // === Overlap Prevention (fix #4) ===
 let autoSchedulerRunning = false;
@@ -65,9 +80,6 @@ async function shutdown(signal: string) {
   console.log("[Cron] Prisma disconnected. Goodbye.");
   process.exit(0);
 }
-
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
 
 // === Cron Jobs ===
 
@@ -114,12 +126,3 @@ export async function runDailyExecutionCron() {
     dailyExecutionRunning = false;
   }
 }
-
-console.log(`[Cron] Worker started with timezone ${tz}.`);
-
-cron.schedule("0 2-22/2 * * *", () => track(runAutoSchedulerCron()), {
-  timezone: tz,
-});
-cron.schedule("0 0 * * *", () => track(runDailyExecutionCron()), {
-  timezone: tz,
-});
