@@ -281,6 +281,8 @@ describe("invitation-service", () => {
     expect(sendMail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: [{ address: "admin-a1@mail.shangjung.com" }],
+        waitForDelivery: false,
+        azureSendTimeoutMs: 3000,
         plainText: expect.stringContaining("180 seconds"),
       }),
     );
