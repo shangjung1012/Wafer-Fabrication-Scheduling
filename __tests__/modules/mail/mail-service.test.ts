@@ -205,6 +205,37 @@ describe("mail-service", () => {
     }
   });
 
+  it("defaults SMTP fallback secure to true on port 465", async () => {
+    process.env.SMTP_FALLBACK_ENABLED = "true";
+    process.env.SMTP_FALLBACK_HOST = "smtp.gmail.com";
+    process.env.SMTP_FALLBACK_PORT = "465";
+    process.env.SMTP_FALLBACK_USER = "mailer@example.com";
+    process.env.SMTP_FALLBACK_PASSWORD = "app-password";
+    process.env.SMTP_FALLBACK_FROM_ADDRESS = "DoNotReply@example.com";
+    beginSend.mockRejectedValueOnce(new Error("Azure request failed"));
+
+    await expect(
+      sendMail({
+        to: [{ address: "user@example.com" }],
+        subject: "Fallback",
+        plainText: "Use SMTP.",
+      }),
+    ).resolves.toEqual({
+      id: "smtp-message-1",
+      status: "SmtpFallbackSucceeded",
+    });
+
+    expect(createTransport).toHaveBeenCalledWith({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: {
+        user: "mailer@example.com",
+        pass: "app-password",
+      },
+    });
+  });
+
   it("can return after Azure accepts the send operation", async () => {
     const pollUntilDone = vi.fn();
     beginSend.mockResolvedValueOnce({
@@ -227,10 +258,16 @@ describe("mail-service", () => {
     expect(pollUntilDone).not.toHaveBeenCalled();
   });
 
-  it("times out when Azure delivery polling does not finish", async () => {
+  it("returns pending when Azure delivery polling times out", async () => {
     vi.useFakeTimers();
     try {
       process.env.AZURE_COMMUNICATION_EMAIL_SEND_TIMEOUT_MS = "25";
+      process.env.SMTP_FALLBACK_ENABLED = "true";
+      process.env.SMTP_FALLBACK_HOST = "smtp.gmail.com";
+      process.env.SMTP_FALLBACK_PORT = "465";
+      process.env.SMTP_FALLBACK_USER = "mailer@example.com";
+      process.env.SMTP_FALLBACK_PASSWORD = "app-password";
+      process.env.SMTP_FALLBACK_FROM_ADDRESS = "DoNotReply@example.com";
 
       const pollUntilDone = vi.fn(
         (options?: { abortSignal?: AbortSignal }) =>
@@ -240,21 +277,29 @@ describe("mail-service", () => {
             });
           }),
       );
-      beginSend.mockResolvedValueOnce({ pollUntilDone });
-
-      const promise = expect(
-        sendMail({
-          to: [{ address: "user@example.com" }],
-          subject: "Timeout",
-          plainText: "This should time out.",
+      beginSend.mockResolvedValueOnce({
+        getResult: vi.fn().mockReturnValue({
+          id: "operation-queued",
+          status: "Running",
         }),
-      ).rejects.toThrow("Email send timed out after 25ms");
+        pollUntilDone,
+      });
+
+      const promise = sendMail({
+        to: [{ address: "user@example.com" }],
+        subject: "Timeout",
+        plainText: "This should time out.",
+      });
 
       await vi.advanceTimersByTimeAsync(25);
-      await promise;
+      await expect(promise).resolves.toEqual({
+        id: "operation-queued",
+        status: "Running",
+      });
       expect(pollUntilDone).toHaveBeenCalledWith({
         abortSignal: expect.any(AbortSignal),
       });
+      expect(sendSmtpMail).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
