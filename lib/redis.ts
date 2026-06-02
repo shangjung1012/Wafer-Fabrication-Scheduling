@@ -46,7 +46,7 @@ function createRedisClient(): RedisClient {
       redisOptions: {
         ...(username ? { username } : {}),
         ...(password ? { password } : {}),
-        ...(usesTls ? { tls: {} } : {}),
+        ...(usesTls ? { tls: { servername: firstUrl.hostname } } : {}),
       },
     },
   );
