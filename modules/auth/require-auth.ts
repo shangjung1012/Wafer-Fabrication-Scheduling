@@ -17,7 +17,7 @@ function parseBearerToken(request: Request): string | null {
     request.headers.get("Authorization");
   if (!raw) return null;
 
-  const match = raw.match(/^Bearer\s+(.+)$/i);
+  const match = /^Bearer\s+(.+)$/i.exec(raw);
   return match?.[1]?.trim() || null;
 }
 
