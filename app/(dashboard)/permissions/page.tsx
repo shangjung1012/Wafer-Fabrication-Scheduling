@@ -525,7 +525,7 @@ export default function PermissionsPage() {
       title="Permissions"
       subtitle="Manage user accounts and roles."
       onBack={handleLogout}
-      leftSectionSurfaceClassName="flex flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
+      leftSectionSurfaceClassName="flex min-h-0 flex-1 flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
       leftSection={
         <>
           {notice && (
@@ -601,7 +601,8 @@ export default function PermissionsPage() {
             </div>
           )}
 
-          <section style={panelStyle}>
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+          <section style={addUserPanelStyle}>
             <div style={sectionHeaderStyle}>
               <div>
                 <h2 style={sectionTitleStyle}>Add User</h2>
@@ -679,8 +680,8 @@ export default function PermissionsPage() {
             </form>
           </section>
 
-          <section style={panelStyle}>
-            <div style={sectionHeaderStyle}>
+          <section style={userListPanelStyle}>
+            <div style={{ ...sectionHeaderStyle, flexShrink: 0 }}>
               <div>
                 <h2 style={sectionTitleStyle}>User List</h2>
                 <p style={sectionMetaStyle}>
@@ -991,6 +992,7 @@ export default function PermissionsPage() {
               </table>
             </div>
           </section>
+          </div>
         </>
       }
       rightSection={<></>}
@@ -1028,6 +1030,26 @@ const panelStyle: React.CSSProperties = {
   marginBottom: 16,
   background: "#ffffff",
   boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+};
+
+/** Top card: natural height only (fills width; gap from wrapper replaces margin). */
+const addUserPanelStyle: React.CSSProperties = {
+  ...panelStyle,
+  flexShrink: 0,
+  marginBottom: 0,
+};
+
+/**
+ * Fills remaining column height under DashboardShell flex so the table scrolls
+ * inside the viewport instead of being clipped by overflow-hidden + wrong dvh maxHeight.
+ */
+const userListPanelStyle: React.CSSProperties = {
+  ...panelStyle,
+  flex: 1,
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  marginBottom: 0,
 };
 
 const sectionHeaderStyle: React.CSSProperties = {
@@ -1179,14 +1201,17 @@ const tableStyle: React.CSSProperties = {
   fontSize: 13,
 };
 
-/** Scrollable viewport for long user lists; keeps filters + table chrome usable. */
+/** Scrolls within flex-allocated height (see userListPanelStyle). */
 const userListScrollWrapStyle: React.CSSProperties = {
+  flex: 1,
+  minHeight: 0,
   overflowX: "auto",
   overflowY: "auto",
   WebkitOverflowScrolling: "touch",
-  maxHeight: "min(28rem, calc(100dvh - 17rem))",
+  overscrollBehavior: "contain",
   borderRadius: 6,
   border: "1px solid #eef2f7",
+  paddingBottom: 12,
 };
 
 const thStyle: React.CSSProperties = {
