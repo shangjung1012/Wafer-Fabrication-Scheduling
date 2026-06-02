@@ -91,12 +91,12 @@ function apiFetch(path: string, options: RequestInit = {}) {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers ?? {}),
+      ...options.headers,
     },
   });
 }
 
-function RoleBadge({ role }: { role: string }) {
+function RoleBadge({ role }: Readonly<{ role: string }>) {
   const tone = roleTone(role);
   return (
     <span
@@ -119,7 +119,7 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-function StatusBadge({ pending }: { pending: boolean }) {
+function StatusBadge({ pending }: Readonly<{ pending: boolean }>) {
   return (
     <span
       style={{
@@ -248,7 +248,11 @@ export default function PermissionsPage() {
     try {
       const response = await apiFetch("/api/users", {
         method: "POST",
-        body: JSON.stringify({ email: form.email, role: form.role, group: inviteGroup }),
+        body: JSON.stringify({
+          email: form.email,
+          role: form.role,
+          group: inviteGroup,
+        }),
       });
       const result = await parseResponse(response);
       if (!response.ok) {
@@ -360,7 +364,10 @@ export default function PermissionsPage() {
       return;
     }
     if (editForm.role === "ADMIN" && !group) {
-      setNotice({ kind: "error", message: "Group is required for ADMIN role." });
+      setNotice({
+        kind: "error",
+        message: "Group is required for ADMIN role.",
+      });
       return;
     }
     if (user.username && !username) {
@@ -889,7 +896,9 @@ export default function PermissionsPage() {
                             <input
                               required={editForm.role === "ADMIN"}
                               value={editForm.group}
-                              placeholder={editForm.role === "ADMIN" ? "" : "Optional"}
+                              placeholder={
+                                editForm.role === "ADMIN" ? "" : "Optional"
+                              }
                               onChange={(event) =>
                                 setEditForm((current) => ({
                                   ...current,
@@ -956,11 +965,17 @@ export default function PermissionsPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleDelete(user)}
-                                  disabled={deleteLoading || isSelf || user.role === "SUPERADMIN"}
+                                  disabled={
+                                    deleteLoading ||
+                                    isSelf ||
+                                    user.role === "SUPERADMIN"
+                                  }
                                   style={{
                                     ...iconButtonStyle,
                                     ...dangerButtonStyle,
-                                    ...(isSelf || user.role === "SUPERADMIN" ? disabledButtonStyle : {}),
+                                    ...(isSelf || user.role === "SUPERADMIN"
+                                      ? disabledButtonStyle
+                                      : {}),
                                   }}
                                   title={
                                     isSelf

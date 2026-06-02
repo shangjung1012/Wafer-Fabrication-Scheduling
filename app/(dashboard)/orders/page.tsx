@@ -20,7 +20,7 @@ function apiFetch(path: string, options: RequestInit = {}) {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers ?? {}),
+      ...options.headers,
     },
   });
 }
@@ -33,11 +33,15 @@ function Section({
   title,
   children,
   badge,
-}: {
+}: Readonly<{
   title: string;
   children: React.ReactNode;
   badge?: string;
-}) {
+}>) {
+  const badgeBg =
+    badge === "SALES" ? "#dcfce7" : badge === "ADMIN" ? "#dbeafe" : "#f3e8ff";
+  const badgeColor =
+    badge === "SALES" ? "#166534" : badge === "ADMIN" ? "#1e40af" : "#6b21a8";
   return (
     <div
       style={{
@@ -69,18 +73,8 @@ function Section({
               fontWeight: 600,
               padding: "2px 7px",
               borderRadius: 99,
-              background:
-                badge === "SALES"
-                  ? "#dcfce7"
-                  : badge === "ADMIN"
-                    ? "#dbeafe"
-                    : "#f3e8ff",
-              color:
-                badge === "SALES"
-                  ? "#166534"
-                  : badge === "ADMIN"
-                    ? "#1e40af"
-                    : "#6b21a8",
+              background: badgeBg,
+              color: badgeColor,
             }}
           >
             {badge}
@@ -92,7 +86,7 @@ function Section({
   );
 }
 
-function Result({ data }: { data: unknown }) {
+function Result({ data }: Readonly<{ data: unknown }>) {
   if (data === null) return null;
   return (
     <pre
@@ -133,7 +127,7 @@ const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   FAILED: { bg: "#ffedd5", color: "#9a3412" },
 };
 
-function OrderTable({ data }: { data: unknown }) {
+function OrderTable({ data }: Readonly<{ data: unknown }>) {
   if (!Array.isArray(data) || data.length === 0) return null;
 
   const orders = data as OrderRow[];
@@ -262,7 +256,7 @@ function OrderTable({ data }: { data: unknown }) {
 function Input({
   label,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+}: Readonly<React.InputHTMLAttributes<HTMLInputElement> & { label: string }>) {
   return (
     <label
       style={{
@@ -296,10 +290,10 @@ function Input({
 function Btn({
   onClick,
   children,
-}: {
+}: Readonly<{
   onClick: () => void;
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <button
       onClick={onClick}
@@ -320,7 +314,7 @@ function Btn({
   );
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
+function SectionHeading({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <h2
       style={{
@@ -498,13 +492,15 @@ export default function OrdersPage() {
   // Role badge colour
   // ---------------------------------------------------------------------------
 
+  const roleBg = isSales ? "#dcfce7" : isAdmin ? "#dbeafe" : "#f3e8ff";
+  const roleColor = isSales ? "#166534" : isAdmin ? "#1e40af" : "#6b21a8";
   const roleBadgeStyle: React.CSSProperties = {
     fontSize: 12,
     fontWeight: 700,
     padding: "3px 10px",
     borderRadius: 99,
-    background: isSales ? "#dcfce7" : isAdmin ? "#dbeafe" : "#f3e8ff",
-    color: isSales ? "#166534" : isAdmin ? "#1e40af" : "#6b21a8",
+    background: roleBg,
+    color: roleColor,
   };
 
   const navLinkStyle: React.CSSProperties = {
