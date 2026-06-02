@@ -108,12 +108,13 @@ jobs:
         run: |
           mkdir -p "${REPORTS_DIR}"
           pnpm exec vitest run \
+            --coverage \
             --reporter=default \
             --reporter=junit \
             --outputFile="${REPORTS_DIR}/junit.xml"
 
       - name: Test Report
-        uses: dorny/test-reporter@v3
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
         if: ${{ !cancelled() }}
         with:
           name: Unit Tests
@@ -129,6 +130,14 @@ jobs:
           name: test-reports
           path: ${{ env.REPORTS_DIR }}/
           if-no-files-found: ignore
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
+          if-no-files-found: error
 
       - name: Build app
         run: pnpm build
@@ -154,12 +163,26 @@ jobs:
     name: SonarQube
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: verify
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        (needs.verify.result == 'success' || needs.verify.result == 'skipped')
+      }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        if: ${{ needs.verify.result == 'success' }}
+        with:
+          name: coverage-report
+          path: coverage
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
