@@ -10,6 +10,12 @@ on:
 
 permissions:
   contents: read
+  actions: read
+  checks: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -26,6 +32,7 @@ jobs:
   verify:
     name: Lint, test, build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -42,7 +49,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-      # Add Redis for CI testing
       redis:
         image: redis:7-alpine
         ports:
@@ -83,11 +89,44 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # 如果你是 Vitest，建議讓 test 產生 JUnit XML
       - name: Test
-        run: pnpm test
+        run: |
+          mkdir -p reports
+          pnpm test -- --reporter=default --reporter=junit --outputFile=reports/junit.xml
+
+      - name: Test Report
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: Unit Tests
+          path: reports/junit.xml
+          reporter: jest-junit
+          use-actions-summary: true
+          fail-on-error: false
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: test-reports
+          path: reports/
+          if-no-files-found: ignore
 
       - name: Build app
         run: pnpm build
 
       - name: Build Docker image
         run: docker build -t wafer-scheduling-next:ci .
+
+      - name: CI Summary
+        if: ${{ always() }}
+        run: |
+          echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Node: \`24\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Package manager: \`pnpm 11.0.9\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Database: PostgreSQL 17" >> $GITHUB_STEP_SUMMARY
+          echo "- Cache: pnpm" >> $GITHUB_STEP_SUMMARY
