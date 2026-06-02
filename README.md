@@ -52,6 +52,7 @@ cp .env.example .env
 ```env
 DATABASE_URL="postgresql://wafer_user:wafer_password@localhost:5432/wafer_db?schema=public"
 REDIS_URL="redis://localhost:6379"
+REDIS_CLUSTER="false"
 APP_BASE_URL="http://localhost:3000"
 JWT_SECRET="replace-with-a-strong-secret-at-least-32-chars"
 JWT_ISSUER="wafer-auth"
@@ -61,6 +62,8 @@ REFRESH_TOKEN_EXPIRES_IN="7d"
 AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING="endpoint=...;accesskey=..."
 AZURE_COMMUNICATION_EMAIL_SENDER_ADDRESS="DoNotReply@example.com"
 ```
+
+雲端 Redis 若啟用 Redis Cluster，需設定 `REDIS_CLUSTER="true"`。如需指定多個 cluster startup nodes，可用逗號分隔的 `REDIS_CLUSTER_NODES` 覆蓋 `REDIS_URL`。
 
 ### 2. 啟動資料庫與 Redis
 
