@@ -45,8 +45,13 @@ function Section({
     badgeBg = "#dbeafe";
   }
 
-  const badgeColor =
-    badge === "SALES" ? "#166534" : badge === "ADMIN" ? "#1e40af" : "#6b21a8";
+  let badgeColor = "#6b21a8";
+  if (badge === "SALES") {
+    badgeColor = "#166534";
+  } else if (badge === "ADMIN") {
+    badgeColor = "#1e40af";
+  }
+
   return (
     <div
       style={{
