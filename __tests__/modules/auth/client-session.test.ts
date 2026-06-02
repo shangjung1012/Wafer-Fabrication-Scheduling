@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, expect, it, beforeEach } from "vitest";
 
 import {
@@ -21,6 +24,10 @@ function installLocalStorage() {
     },
   };
 
+  Object.defineProperty(window, "localStorage", {
+    value: storage,
+    configurable: true,
+  });
   Object.defineProperty(globalThis, "localStorage", {
     value: storage,
     configurable: true,

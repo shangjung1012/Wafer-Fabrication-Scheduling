@@ -23,6 +23,31 @@ const session: ClientAuthSession = {
   },
 };
 
+function createMemoryStorage(): Storage {
+  const values = new Map<string, string>();
+
+  return {
+    get length() {
+      return values.size;
+    },
+    clear() {
+      values.clear();
+    },
+    getItem(key: string) {
+      return values.get(key) ?? null;
+    },
+    key(index: number) {
+      return Array.from(values.keys())[index] ?? null;
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value);
+    },
+  };
+}
+
 function HydrationProbe() {
   const authSession = useClientAuthSession() ?? null;
 
@@ -45,19 +70,27 @@ function SnapshotProbe({
 
 describe("useClientAuthSession", () => {
   let container: HTMLDivElement;
-  let consoleError: ReturnType<typeof vi.spyOn>;
+  let consoleError: ReturnType<typeof vi.spyOn> | undefined;
 
   beforeEach(() => {
-    localStorage.clear();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: createMemoryStorage(),
+    });
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: window.localStorage,
+    });
+    window.localStorage.clear();
     container = document.createElement("div");
     document.body.appendChild(container);
     consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
-    consoleError.mockRestore();
+    consoleError?.mockRestore();
     container.remove();
-    localStorage.clear();
+    window.localStorage.clear();
   });
 
   it("keeps the first client snapshot aligned with the server snapshot during hydration", async () => {
