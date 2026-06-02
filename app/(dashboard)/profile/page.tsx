@@ -119,8 +119,13 @@ const EMAIL_ERROR_MESSAGES: Record<string, string> = {
 };
 
 function roleBadge(role: Role): React.CSSProperties {
-  const bg =
-    role === "SALES" ? "#dcfce7" : role === "ADMIN" ? "#dbeafe" : "#f3e8ff";
+  let bg = "#f3e8ff";
+  if (role === "SALES") {
+    bg = "#dcfce7";
+  } else if (role === "ADMIN") {
+    bg = "#dbeafe";
+  }
+
   const color =
     role === "SALES" ? "#166534" : role === "ADMIN" ? "#1e40af" : "#6b21a8";
   return {
