@@ -2684,13 +2684,30 @@ export default function SchedulePage() {
       const factoryTypeMap = new Map(
         data.factories.map((f) => [f.id, f.productionType]),
       );
+
+      // Mutable copy of versions — bumped locally after each successful write
+      // so sequential PUTs within the same Save don't false-positive on OCC.
+      const liveVersions: Record<string, number> = {
+        ...(data.adminContext?.scheduleVersions ?? {}),
+      };
       const getVersionForOrder = (orderId: string) => {
         const item = data.timeline.find((t) => t.orderId === orderId);
         if (!item) return undefined;
         const type = factoryTypeMap.get(item.factoryId);
         if (!type) return undefined;
-        return data.adminContext?.scheduleVersions[type];
+        return liveVersions[type];
       };
+      const bumpVersionForFactory = (factoryId: string) => {
+        const type = factoryTypeMap.get(factoryId);
+        if (type !== undefined && liveVersions[type] !== undefined) {
+          liveVersions[type]++;
+        }
+      };
+      const bumpVersionForOrder = (orderId: string) => {
+        const item = data.timeline.find((t) => t.orderId === orderId);
+        if (item) bumpVersionForFactory(item.factoryId);
+      };
+
       const onConflict = (msg: string) => {
         setSaveStatus("conflict");
         setSaveErrorMsg(msg);
@@ -2722,6 +2739,7 @@ export default function SchedulePage() {
           setTimeout(() => setSaveStatus("idle"), 6000);
           return;
         }
+        bumpVersionForOrder(id);
       }
 
       const pendingPlaceEntries = Array.from(pendingPlaceByOrderId.entries());
@@ -2755,7 +2773,7 @@ export default function SchedulePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             moves,
-            expectedVersions: data.adminContext?.scheduleVersions,
+            expectedVersions: liveVersions,
           }),
         });
         const body = await res.json().catch(() => ({}));
@@ -2794,6 +2812,9 @@ export default function SchedulePage() {
         if (errors.length > 0) {
           movePartialWarning = `${applied} saved, ${errors.length} rejected: ${errors[0].reason}`;
         }
+        for (const m of moves) {
+          bumpVersionForFactory(m.factoryId);
+        }
       }
 
       for (const id of toLock) {
@@ -2819,6 +2840,7 @@ export default function SchedulePage() {
           setTimeout(() => setSaveStatus("idle"), 6000);
           return;
         }
+        bumpVersionForOrder(id);
       }
 
       for (const id of [...toPrioritize, ...toUnprioritize]) {
@@ -2847,6 +2869,7 @@ export default function SchedulePage() {
           setTimeout(() => setSaveStatus("idle"), 6000);
           return;
         }
+        bumpVersionForOrder(id);
       }
 
       setSaveStatus("success");
