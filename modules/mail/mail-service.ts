@@ -71,6 +71,13 @@ function readBooleanEnv(name: string): boolean {
   );
 }
 
+function readOptionalBooleanEnv(name: string): boolean | undefined {
+  const raw = process.env[name]?.trim().toLowerCase();
+  if (!raw) return undefined;
+
+  return ["1", "true", "yes", "on"].includes(raw);
+}
+
 function isSmtpFallbackEnabled(): boolean {
   return readBooleanEnv("SMTP_FALLBACK_ENABLED");
 }
@@ -100,7 +107,7 @@ function getSmtpTransporter(): Transporter {
 
   const host = requiredEnv("SMTP_FALLBACK_HOST");
   const port = readPositiveIntegerEnv("SMTP_FALLBACK_PORT", 465);
-  const secure = readBooleanEnv("SMTP_FALLBACK_SECURE");
+  const secure = readOptionalBooleanEnv("SMTP_FALLBACK_SECURE") ?? port === 465;
   const user = requiredEnv("SMTP_FALLBACK_USER");
   const pass = requiredEnv("SMTP_FALLBACK_PASSWORD");
 
@@ -189,6 +196,16 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
   );
   const abortController = new AbortController();
   let timedOut = false;
+  let sendOperation:
+    | {
+        getResult: () => { id?: string; status?: string } | undefined;
+        pollUntilDone: (options: { abortSignal?: AbortSignal }) => Promise<{
+          id: string;
+          status: string;
+          error?: { message?: string };
+        }>;
+      }
+    | undefined;
   const timeoutId = setTimeout(() => {
     timedOut = true;
     abortController.abort();
@@ -198,7 +215,7 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
     const senderAddress = requiredEnv(
       "AZURE_COMMUNICATION_EMAIL_SENDER_ADDRESS",
     );
-    const poller = await getEmailClient().beginSend(
+    sendOperation = await getEmailClient().beginSend(
       {
         senderAddress,
         content: {
@@ -220,14 +237,14 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
     );
 
     if (input.waitForDelivery === false) {
-      const response = poller.getResult();
+      const response = sendOperation.getResult();
       return {
         id: response?.id ?? "unknown",
         status: response?.status ?? "Accepted",
       };
     }
 
-    const response = await poller.pollUntilDone({
+    const response = await sendOperation.pollUntilDone({
       abortSignal: abortController.signal,
     });
     if (response.status !== KnownEmailSendStatus.Succeeded) {
@@ -242,6 +259,14 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
     };
   } catch (error) {
     if (timedOut) {
+      if (sendOperation) {
+        const response = sendOperation.getResult();
+        return {
+          id: response?.id ?? "unknown",
+          status: response?.status ?? "Pending",
+        };
+      }
+
       return fallbackOrThrow(
         input,
         new MailSendError(
