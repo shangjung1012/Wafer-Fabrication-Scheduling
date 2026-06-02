@@ -105,8 +105,8 @@ describe("Repository side effects", () => {
               factory: { productionType: "Type A" },
             },
           ]),
-          update: vi.fn().mockResolvedValue({}),
         },
+        $executeRaw: vi.fn().mockResolvedValue(1),
       } as unknown as PrismaClient;
 
       const result = await bulkUpdateDailyCapacities(mockDb, [
@@ -115,10 +115,7 @@ describe("Repository side effects", () => {
 
       expect(result).toBeInstanceOf(Set);
       expect(Array.from(result)).toEqual(["Type A"]);
-      expect(mockDb.dailyCapacity.update).toHaveBeenCalledWith({
-        where: { id: "C1" },
-        data: { curCapacity: 100 },
-      });
+      expect(mockDb.$executeRaw).toHaveBeenCalledOnce();
       expect(scheduleStore.incrementScheduleVersion).not.toHaveBeenCalled();
     });
   });

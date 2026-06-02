@@ -1014,6 +1014,22 @@ const tableInputStyle: React.CSSProperties = {
   fontSize: 13,
 };
 
+const addUserPanelStyle: React.CSSProperties = {
+  ...panelStyle,
+  flexShrink: 0,
+  marginBottom: 0,
+};
+
+/** Fills remaining column height so the table scrolls inside the viewport. */
+const userListPanelStyle: React.CSSProperties = {
+  ...panelStyle,
+  flex: 1,
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  marginBottom: 0,
+};
+
 /** Scrollable viewport for long user lists; keeps filters + table chrome usable. */
 const userListScrollWrapStyle: React.CSSProperties = {
   flex: 1,
