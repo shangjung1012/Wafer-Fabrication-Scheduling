@@ -1,4 +1,4 @@
-import { EmailClient, KnownEmailSendStatus } from "@azure/communication-email";
+import { EmailClient } from "@azure/communication-email";
 import nodemailer, { type Transporter } from "nodemailer";
 
 type Recipient = {
@@ -14,8 +14,6 @@ export type SendMailInput = {
   plainText: string;
   html?: string;
   replyTo?: Recipient[];
-  waitForDelivery?: boolean;
-  azureSendTimeoutMs?: number;
 };
 
 export type SendMailResult = {
@@ -40,11 +38,6 @@ export class MailSendError extends Error {
 let emailClient: EmailClient | undefined;
 let emailClientInitFailed = false;
 let smtpTransporter: Transporter | undefined;
-
-const DEFAULT_SEND_TIMEOUT_MS = 15000;
-const DEFAULT_POLL_INTERVAL_MS = 1000;
-
-type SendOperation = Awaited<ReturnType<EmailClient["beginSend"]>>;
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -82,6 +75,10 @@ function readOptionalBooleanEnv(name: string): boolean | undefined {
 
 function isSmtpFallbackEnabled(): boolean {
   return readBooleanEnv("SMTP_FALLBACK_ENABLED");
+}
+
+function shouldUseSmtpTransport(): boolean {
+  return isSmtpFallbackEnabled();
 }
 
 function getEmailClient(): EmailClient {
@@ -164,21 +161,28 @@ async function sendWithSmtpFallback(
   };
 }
 
-async function fallbackOrThrow(
-  input: SendMailInput,
-  error: unknown,
-  message: string,
-): Promise<SendMailResult> {
-  if (isSmtpFallbackEnabled()) {
-    const detail =
-      error instanceof Error
-        ? `${error.name}: ${error.message}`
-        : String(error);
-    console.warn(`${message} ${detail}`);
-    return sendWithSmtpFallback(input);
-  }
+async function sendWithAzure(input: SendMailInput): Promise<SendMailResult> {
+  const senderAddress = requiredEnv("AZURE_COMMUNICATION_EMAIL_SENDER_ADDRESS");
+  const response = await getEmailClient().beginSend({
+    senderAddress,
+    content: {
+      subject: input.subject,
+      plainText: input.plainText,
+      ...(input.html ? { html: input.html } : {}),
+    },
+    recipients: {
+      to: input.to,
+      ...(input.cc?.length ? { cc: input.cc } : {}),
+      ...(input.bcc?.length ? { bcc: input.bcc } : {}),
+    },
+    ...(input.replyTo?.length ? { replyTo: input.replyTo } : {}),
+  });
 
-  throw error;
+  const result = response.getResult();
+  return {
+    id: result?.id ?? "unknown",
+    status: result?.status ?? "Accepted",
+  };
 }
 
 export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
@@ -186,85 +190,9 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
     throw new MailSendError("At least one recipient is required.");
   }
 
-  const sendTimeoutMs =
-    input.azureSendTimeoutMs ??
-    readPositiveIntegerEnv(
-      "AZURE_COMMUNICATION_EMAIL_SEND_TIMEOUT_MS",
-      DEFAULT_SEND_TIMEOUT_MS,
-    );
-  const pollIntervalMs = readPositiveIntegerEnv(
-    "AZURE_COMMUNICATION_EMAIL_POLL_INTERVAL_MS",
-    DEFAULT_POLL_INTERVAL_MS,
-  );
-  const abortController = new AbortController();
-  let timedOut = false;
-  let sendOperation: SendOperation | undefined;
-  const timeoutId = setTimeout(() => {
-    timedOut = true;
-    abortController.abort();
-  }, sendTimeoutMs);
-
-  try {
-    const senderAddress = requiredEnv(
-      "AZURE_COMMUNICATION_EMAIL_SENDER_ADDRESS",
-    );
-    sendOperation = await getEmailClient().beginSend(
-      {
-        senderAddress,
-        content: {
-          subject: input.subject,
-          plainText: input.plainText,
-          ...(input.html ? { html: input.html } : {}),
-        },
-        recipients: {
-          to: input.to,
-          ...(input.cc?.length ? { cc: input.cc } : {}),
-          ...(input.bcc?.length ? { bcc: input.bcc } : {}),
-        },
-        ...(input.replyTo?.length ? { replyTo: input.replyTo } : {}),
-      },
-      {
-        abortSignal: abortController.signal,
-        updateIntervalInMs: pollIntervalMs,
-      },
-    );
-
-    if (input.waitForDelivery === false) {
-      const response = sendOperation.getResult();
-      return {
-        id: response?.id ?? "unknown",
-        status: response?.status ?? "Accepted",
-      };
-    }
-
-    const response = await sendOperation.pollUntilDone({
-      abortSignal: abortController.signal,
-    });
-    if (response.status !== KnownEmailSendStatus.Succeeded) {
-      throw new MailSendError(
-        response.error?.message ?? `Email send status: ${response.status}`,
-      );
-    }
-
-    return {
-      id: response.id,
-      status: response.status,
-    };
-  } catch (error) {
-    if (timedOut) {
-      const response = sendOperation?.getResult();
-      return {
-        id: response?.id ?? "unknown",
-        status: sendOperation ? "Pending" : "Unknown",
-      };
-    }
-
-    return fallbackOrThrow(
-      input,
-      error,
-      "Azure email send failed. Falling back to SMTP.",
-    );
-  } finally {
-    clearTimeout(timeoutId);
+  if (shouldUseSmtpTransport()) {
+    return sendWithSmtpFallback(input);
   }
+
+  return sendWithAzure(input);
 }
