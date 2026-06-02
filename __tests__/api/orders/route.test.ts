@@ -28,35 +28,43 @@ vi.mock("@/modules/auth/rbac", () => ({
     status = 403;
     code = "FORBIDDEN";
   },
-  forbiddenResponse: vi.fn((err: Error) =>
-    new Response(JSON.stringify({ code: "FORBIDDEN", message: err.message }), {
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-    }),
+  forbiddenResponse: vi.fn(
+    (err: Error) =>
+      new Response(
+        JSON.stringify({ code: "FORBIDDEN", message: err.message }),
+        {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
   ),
-  unauthorizedResponse: vi.fn((msg: string) =>
-    new Response(JSON.stringify({ code: "UNAUTHORIZED", message: msg }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    }),
+  unauthorizedResponse: vi.fn(
+    (msg: string) =>
+      new Response(JSON.stringify({ code: "UNAUTHORIZED", message: msg }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
   ),
-  csrfResponse: vi.fn((msg: string) =>
-    new Response(JSON.stringify({ code: "CSRF_FORBIDDEN", message: msg }), {
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-    }),
+  csrfResponse: vi.fn(
+    (msg: string) =>
+      new Response(JSON.stringify({ code: "CSRF_FORBIDDEN", message: msg }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      }),
   ),
-  badRequestResponse: vi.fn((msg: string) =>
-    new Response(JSON.stringify({ code: "BAD_REQUEST", message: msg }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    }),
+  badRequestResponse: vi.fn(
+    (msg: string) =>
+      new Response(JSON.stringify({ code: "BAD_REQUEST", message: msg }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
   ),
-  notFoundResponse: vi.fn((msg?: string) =>
-    new Response(JSON.stringify({ code: "NOT_FOUND", message: msg }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    }),
+  notFoundResponse: vi.fn(
+    (msg?: string) =>
+      new Response(JSON.stringify({ code: "NOT_FOUND", message: msg }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      }),
   ),
 }));
 
@@ -95,7 +103,7 @@ describe("DELETE /api/orders — 409 when lock is held", () => {
     vi.mocked(auth.requireAuth).mockResolvedValue({
       user: { id: "admin-1", role: "ADMIN", username: "admin-a1" },
       requestId: "req-1",
-    } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
+    });
   });
 
   it("returns 409 with CONFLICT code when deleteOrdersService throws 'already running'", async () => {

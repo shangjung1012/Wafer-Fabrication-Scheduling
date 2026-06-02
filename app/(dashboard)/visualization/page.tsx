@@ -146,12 +146,12 @@ function CommittedDateInput({
   onCommit,
   className,
   disabled,
-}: {
+}: Readonly<{
   value: string;
   onCommit: (next: string) => void;
   className?: string;
   disabled?: boolean;
-}) {
+}>) {
   const [draft, setDraft] = useState(value);
   const focusedRef = useRef(false);
   const valueOnFocusRef = useRef(value);
@@ -626,7 +626,7 @@ const STATUS_STYLE: Record<string, string> = {
   CANCELLED: "bg-red-100 text-red-600",
 };
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status }: Readonly<{ status: string }>) {
   return (
     <span
       className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${STATUS_STYLE[status] ?? "bg-gray-100 text-gray-600"}`}
@@ -672,7 +672,7 @@ function DetailPanel({
   onToggleOrderFixed,
   onToggleOrderPrioritized,
   onClose,
-}: {
+}: Readonly<{
   cell: CellData;
   factory: FactoryInfo;
   diffByOrderId: Map<string, DiffEntry>;
@@ -686,7 +686,7 @@ function DetailPanel({
   onToggleOrderFixed?: (orderId: string, next: boolean) => void;
   onToggleOrderPrioritized?: (orderId: string, next: boolean) => void;
   onClose: () => void;
-}) {
+}>) {
   const myOrderIdSet = new Set(myOrderIds ?? []);
   const myOrderItems = cell.items.filter((i) => myOrderIdSet.has(i.orderId));
   const otherItems = isSales
@@ -1051,7 +1051,7 @@ function PendingSidebar({
   scheduleTypes,
   selectedScheduleType,
   onScheduleTypeChange,
-}: {
+}: Readonly<{
   orders: PendingOrderInfo[];
   today: string;
   onEditOrder: (order: OrderEditorValues) => void;
@@ -1081,7 +1081,7 @@ function PendingSidebar({
   scheduleTypes?: readonly string[];
   selectedScheduleType?: string;
   onScheduleTypeChange?: (type: string) => void;
-}) {
+}>) {
   const multiSelectEnabled =
     !editMode && Boolean(setSelectedOrderIds && onPreviewSelected);
   const selected = selectedOrderIds ?? new Set<string>();
@@ -1574,7 +1574,7 @@ function OrderFormModal({
   onClose,
   onSubmit,
   onCsvImported,
-}: {
+}: Readonly<{
   title: string;
   mode: "create" | "edit";
   initialValues: OrderEditorValues;
@@ -1584,7 +1584,7 @@ function OrderFormModal({
   onClose: () => void;
   onSubmit: (values: OrderEditorValues) => Promise<void>;
   onCsvImported?: () => void;
-}) {
+}>) {
   const [name, setName] = useState(initialValues.name);
   const [quantity, setQuantity] = useState(initialValues.quantity);
   const [type, setType] = useState(initialValues.type ?? "A");
@@ -1862,7 +1862,7 @@ function GanttCell({
   onToggleOrderPrioritized,
   onClickItem,
   onClick,
-}: {
+}: Readonly<{
   cell: CellData;
   hasRescheduled: boolean;
   hasNewlyPlaced: boolean;
@@ -1880,7 +1880,7 @@ function GanttCell({
   onToggleOrderPrioritized?: (orderId: string, next: boolean) => void;
   onClickItem?: (item: TimelineItem) => void;
   onClick: () => void;
-}) {
+}>) {
   const { bg, barColor, fillRatio } = getCellStyle(cell);
   const hasConflict = cell.conflicts.length > 0;
   const pct = Math.round(fillRatio * 100);
@@ -2111,10 +2111,10 @@ type OrderEditorState = OrderEditorValues & {
 function NavLinks({
   pathname,
   isSuperAdmin,
-}: {
+}: Readonly<{
   pathname: string;
   isSuperAdmin: boolean;
-}) {
+}>) {
   const isVisDashboard = pathname.startsWith("/visualization/dashboard");
   const isVisualization = pathname.startsWith("/visualization");
 
@@ -2285,7 +2285,7 @@ export default function SchedulePage() {
         type != null &&
         type !== "" &&
         versions != null &&
-        Object.prototype.hasOwnProperty.call(versions, type)
+        Object.hasOwn(versions, type)
           ? versions[type]
           : undefined;
       setEditOrder({
@@ -2293,7 +2293,10 @@ export default function SchedulePage() {
         expectedScheduleVersionAtOpen,
       });
     },
-    [data?.adminContext?.scheduleVersions, data?.salesContext?.scheduleVersions],
+    [
+      data?.adminContext?.scheduleVersions,
+      data?.salesContext?.scheduleVersions,
+    ],
   );
 
   // T4A: multi-select pending orders for targeted preview.
@@ -3782,7 +3785,9 @@ export default function SchedulePage() {
       {!isSales && (
         <div
           className={`flex-none px-6 py-2 flex items-center gap-3 flex-wrap border-b text-xs ${
-            simMode ? "bg-amber-50 border-amber-200" : "bg-white border-gray-100"
+            simMode
+              ? "bg-amber-50 border-amber-200"
+              : "bg-white border-gray-100"
           }`}
         >
           <span className="font-medium text-gray-700">Time Mode</span>

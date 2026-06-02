@@ -44,6 +44,14 @@ vi.mock("@/modules/schedule/access-control", () => ({
   assertCanManageScheduleType: vi.fn(),
 }));
 
+function patchRequest(body: unknown): Request {
+  return new Request("http://localhost/api/system/auto-scheduler", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 describe("/api/system/auto-scheduler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,14 +91,6 @@ describe("/api/system/auto-scheduler", () => {
   });
 
   describe("PATCH", () => {
-    function patchRequest(body: unknown): Request {
-      return new Request("http://localhost/api/system/auto-scheduler", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    }
-
     it("checks schedule type scope before updating config", async () => {
       const updated = {
         type: "A",

@@ -57,10 +57,7 @@ describe("GET /api/conflict-issues", () => {
       expect.anything(),
       expect.objectContaining({ __tag: "mock-prisma" }),
       {
-        statuses: [
-          ConflictIssueStatus.OPEN,
-          ConflictIssueStatus.IN_DISCUSSION,
-        ],
+        statuses: [ConflictIssueStatus.OPEN, ConflictIssueStatus.IN_DISCUSSION],
       },
     );
   });

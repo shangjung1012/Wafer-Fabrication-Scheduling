@@ -23,6 +23,29 @@ import {
   logoutClientAuthSession,
 } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
+import {
+  RoleBadge,
+  StatusBadge,
+  fieldStyle,
+  formGridStyle,
+  iconButtonStyle,
+  inputStyle,
+  labelStyle,
+  mutedTextStyle,
+  pageStyle,
+  panelStyle,
+  primaryButtonStyle,
+  secondaryButtonStyle,
+  sectionHeaderStyle,
+  sectionMetaStyle,
+  sectionTitleStyle,
+  tableStyle,
+  tdStyle,
+  thStyle,
+  topBarStyle,
+  trStyle,
+  warningStyle,
+} from "@/components/users/user-admin-ui";
 
 type Role = ClientAuthSession["user"]["role"];
 
@@ -63,23 +86,6 @@ const initialForm: InviteForm = {
   group: "",
 };
 
-function roleTone(role: string): {
-  background: string;
-  color: string;
-  border: string;
-} {
-  switch (role) {
-    case "SUPERADMIN":
-      return { background: "#f3e8ff", color: "#6b21a8", border: "#d8b4fe" };
-    case "ADMIN":
-      return { background: "#dbeafe", color: "#1e40af", border: "#93c5fd" };
-    case "SALES":
-      return { background: "#dcfce7", color: "#166534", border: "#86efac" };
-    default:
-      return { background: "#f1f5f9", color: "#475569", border: "#cbd5e1" };
-  }
-}
-
 async function parseResponse(response: Response): Promise<ApiResult> {
   const body = await response.json().catch(() => null);
   return { status: response.status, body };
@@ -91,53 +97,9 @@ function apiFetch(path: string, options: RequestInit = {}) {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers ?? {}),
+      ...options.headers,
     },
   });
-}
-
-function RoleBadge({ role }: { role: string }) {
-  const tone = roleTone(role);
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        border: `1px solid ${tone.border}`,
-        background: tone.background,
-        color: tone.color,
-        borderRadius: 999,
-        padding: "2px 8px",
-        fontSize: 11,
-        fontWeight: 700,
-        lineHeight: 1.4,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {role}
-    </span>
-  );
-}
-
-function StatusBadge({ pending }: { pending: boolean }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        border: `1px solid ${pending ? "#fed7aa" : "#bbf7d0"}`,
-        background: pending ? "#fff7ed" : "#f0fdf4",
-        color: pending ? "#9a3412" : "#166534",
-        borderRadius: 999,
-        padding: "2px 8px",
-        fontSize: 11,
-        fontWeight: 700,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {pending ? "PENDING" : "ACTIVE"}
-    </span>
-  );
 }
 
 export default function PermissionsPage() {
@@ -248,7 +210,11 @@ export default function PermissionsPage() {
     try {
       const response = await apiFetch("/api/users", {
         method: "POST",
-        body: JSON.stringify({ email: form.email, role: form.role, group: inviteGroup }),
+        body: JSON.stringify({
+          email: form.email,
+          role: form.role,
+          group: inviteGroup,
+        }),
       });
       const result = await parseResponse(response);
       if (!response.ok) {
@@ -360,7 +326,10 @@ export default function PermissionsPage() {
       return;
     }
     if (editForm.role === "ADMIN" && !group) {
-      setNotice({ kind: "error", message: "Group is required for ADMIN role." });
+      setNotice({
+        kind: "error",
+        message: "Group is required for ADMIN role.",
+      });
       return;
     }
     if (user.username && !username) {
@@ -525,7 +494,7 @@ export default function PermissionsPage() {
       title="Permissions"
       subtitle="Manage user accounts and roles."
       onBack={handleLogout}
-      leftSectionSurfaceClassName="flex flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
+      leftSectionSurfaceClassName="flex min-h-0 flex-1 flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden"
       leftSection={
         <>
           {notice && (
@@ -601,396 +570,409 @@ export default function PermissionsPage() {
             </div>
           )}
 
-          <section style={panelStyle}>
-            <div style={sectionHeaderStyle}>
-              <div>
-                <h2 style={sectionTitleStyle}>Add User</h2>
-                <p style={sectionMetaStyle}>Quickly invite a new account.</p>
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+            <section style={addUserPanelStyle}>
+              <div style={sectionHeaderStyle}>
+                <div>
+                  <h2 style={sectionTitleStyle}>Add User</h2>
+                  <p style={sectionMetaStyle}>Quickly invite a new account.</p>
+                </div>
+                <Mail size={18} color="#475569" />
               </div>
-              <Mail size={18} color="#475569" />
-            </div>
 
-            <form onSubmit={handleInvite} style={formGridStyle}>
-              <label style={fieldStyle}>
-                <span style={labelStyle}>Email</span>
-                <input
-                  required
-                  type="email"
-                  value={form.email}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      email: event.target.value,
-                    }))
-                  }
-                  placeholder="person@example.com"
-                  style={inputStyle}
-                />
-              </label>
+              <form onSubmit={handleInvite} style={formGridStyle}>
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Email</span>
+                  <input
+                    required
+                    type="email"
+                    value={form.email}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        email: event.target.value,
+                      }))
+                    }
+                    placeholder="person@example.com"
+                    style={inputStyle}
+                  />
+                </label>
 
-              <label style={fieldStyle}>
-                <span style={labelStyle}>Role</span>
-                <select
-                  value={form.role}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      role: event.target.value as Role,
-                    }))
-                  }
-                  style={inputStyle}
-                >
-                  {visibleRoles.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Role</span>
+                  <select
+                    value={form.role}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        role: event.target.value as Role,
+                      }))
+                    }
+                    style={inputStyle}
+                  >
+                    {visibleRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <label style={fieldStyle}>
-                <span style={labelStyle}>
-                  Group{form.role === "ADMIN" ? " *" : ""}
-                </span>
-                <input
-                  required={form.role === "ADMIN"}
-                  value={form.group || ""}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      group: event.target.value,
-                    }))
-                  }
-                  placeholder={form.role === "ADMIN" ? "A" : "Optional"}
-                  style={inputStyle}
-                />
-              </label>
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>
+                    Group{form.role === "ADMIN" ? " *" : ""}
+                  </span>
+                  <input
+                    required={form.role === "ADMIN"}
+                    value={form.group || ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        group: event.target.value,
+                      }))
+                    }
+                    placeholder={form.role === "ADMIN" ? "A" : "Optional"}
+                    style={inputStyle}
+                  />
+                </label>
 
-              <div style={{ display: "flex", alignItems: "end" }}>
-                <button
-                  type="submit"
-                  disabled={loading === "invite"}
-                  style={primaryButtonStyle}
-                >
-                  <UserPlus size={16} />
-                  {loading === "invite" ? "Sending..." : "Add User"}
-                </button>
+                <div style={{ display: "flex", alignItems: "end" }}>
+                  <button
+                    type="submit"
+                    disabled={loading === "invite"}
+                    style={primaryButtonStyle}
+                  >
+                    <UserPlus size={16} />
+                    {loading === "invite" ? "Sending..." : "Add User"}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section style={userListPanelStyle}>
+              <div style={{ ...sectionHeaderStyle, flexShrink: 0 }}>
+                <div>
+                  <h2 style={sectionTitleStyle}>User List</h2>
+                  <p style={sectionMetaStyle}>
+                    Filter and manage existing accounts.
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    placeholder="Search email or username"
+                    value={textFilter}
+                    onChange={(e) => setTextFilter(e.target.value)}
+                    style={{
+                      padding: "6px 8px",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: 6,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => loadUsers(roleFilter)}
+                    disabled={loading === "list"}
+                    style={secondaryButtonStyle}
+                  >
+                    <RefreshCw size={15} />
+                    Refresh
+                  </button>
+                </div>
               </div>
-            </form>
-          </section>
 
-          <section style={panelStyle}>
-            <div style={sectionHeaderStyle}>
-              <div>
-                <h2 style={sectionTitleStyle}>User List</h2>
-                <p style={sectionMetaStyle}>
-                  Filter and manage existing accounts.
-                </p>
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  placeholder="Search email or username"
-                  value={textFilter}
-                  onChange={(e) => setTextFilter(e.target.value)}
-                  style={{
-                    padding: "6px 8px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: 6,
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => loadUsers(roleFilter)}
-                  disabled={loading === "list"}
-                  style={secondaryButtonStyle}
-                >
-                  <RefreshCw size={15} />
-                  Refresh
-                </button>
-              </div>
-            </div>
-
-            <div style={userListScrollWrapStyle}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thHeadStyle}>Email</th>
-                    <th style={thHeadStyle}>Username</th>
-                    <th style={thHeadStyle}>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                        }}
-                      >
-                        <span>Role</span>
-                        <select
-                          value={roleFilter}
-                          onChange={(e) => {
-                            const val = e.target.value as Role | "";
-                            setRoleFilter(val);
-                            void loadUsers(val);
-                          }}
+              <div style={userListScrollWrapStyle}>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thHeadStyle}>Email</th>
+                      <th style={thHeadStyle}>Username</th>
+                      <th style={thHeadStyle}>
+                        <div
                           style={{
-                            padding: "5px 8px",
-                            fontSize: 13,
-                            border: "1px solid #cbd5e1",
-                            borderRadius: 6,
-                            background: "#fff",
-                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
                           }}
                         >
-                          <option value="">All roles</option>
-                          {visibleRoles.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </th>
-                    <th style={thHeadStyle}>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                        }}
-                      >
-                        <span>Group</span>
-                        <select
-                          value={groupFilter}
-                          onChange={(e) => setGroupFilter(e.target.value)}
+                          <span>Role</span>
+                          <select
+                            value={roleFilter}
+                            onChange={(e) => {
+                              const val = e.target.value as Role | "";
+                              setRoleFilter(val);
+                              void loadUsers(val);
+                            }}
+                            style={{
+                              padding: "5px 8px",
+                              fontSize: 13,
+                              border: "1px solid #cbd5e1",
+                              borderRadius: 6,
+                              background: "#fff",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <option value="">All roles</option>
+                            {visibleRoles.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </th>
+                      <th style={thHeadStyle}>
+                        <div
                           style={{
-                            padding: "5px 8px",
-                            fontSize: 13,
-                            border: "1px solid #cbd5e1",
-                            borderRadius: 6,
-                            background: "#fff",
-                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
                           }}
                         >
-                          <option value="">All groups</option>
-                          {groupOptions.map((g) => (
-                            <option key={g} value={g}>
-                              {g}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </th>
-                    <th style={thHeadStyle}>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                        }}
-                      >
-                        <span>Status</span>
-                        <select
-                          value={statusFilter}
-                          onChange={(e) =>
-                            setStatusFilter(
-                              e.target.value as "" | "ACTIVE" | "PENDING",
-                            )
-                          }
+                          <span>Group</span>
+                          <select
+                            value={groupFilter}
+                            onChange={(e) => setGroupFilter(e.target.value)}
+                            style={{
+                              padding: "5px 8px",
+                              fontSize: 13,
+                              border: "1px solid #cbd5e1",
+                              borderRadius: 6,
+                              background: "#fff",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <option value="">All groups</option>
+                            {groupOptions.map((g) => (
+                              <option key={g} value={g}>
+                                {g}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </th>
+                      <th style={thHeadStyle}>
+                        <div
                           style={{
-                            padding: "5px 8px",
-                            fontSize: 13,
-                            border: "1px solid #cbd5e1",
-                            borderRadius: 6,
-                            background: "#fff",
-                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
                           }}
                         >
-                          <option value="">All</option>
-                          <option value="ACTIVE">ACTIVE</option>
-                          <option value="PENDING">PENDING</option>
-                        </select>
-                      </div>
-                    </th>
-                    <th style={thHeadStyle}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((user) => {
-                    const pending = !user.username;
-                    const resendLoading = loading === `resend:${user.id}`;
-                    const updateLoading = loading === `update:${user.id}`;
-                    const deleteLoading = loading === `delete:${user.id}`;
-                    const isEditing = editingId === user.id;
-                    const isSelf = user.id === session.user.id;
-                    return (
-                      <tr key={user.id} style={trStyle}>
-                        <td style={tdStyle}>
-                          {isEditing ? (
-                            <input
-                              required
-                              type="email"
-                              value={editForm.email}
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  email: event.target.value,
-                                }))
-                              }
-                              style={tableInputStyle}
-                            />
-                          ) : (
-                            user.email
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          {isEditing ? (
-                            <input
-                              value={editForm.username}
-                              disabled={pending}
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  username: event.target.value,
-                                }))
-                              }
-                              placeholder={
-                                pending ? "Set via invitation" : "Username"
-                              }
-                              style={tableInputStyle}
-                            />
-                          ) : (
-                            (user.username ?? "-")
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          {isEditing ? (
-                            <select
-                              value={editForm.role}
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  role: event.target.value as Role,
-                                }))
-                              }
-                              style={tableInputStyle}
-                            >
-                              {visibleRoles.map((role) => (
-                                <option key={role} value={role}>
-                                  {role}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <RoleBadge role={user.role} />
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          {isEditing ? (
-                            <input
-                              required={editForm.role === "ADMIN"}
-                              value={editForm.group}
-                              placeholder={editForm.role === "ADMIN" ? "" : "Optional"}
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  group: event.target.value,
-                                }))
-                              }
-                              style={tableInputStyle}
-                            />
-                          ) : (
-                            (user.group ?? "-")
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          <StatusBadge pending={pending} />
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: "right" }}>
-                          <div style={actionGroupStyle}>
+                          <span>Status</span>
+                          <select
+                            value={statusFilter}
+                            onChange={(e) =>
+                              setStatusFilter(
+                                e.target.value as "" | "ACTIVE" | "PENDING",
+                              )
+                            }
+                            style={{
+                              padding: "5px 8px",
+                              fontSize: 13,
+                              border: "1px solid #cbd5e1",
+                              borderRadius: 6,
+                              background: "#fff",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <option value="">All</option>
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="PENDING">PENDING</option>
+                          </select>
+                        </div>
+                      </th>
+                      <th style={thHeadStyle}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((user) => {
+                      const pending = !user.username;
+                      const resendLoading = loading === `resend:${user.id}`;
+                      const updateLoading = loading === `update:${user.id}`;
+                      const deleteLoading = loading === `delete:${user.id}`;
+                      const isEditing = editingId === user.id;
+                      const isSelf = user.id === session.user.id;
+                      return (
+                        <tr key={user.id} style={trStyle}>
+                          <td style={tdStyle}>
                             {isEditing ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdate(user)}
-                                  disabled={updateLoading}
-                                  style={iconButtonStyle}
-                                  title="Save changes"
-                                >
-                                  <Save size={14} />
-                                  {updateLoading ? "Saving" : "Save"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={cancelEdit}
-                                  disabled={updateLoading}
-                                  style={iconButtonStyle}
-                                  title="Cancel editing"
-                                >
-                                  <X size={14} />
-                                  Cancel
-                                </button>
-                              </>
+                              <input
+                                required
+                                type="email"
+                                value={editForm.email}
+                                onChange={(event) =>
+                                  setEditForm((current) => ({
+                                    ...current,
+                                    email: event.target.value,
+                                  }))
+                                }
+                                style={tableInputStyle}
+                              />
                             ) : (
-                              <>
-                                {pending ? (
+                              user.email
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {isEditing ? (
+                              <input
+                                value={editForm.username}
+                                disabled={pending}
+                                onChange={(event) =>
+                                  setEditForm((current) => ({
+                                    ...current,
+                                    username: event.target.value,
+                                  }))
+                                }
+                                placeholder={
+                                  pending ? "Set via invitation" : "Username"
+                                }
+                                style={tableInputStyle}
+                              />
+                            ) : (
+                              (user.username ?? "-")
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {isEditing ? (
+                              <select
+                                value={editForm.role}
+                                onChange={(event) =>
+                                  setEditForm((current) => ({
+                                    ...current,
+                                    role: event.target.value as Role,
+                                  }))
+                                }
+                                style={tableInputStyle}
+                              >
+                                {visibleRoles.map((role) => (
+                                  <option key={role} value={role}>
+                                    {role}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <RoleBadge role={user.role} />
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {isEditing ? (
+                              <input
+                                required={editForm.role === "ADMIN"}
+                                value={editForm.group}
+                                placeholder={
+                                  editForm.role === "ADMIN" ? "" : "Optional"
+                                }
+                                onChange={(event) =>
+                                  setEditForm((current) => ({
+                                    ...current,
+                                    group: event.target.value,
+                                  }))
+                                }
+                                style={tableInputStyle}
+                              />
+                            ) : (
+                              (user.group ?? "-")
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            <StatusBadge pending={pending} />
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: "right" }}>
+                            <div style={actionGroupStyle}>
+                              {isEditing ? (
+                                <>
                                   <button
                                     type="button"
-                                    onClick={() => handleResend(user)}
-                                    disabled={resendLoading}
+                                    onClick={() => handleUpdate(user)}
+                                    disabled={updateLoading}
                                     style={iconButtonStyle}
-                                    title="Resend invitation"
+                                    title="Save changes"
                                   >
-                                    <RotateCw size={14} />
-                                    {resendLoading ? "Sending" : "Resend"}
+                                    <Save size={14} />
+                                    {updateLoading ? "Saving" : "Save"}
                                   </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  onClick={() => beginEdit(user)}
-                                  style={iconButtonStyle}
-                                  title="Edit account"
-                                >
-                                  <Pencil size={14} />
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDelete(user)}
-                                  disabled={deleteLoading || isSelf || user.role === "SUPERADMIN"}
-                                  style={{
-                                    ...iconButtonStyle,
-                                    ...dangerButtonStyle,
-                                    ...(isSelf || user.role === "SUPERADMIN" ? disabledButtonStyle : {}),
-                                  }}
-                                  title={
-                                    isSelf
-                                      ? "You cannot delete your own account"
-                                      : user.role === "SUPERADMIN"
-                                        ? "SUPERADMIN accounts cannot be deleted"
-                                        : "Remove account"
-                                  }
-                                >
-                                  <Trash2 size={14} />
-                                  {deleteLoading ? "Removing" : "Remove"}
-                                </button>
-                              </>
-                            )}
-                          </div>
+                                  <button
+                                    type="button"
+                                    onClick={cancelEdit}
+                                    disabled={updateLoading}
+                                    style={iconButtonStyle}
+                                    title="Cancel editing"
+                                  >
+                                    <X size={14} />
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  {pending ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleResend(user)}
+                                      disabled={resendLoading}
+                                      style={iconButtonStyle}
+                                      title="Resend invitation"
+                                    >
+                                      <RotateCw size={14} />
+                                      {resendLoading ? "Sending" : "Resend"}
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => beginEdit(user)}
+                                    style={iconButtonStyle}
+                                    title="Edit account"
+                                  >
+                                    <Pencil size={14} />
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelete(user)}
+                                    disabled={
+                                      deleteLoading ||
+                                      isSelf ||
+                                      user.role === "SUPERADMIN"
+                                    }
+                                    style={{
+                                      ...iconButtonStyle,
+                                      ...dangerButtonStyle,
+                                      ...(isSelf || user.role === "SUPERADMIN"
+                                        ? disabledButtonStyle
+                                        : {}),
+                                    }}
+                                    title={
+                                      isSelf
+                                        ? "You cannot delete your own account"
+                                        : user.role === "SUPERADMIN"
+                                          ? "SUPERADMIN accounts cannot be deleted"
+                                          : "Remove account"
+                                    }
+                                  >
+                                    <Trash2 size={14} />
+                                    {deleteLoading ? "Removing" : "Remove"}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filtered.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          style={{ ...tdStyle, color: "#475569" }}
+                        >
+                          No users found.
                         </td>
                       </tr>
-                    );
-                  })}
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td colSpan={6} style={{ ...tdStyle, color: "#475569" }}>
-                        No users found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
         </>
       }
       rightSection={<></>}
@@ -999,139 +981,11 @@ export default function PermissionsPage() {
   );
 }
 
-// reuse same styles as users page
-const pageStyle: React.CSSProperties = {
-  fontFamily: "system-ui, sans-serif",
-  maxWidth: 1040,
-  minHeight: "100vh",
-  margin: "0 auto",
-  padding: 24,
-  color: "#0f172a",
-  background: "#f8fafc",
-  boxShadow: "0 0 0 100vmax #f8fafc",
-  clipPath: "inset(0 -100vmax)",
-};
-
-const topBarStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
-  gap: 16,
-  flexWrap: "wrap",
-  marginBottom: 18,
-};
-
-const panelStyle: React.CSSProperties = {
-  border: "1px solid #dbe3ef",
-  borderRadius: 8,
-  padding: 16,
-  marginBottom: 16,
-  background: "#ffffff",
-  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
-};
-
-const sectionHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  marginBottom: 14,
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 15,
-  fontWeight: 750,
-};
-
-const sectionMetaStyle: React.CSSProperties = {
-  margin: "4px 0 0",
-  color: "#475569",
-  fontSize: 12,
-};
-
-const formGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 12,
-  alignItems: "end",
-};
-
-const fieldStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-};
-
-const labelStyle: React.CSSProperties = {
-  color: "#334155",
-  fontSize: 12,
-  fontWeight: 700,
-};
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  boxSizing: "border-box",
-  border: "1px solid #cbd5e1",
-  borderRadius: 6,
-  padding: "8px 10px",
-  fontSize: 14,
-  color: "#0f172a",
-  background: "#fff",
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  width: "100%",
-  minHeight: 38,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
-  border: "1px solid #2563eb",
-  borderRadius: 6,
-  padding: "8px 12px",
-  background: "#2563eb",
-  color: "#fff",
-  fontSize: 13,
-  fontWeight: 750,
-  cursor: "pointer",
-};
-
 const dangerPrimaryStyle: React.CSSProperties = {
   width: "auto",
   minWidth: 112,
   borderColor: "#dc2626",
   background: "#dc2626",
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  minHeight: 32,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 7,
-  border: "1px solid #cbd5e1",
-  borderRadius: 6,
-  padding: "6px 10px",
-  background: "#fff",
-  color: "#1e293b",
-  fontSize: 13,
-  fontWeight: 700,
-  cursor: "pointer",
-};
-
-const iconButtonStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  border: "1px solid #cbd5e1",
-  borderRadius: 6,
-  padding: "5px 9px",
-  background: "#fff",
-  color: "#1e293b",
-  fontSize: 12,
-  fontWeight: 700,
-  cursor: "pointer",
 };
 
 const dangerButtonStyle: React.CSSProperties = {
@@ -1160,43 +1014,33 @@ const tableInputStyle: React.CSSProperties = {
   fontSize: 13,
 };
 
-const warningStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  border: "1px solid #fed7aa",
-  background: "#fff7ed",
-  color: "#9a3412",
-  borderRadius: 8,
-  padding: 12,
-  marginBottom: 16,
-  fontSize: 13,
+const addUserPanelStyle: React.CSSProperties = {
+  ...panelStyle,
+  flexShrink: 0,
+  marginBottom: 0,
 };
 
-const tableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse",
-  fontSize: 13,
+/** Fills remaining column height so the table scrolls inside the viewport. */
+const userListPanelStyle: React.CSSProperties = {
+  ...panelStyle,
+  flex: 1,
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  marginBottom: 0,
 };
 
 /** Scrollable viewport for long user lists; keeps filters + table chrome usable. */
 const userListScrollWrapStyle: React.CSSProperties = {
+  flex: 1,
+  minHeight: 0,
   overflowX: "auto",
   overflowY: "auto",
   WebkitOverflowScrolling: "touch",
-  maxHeight: "min(28rem, calc(100dvh - 17rem))",
+  overscrollBehavior: "contain",
   borderRadius: 6,
   border: "1px solid #eef2f7",
-};
-
-const thStyle: React.CSSProperties = {
-  borderBottom: "1px solid #dbe3ef",
-  padding: "9px 10px",
-  color: "#334155",
-  fontSize: 12,
-  fontWeight: 750,
-  textAlign: "left",
-  whiteSpace: "nowrap",
+  paddingBottom: 12,
 };
 
 const thHeadStyle: React.CSSProperties = {
@@ -1206,22 +1050,6 @@ const thHeadStyle: React.CSSProperties = {
   zIndex: 1,
   background: "#ffffff",
   boxShadow: "0 1px 0 #dbe3ef",
-};
-
-const trStyle: React.CSSProperties = {
-  borderBottom: "1px solid #eef2f7",
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "10px",
-  verticalAlign: "middle",
-  color: "#0f172a",
-  whiteSpace: "nowrap",
-};
-
-const mutedTextStyle: React.CSSProperties = {
-  color: "#475569",
-  fontSize: 14,
 };
 
 const toastStyle: React.CSSProperties = {

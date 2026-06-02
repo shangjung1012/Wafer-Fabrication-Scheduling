@@ -2,30 +2,51 @@ name: CI
 
 on:
   pull_request:
-    branches:
-      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
   push:
     branches:
+      - main
       - dev
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  NEXT_TELEMETRY_DISABLED: "1"
-  DATABASE_URL: postgresql://wafer_user:wafer_password@localhost:5432/wafer_db?schema=public
-  REDIS_URL: redis://localhost:6379
-  JWT_SECRET: test-secret-at-least-32-characters-long
-  JWT_ISSUER: wafer-auth
-  JWT_AUDIENCE: wafer-api
-  ACCESS_TOKEN_EXPIRES_IN: 15m
-  REFRESH_TOKEN_EXPIRES_IN: 7d
+  NODE_VERSION: "24"
+  PNPM_VERSION: "11.0.9"
+  REPORTS_DIR: reports
 
 jobs:
   verify:
     name: Lint, test, build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: >-
+      ${{
+        (github.event_name == 'push' && github.ref_name == 'dev') ||
+        (github.event_name == 'pull_request' && github.base_ref == 'main')
+      }}
+    permissions:
+      contents: read
+      actions: read
+      checks: write
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATABASE_URL: postgresql://wafer_user:wafer_password@localhost:5432/wafer_db?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: test-secret-at-least-32-characters-long
+      JWT_ISSUER: wafer-auth
+      JWT_AUDIENCE: wafer-api
+      ACCESS_TOKEN_EXPIRES_IN: 15m
+      REFRESH_TOKEN_EXPIRES_IN: 7d
 
     services:
       postgres:
@@ -42,7 +63,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-      # Add Redis for CI testing
       redis:
         image: redis:7-alpine
         ports:
@@ -60,16 +80,16 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11.0.9
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Generate Prisma client
         run: pnpm db:generate
@@ -83,11 +103,88 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # 如果你是 Vitest，建議讓 test 產生 JUnit XML
       - name: Test
-        run: pnpm test
+        run: |
+          mkdir -p "${REPORTS_DIR}"
+          pnpm exec vitest run \
+            --coverage \
+            --reporter=default \
+            --reporter=junit \
+            --outputFile="${REPORTS_DIR}/junit.xml"
+
+      - name: Test Report
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
+        if: ${{ !cancelled() }}
+        with:
+          name: Unit Tests
+          path: ${{ env.REPORTS_DIR }}/junit.xml
+          reporter: jest-junit
+          use-actions-summary: true
+          fail-on-error: false
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: test-reports
+          path: ${{ env.REPORTS_DIR }}/
+          if-no-files-found: ignore
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
+          if-no-files-found: error
 
       - name: Build app
         run: pnpm build
 
       - name: Build Docker image
         run: docker build -t wafer-scheduling-next:ci .
+
+      - name: CI Summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## CI Summary"
+            echo ""
+            echo "- Branch: \`${{ github.ref_name }}\`"
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo "- Node: \`${NODE_VERSION}\`"
+            echo "- Package manager: \`pnpm ${PNPM_VERSION}\`"
+            echo "- Database: PostgreSQL 17"
+            echo "- Cache: pnpm"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  sonarqube:
+    name: SonarQube
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: verify
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        (needs.verify.result == 'success' || needs.verify.result == 'skipped')
+      }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        if: ${{ needs.verify.result == 'success' }}
+        with:
+          name: coverage-report
+          path: coverage
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

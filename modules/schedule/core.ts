@@ -145,64 +145,67 @@ export async function _applyScheduleTransaction(
   let deferredEmails: Array<() => Promise<void>> = [];
   let affectedFactoryTypes: Set<string> = new Set();
 
-  await prisma.$transaction(async (tx) => {
-    const db = tx as unknown as PrismaClient;
+  await prisma.$transaction(
+    async (tx) => {
+      const db = tx as unknown as PrismaClient;
 
-    if (config.reschedulePolicy !== "GAP_FILLING") {
-      // Only delete assignments for mutable orders
-      const mutableProcessedOrderIds = strategyResult.processedOrders
-        .filter(
-          (o) =>
-            !o.isFixed &&
-            o.status !== OrderStatus.IN_PRODUCTION &&
-            o.status !== OrderStatus.COMPLETED,
-        )
-        .map((o) => o.id);
+      if (config.reschedulePolicy !== "GAP_FILLING") {
+        // Only delete assignments for mutable orders
+        const mutableProcessedOrderIds = strategyResult.processedOrders
+          .filter(
+            (o) =>
+              !o.isFixed &&
+              o.status !== OrderStatus.IN_PRODUCTION &&
+              o.status !== OrderStatus.COMPLETED,
+          )
+          .map((o) => o.id);
 
-      if (mutableProcessedOrderIds.length > 0) {
-        await deleteScheduledAssignments(
-          db,
-          mutableProcessedOrderIds,
-          config.startDate,
-          config.endDate,
-        );
+        if (mutableProcessedOrderIds.length > 0) {
+          await deleteScheduledAssignments(
+            db,
+            mutableProcessedOrderIds,
+            config.startDate,
+            config.endDate,
+          );
+        }
       }
-    }
 
-    await applyScheduleOrdersUpdate(db, scheduledIds, failedIds, operatorId);
+      await applyScheduleOrdersUpdate(db, scheduledIds, failedIds, operatorId);
 
-    await createDailyCapacities(db, strategyResult.newCapacities);
+      await createDailyCapacities(db, strategyResult.newCapacities);
 
-    affectedFactoryTypes = await bulkUpdateDailyCapacities(
-      db,
-      strategyResult.updatedCapacities,
-    );
-
-    await createAssignments(db, strategyResult.newAssignments);
-
-    // Atomically create conflict issues for any orders that failed scheduling
-    // Prep runs INSIDE the transaction, after capacity updates, so the snapshot
-    // reflects post-schedule available capacity. Batch queries (not N+1) keep it fast.
-    if (failedIds.length > 0) {
-      const prep = await prepareIssueCreationPrep(
+      affectedFactoryTypes = await bulkUpdateDailyCapacities(
         db,
-        failedIds,
-        operatorId,
-        config,
-        new Date(),
-        true,
+        strategyResult.updatedCapacities,
       );
-      const { emailsToDispatch } = await createIssuesForFailedOrdersTx(
-        db,
-        failedIds,
-        operatorId,
-        config,
-        new Date(),
-        prep,
-      );
-      deferredEmails = emailsToDispatch;
-    }
-  });
+
+      await createAssignments(db, strategyResult.newAssignments);
+
+      // Atomically create conflict issues for any orders that failed scheduling
+      // Prep runs INSIDE the transaction, after capacity updates, so the snapshot
+      // reflects post-schedule available capacity. Batch queries (not N+1) keep it fast.
+      if (failedIds.length > 0) {
+        const prep = await prepareIssueCreationPrep(
+          db,
+          failedIds,
+          operatorId,
+          config,
+          new Date(),
+          true,
+        );
+        const { emailsToDispatch } = await createIssuesForFailedOrdersTx(
+          db,
+          failedIds,
+          operatorId,
+          config,
+          new Date(),
+          prep,
+        );
+        deferredEmails = emailsToDispatch;
+      }
+    },
+    { timeout: 30_000 },
+  );
 
   // Increment schedule versions outside the transaction (no Redis while holding DB connection)
   for (const factoryType of affectedFactoryTypes) {

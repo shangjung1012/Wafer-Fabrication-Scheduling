@@ -169,15 +169,13 @@ describe("findConflictIssues", () => {
 
 describe("staleOtherProposals", () => {
   it("does not call $transaction when there are no PENDING other proposals", async () => {
-    const findMany = vi
-      .fn()
-      .mockResolvedValue([
-        { id: "C2", proposal: null },
-        {
-          id: "C3",
-          proposal: { kind: "DELAY_DUE_DATE", status: "ACCEPTED" },
-        },
-      ]);
+    const findMany = vi.fn().mockResolvedValue([
+      { id: "C2", proposal: null },
+      {
+        id: "C3",
+        proposal: { kind: "DELAY_DUE_DATE", status: "ACCEPTED" },
+      },
+    ]);
     const update = vi.fn();
     const $transaction = vi.fn();
     const mockDb = {
@@ -199,13 +197,11 @@ describe("staleOtherProposals", () => {
   it("marks each other PENDING proposal STALE in a single $transaction", async () => {
     const pendingA = { kind: "DELAY_DUE_DATE", status: "PENDING" as const };
     const pendingB = { kind: "REDUCE_QUANTITY", status: "PENDING" as const };
-    const findMany = vi
-      .fn()
-      .mockResolvedValue([
-        { id: "C2", proposal: pendingA },
-        { id: "C3", proposal: pendingB },
-        { id: "C4", proposal: { status: "STALE" } },
-      ]);
+    const findMany = vi.fn().mockResolvedValue([
+      { id: "C2", proposal: pendingA },
+      { id: "C3", proposal: pendingB },
+      { id: "C4", proposal: { status: "STALE" } },
+    ]);
     const update = vi.fn().mockResolvedValue(undefined);
     const $transaction = vi.fn().mockResolvedValue(undefined);
     const mockDb = {

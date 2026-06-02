@@ -113,11 +113,11 @@ describe("Visualization RBAC", () => {
     const data = await getTimeline(superAdminA, prisma, FILTERS);
     const ids = data.factories.map((f) => f.id);
     expect(ids).toEqual(expect.arrayContaining([...SEED_FACTORY_IDS]));
+    expect(SEED_FACTORY_IDS.every((id) => ids.includes(id))).toBe(true);
     expect(
-      SEED_FACTORY_IDS.every((id) => ids.includes(id)),
-    ).toBe(true);
-    expect(
-      ids.some((id) => id.startsWith("factory-B") || id.startsWith("factory-C")),
+      ids.some(
+        (id) => id.startsWith("factory-B") || id.startsWith("factory-C"),
+      ),
     ).toBe(true);
   });
 

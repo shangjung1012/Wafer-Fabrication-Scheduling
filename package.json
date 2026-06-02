@@ -16,14 +16,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "benchmark": "tsx scripts/benchmark.ts",
     "cron": "tsx scripts/cron.ts",
     "azure:env:update": "tsx scripts/update-containerapp-env.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "db:stress": "tsx scripts/db-stress.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -41,7 +41,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.24",
     "argon2": "^0.44.0",
-    "better-auth": "^1.6.9",
+    "better-auth": "^1.6.13",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -50,6 +50,7 @@
     "lucide-react": "^1.14.0",
     "next": "16.2.6",
     "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.10",
     "nuqs": "^2.8.9",
     "papaparse": "^5.5.3",
     "pg": "^8.20.0",
@@ -64,11 +65,13 @@
     "zod": "^4.4.1"
   },
   "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^11.15.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^8.0.0",
     "@types/papaparse": "^5.5.2",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
@@ -85,6 +88,7 @@
     "playwright": "^1.59.1",
     "prettier": "^3.8.3",
     "prisma": "^7.8.0",
+    "prisma-erd-generator": "^2.4.3",
     "tailwindcss": "^4",
     "tsx": "^4.8.1",
     "typescript": "^5",

@@ -100,7 +100,6 @@ function buildUsers(): SeedUser[] {
     });
   }
   for (const t of PRODUCTION_TYPES) {
-
     for (let i = 1; i <= 3; i++) {
       users.push({
         id: `admin-${t}${i}`,
@@ -171,7 +170,8 @@ function generateOrdersAndAssignments() {
       type,
       quantity,
       dueDate,
-      applicantId: SALES_APPLICANTS[salesRoundRobin++ % SALES_APPLICANTS.length],
+      applicantId:
+        SALES_APPLICANTS[salesRoundRobin++ % SALES_APPLICANTS.length],
       status,
       isFixed,
       isPrioritized,

@@ -177,6 +177,53 @@ describe("Greedy Best-Fit Strategy", () => {
     expect(f1Assignment?.assignedQuantity).toBe(30); // 150 - 120 = 30
   });
 
+  it("should use factory id as a deterministic tie-breaker for equal capacity", () => {
+    const orders: SchedulingOrderInput[] = [
+      {
+        id: "O1",
+        status: OrderStatus.PENDING,
+        dueDate: addDays(TODAY, 3),
+        quantity: 50,
+        createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
+        assignments: [],
+      },
+    ];
+
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F2", maxCapacity: 100 },
+      { id: "F1", maxCapacity: 100 },
+    ];
+
+    const capacities: SchedulingCapacityInput[] = [
+      {
+        id: "C2",
+        factoryId: "F2",
+        date: addDays(TODAY, 1),
+        curCapacity: 100,
+        maxCapacity: 100,
+      },
+      {
+        id: "C1",
+        factoryId: "F1",
+        date: addDays(TODAY, 1),
+        curCapacity: 100,
+        maxCapacity: 100,
+      },
+    ];
+
+    const result = greedyBestFitStrategy.execute(
+      orders,
+      factories,
+      capacities,
+      defaultConfig,
+      TODAY,
+    );
+
+    expect(result.newAssignments[0].factoryId).toBe("F1");
+  });
+
   it("should fail and rollback if an order cannot be fully fulfilled", () => {
     const orders: SchedulingOrderInput[] = [
       {
@@ -608,6 +655,42 @@ describe("Greedy Best-Fit Strategy", () => {
 
     expect(assignedDateStr >= expectedStartStr).toBeTruthy();
     expect(assignedDateStr <= expectedEndStr).toBeTruthy();
+  });
+
+  it("should fail when endDate leaves no schedulable capacity window", () => {
+    const orders: SchedulingOrderInput[] = [
+      {
+        id: "O1",
+        status: OrderStatus.PENDING,
+        dueDate: addDays(TODAY, 10),
+        quantity: 100,
+        createdAt: TODAY,
+        isFixed: false,
+        isPrioritized: false,
+        assignments: [],
+      },
+    ];
+
+    const factories: SchedulingFactoryInput[] = [
+      { id: "F1", maxCapacity: 100 },
+    ];
+
+    const config: SchedulingConfig = {
+      ...defaultConfig,
+      startDate: addDays(TODAY, 5),
+      endDate: addDays(TODAY, 4),
+    };
+
+    const result = greedyBestFitStrategy.execute(
+      orders,
+      factories,
+      [],
+      config,
+      TODAY,
+    );
+
+    expect(result.processedOrders[0].status).toBe(OrderStatus.FAILED);
+    expect(result.newAssignments).toHaveLength(0);
   });
 
   it("should prioritize isPrioritized orders", () => {

@@ -1,20 +1,18 @@
 # 測試說明與 Coverage
 
-本文整理本專案 **Vitest** 測試的配置方式、各目錄負責驗證的範圍，以及 `**pnpm test:coverage`**（`@vitest/coverage-v8`）產出的覆蓋率報表。實際數字會隨程式變動；更新文件時請重新執行 coverage 並替換下方表格（或保留 `coverage/coverage-summary.json` 供機器讀取）。
+本文整理本專案 **Vitest** 測試的配置方式、各目錄負責驗證的範圍，以及 `**pnpm test:coverage`\*\*（`@vitest/coverage-v8`）產出的覆蓋率報表。實際數字會隨程式變動；更新文件時請重新執行 coverage 並替換下方表格（或保留 `coverage/coverage-summary.json` 供機器讀取）。
 
 ---
 
 ## 執行方式
 
-
-| 指令                               | 說明                                                                          |
-| -------------------------------- | --------------------------------------------------------------------------- |
-| `pnpm test`                      | 一次性跑完全部測試（等同 `vitest run`）。                                                 |
-| `pnpm test:watch`                | Watch 模式。                                                                   |
-| `pnpm test path/to/file.test.ts` | 單檔。                                                                         |
-| `pnpm test -- -t "pattern"`      | 依名稱過濾。                                                                      |
+| 指令                             | 說明                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| `pnpm test`                      | 一次性跑完全部測試（等同 `vitest run`）。                                                   |
+| `pnpm test:watch`                | Watch 模式。                                                                                |
+| `pnpm test path/to/file.test.ts` | 單檔。                                                                                      |
+| `pnpm test -- -t "pattern"`      | 依名稱過濾。                                                                                |
 | `pnpm test:coverage`             | `vitest run --coverage`，於終端機輸出報表並寫入 `coverage/`（含 `coverage-summary.json`）。 |
-
 
 **環境：** `vitest.config.ts` 使用 `environment: "node"`、`setupFiles: ["dotenv/config"]`。部分整合測試需本機 **Postgres / Redis**（與 `.env` 一致）；CI 見 `.github/workflows/ci.yml`。
 
@@ -24,11 +22,9 @@
 
 ## 測試檔配置（目錄對照）
 
-
-| 路徑           | 角色                                                                       |
-| ------------ | ------------------------------------------------------------------------ |
+| 路徑         | 角色                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------- |
 | `__tests__/` | 全部 Vitest 測試：API route、modules（含 auth／mail 單元）、infra、整合、RBAC、profile UI。 |
-
 
 以下依**區塊**說明各測試檔主要驗證什麼（對應 `describe` 主題與行為）。
 
@@ -36,126 +32,109 @@
 
 ### `__tests__/api/` — HTTP 路由與錯誤映射
 
-
-| 檔案                                        | 測試重點                                                                                                        |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 檔案                                      | 測試重點                                                                                                                |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `api/schedule/route.test.ts`              | `POST /api/schedule/run`：權限、Zod、鎖／OCC 相關行為。                                                                 |
-| `api/schedule/preview.test.ts`            | `POST /api/schedule/preview`：preview 流程與錯誤碼。                                                                |
-| `api/schedule/apply.test.ts`              | `POST /api/schedule/apply`：套用 preview、版本衝突等。                                                                |
-| `api/auth/route.test.ts`                  | Auth 路由整合流（cookie／服務互動為主）。                                                                                  |
-| `api/auth/auth-routes-mocked.test.ts`     | **Mock** `login` / `logout` / `refresh`：JSON 與 cookie 路徑、CSRF 403、Zod 400、服務層 401。                          |
+| `api/schedule/preview.test.ts`            | `POST /api/schedule/preview`：preview 流程與錯誤碼。                                                                    |
+| `api/schedule/apply.test.ts`              | `POST /api/schedule/apply`：套用 preview、版本衝突等。                                                                  |
+| `api/auth/route.test.ts`                  | Auth 路由整合流（cookie／服務互動為主）。                                                                               |
+| `api/auth/auth-routes-mocked.test.ts`     | **Mock** `login` / `logout` / `refresh`：JSON 與 cookie 路徑、CSRF 403、Zod 400、服務層 401。                           |
 | `api/system/simulation-route.test.ts`     | `GET`/`PATCH /api/system/simulation`：認證、Zod、`handleSimulationTimeAdvance` 與僅 `upsertSystemState` 分支、空 body。 |
-| `api/conflict-issues/route.test.ts`       | `GET /api/conflict-issues`：`statuses=` 解析、無效 token 過濾、未帶 query、401。                                         |
-| `api/conflict-issues/suggestions.test.ts` | 衝突議題建議 API／`getSuggestions` 與 Prisma mock。                                                                  |
-| `api/invitation-route.test.ts`            | 邀請註冊／重送等 invitation 相關路由與權限。                                                                                |
-
+| `api/conflict-issues/route.test.ts`       | `GET /api/conflict-issues`：`statuses=` 解析、無效 token 過濾、未帶 query、401。                                        |
+| `api/conflict-issues/suggestions.test.ts` | 衝突議題建議 API／`getSuggestions` 與 Prisma mock。                                                                     |
+| `api/invitation-route.test.ts`            | 邀請註冊／重送等 invitation 相關路由與權限。                                                                            |
 
 ---
 
 ### `__tests__/modules/` — 業務邏輯（不依賴真實 DB 為主）
 
-
-| 檔案                                             | 測試重點                                                                                                  |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `modules/schedule/strategy.test.ts`            | **Greedy Best-Fit** 純演算法、rollback、排序（含 `isPrioritized`）、completionDate 等。                             |
-| `modules/schedule/core.test.ts`                | `prepareSchedulingData` / transaction 準備與核心路徑。                                                        |
-| `modules/schedule/preview.test.ts`             | `previewSchedule` 不寫 DB 的預覽流程。                                                                        |
-| `modules/schedule/run.test.ts`                 | `runSchedule` 與鎖、寫入協調。                                                                                |
-| `modules/schedule/manual-edit-service.test.ts` | `applyAssignmentMoves` 手動拖曳／批量調整。                                                                     |
-| `modules/schedule/daily-execution.test.ts`     | 每日狀態推進與 `withScheduleLock` 互動（含 `executeDailyStateAdvancement` 第二參數）。                                 |
+| 檔案                                           | 測試重點                                                                                                       |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `modules/schedule/strategy.test.ts`            | **Greedy Best-Fit** 純演算法、rollback、排序（含 `isPrioritized`）、completionDate 等。                        |
+| `modules/schedule/core.test.ts`                | `prepareSchedulingData` / transaction 準備與核心路徑。                                                         |
+| `modules/schedule/preview.test.ts`             | `previewSchedule` 不寫 DB 的預覽流程。                                                                         |
+| `modules/schedule/run.test.ts`                 | `runSchedule` 與鎖、寫入協調。                                                                                 |
+| `modules/schedule/manual-edit-service.test.ts` | `applyAssignmentMoves` 手動拖曳／批量調整。                                                                    |
+| `modules/schedule/daily-execution.test.ts`     | 每日狀態推進與 `withScheduleLock` 互動（含 `executeDailyStateAdvancement` 第二參數）。                         |
 | `modules/schedule/validation-utils.test.ts`    | `calculateOrderDeadline`、`calculateMinimumStartDate` 等日期視窗工具。                                         |
 | `modules/order/conflict-issue-service.test.ts` | `createIssuesForFailedOrders`、`listConflictIssues`（SALES／ADMIN 與 `statuses` 合併）、`acceptProposal` OCC。 |
-| `modules/users/user-service.test.ts`           | **User 服務層**：`listUsers`／`create`／`update`／`delete` 與 RBAC、`Forbidden`／`NotFound`。                    |
-| `modules/mail/mail-template.test.ts`           | `renderAndSend` 等模板寄送封裝。                                                                              |
-| `modules/mail/mail-service.test.ts`            | `mail-service`：寄件抽象與錯誤處理。                                                                             |
-| `modules/auth/auth-service.test.ts`            | 註冊／登入／refresh 等 `auth-service` 核心流程。                                                                  |
-| `modules/auth/require-auth.test.ts`            | `requireAuth`：Bearer、Cookie、`DEV_STATIC_TOKEN` 等分支。                                                   |
-| `modules/auth/with-auth.test.ts`               | `withAuth` 包裝與 HTTP 錯誤映射。                                                                             |
-| `modules/auth/token.test.ts`                   | `token-service`：簽發與驗證。                                                                                |
-| `modules/auth/password.test.ts`                | `password-service`：雜湊與驗證。                                                                             |
-| `modules/auth/client-session.test.ts`          | 前端 `client-session` 序列化邊界。                                                                            |
-| `modules/auth/invitation-service.test.ts`      | 邀請建立／接受流程。                                                                                            |
-| `modules/auth/email-change-route.test.ts`      | 換信相關路由行為（與 email-change 流程銜接）。                                                                        |
-
+| `modules/users/user-service.test.ts`           | **User 服務層**：`listUsers`／`create`／`update`／`delete` 與 RBAC、`Forbidden`／`NotFound`。                  |
+| `modules/mail/mail-template.test.ts`           | `renderAndSend` 等模板寄送封裝。                                                                               |
+| `modules/mail/mail-service.test.ts`            | `mail-service`：寄件抽象與錯誤處理。                                                                           |
+| `modules/auth/auth-service.test.ts`            | 註冊／登入／refresh 等 `auth-service` 核心流程。                                                               |
+| `modules/auth/require-auth.test.ts`            | `requireAuth`：Bearer、Cookie、`DEV_STATIC_TOKEN` 等分支。                                                     |
+| `modules/auth/with-auth.test.ts`               | `withAuth` 包裝與 HTTP 錯誤映射。                                                                              |
+| `modules/auth/token.test.ts`                   | `token-service`：簽發與驗證。                                                                                  |
+| `modules/auth/password.test.ts`                | `password-service`：雜湊與驗證。                                                                               |
+| `modules/auth/client-session.test.ts`          | 前端 `client-session` 序列化邊界。                                                                             |
+| `modules/auth/invitation-service.test.ts`      | 邀請建立／接受流程。                                                                                           |
+| `modules/auth/email-change-route.test.ts`      | 換信相關路由行為（與 email-change 流程銜接）。                                                                 |
 
 ---
 
 ### `__tests__/infra/` — Repository／Redis
 
-
-| 檔案                                           | 測試重點                                                                                                                     |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `infra/db/order-repository.test.ts`          | 訂單查詢／更新等 Prisma 呼叫形狀（mock）。                                                                                              |
-| `infra/db/assignment-repository.test.ts`     | 派工相關 repository。                                                                                                         |
-| `infra/db/conflict-issue-repository.test.ts` | `findConflictIssueByNumber`、`findConflictIssues`（`statuses` 空／非空）、`staleOtherProposals` 批次 `$transaction`。               |
+| 檔案                                         | 測試重點                                                                                                                          |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `infra/db/order-repository.test.ts`          | 訂單查詢／更新等 Prisma 呼叫形狀（mock）。                                                                                        |
+| `infra/db/assignment-repository.test.ts`     | 派工相關 repository。                                                                                                             |
+| `infra/db/conflict-issue-repository.test.ts` | `findConflictIssueByNumber`、`findConflictIssues`（`statuses` 空／非空）、`staleOtherProposals` 批次 `$transaction`。             |
 | `infra/db/user-repository.test.ts`           | **User repository**：`findUsers`、`findUserById`、`createUser`、`updateUser`、`deleteUser`、`findUserByUsername`（mock Prisma）。 |
 | `infra/db/repositories.test.ts`              | 版本失效 hook 等跨 repository 行為。                                                                                              |
 | `infra/redis/schedule-store.test.ts`         | Redis preview／版本鍵讀寫語意。                                                                                                   |
-
 
 ---
 
 ### `__tests__/integration/` — 真實 DB／Redis
 
-
-| 檔案                                        | 測試重點                                                |
-| ----------------------------------------- | --------------------------------------------------- |
-| `integration/schedule-engine.test.ts`     | 排程引擎端到端（Postgres）。                                  |
-| `integration/redis-lock.test.ts`          | `schedule:lock:*` 等分散式鎖行為。                          |
+| 檔案                                      | 測試重點                                                         |
+| ----------------------------------------- | ---------------------------------------------------------------- |
+| `integration/schedule-engine.test.ts`     | 排程引擎端到端（Postgres）。                                     |
+| `integration/redis-lock.test.ts`          | `schedule:lock:*` 等分散式鎖行為。                               |
 | `integration/auto-issue-creation.test.ts` | 訂單變 `FAILED` 後自動建立 `ConflictIssue` 與事件／idempotency。 |
-
 
 ---
 
 ### `__tests__/rbac/` — 資料範圍與角色
 
-
-| 檔案                                | 測試重點                                                   |
-| --------------------------------- | ------------------------------------------------------ |
-| `rbac/order-rbac.test.ts`         | 訂單生命週期與 **scope 隔離**（多角色流程）。                           |
+| 檔案                              | 測試重點                                                                      |
+| --------------------------------- | ----------------------------------------------------------------------------- |
+| `rbac/order-rbac.test.ts`         | 訂單生命週期與 **scope 隔離**（多角色流程）。                                 |
 | `rbac/visualization-rbac.test.ts` | 時間軸／視覺化：`myOrderIds`、ADMIN 廠別範圍等（含 sales-1/2/3 兩兩不重疊）。 |
-
 
 ---
 
 ### `__tests__/scripts/` — Cron／模擬時間
 
-
-| 檔案                                | 測試重點                                                                                      |
-| --------------------------------- | ----------------------------------------------------------------------------------------- |
+| 檔案                              | 測試重點                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `scripts/cron/time-logic.test.ts` | 模擬時間前進、`handleSimulationTimeAdvance` 與 `advanceOrderStatuses`／`triggerAutoSchedule` 呼叫契約。 |
-
 
 ---
 
 ### `__tests__/profile/` — 儀表板頁面（jsdom）
 
-
-| 檔案                              | 測試重點                                                                  |
-| ------------------------------- | --------------------------------------------------------------------- |
+| 檔案                            | 測試重點                                                                          |
+| ------------------------------- | --------------------------------------------------------------------------------- |
 | `profile/profile-page.test.tsx` | `ProfilePage`（`@vitest-environment jsdom`）：mock Next／session 下的渲染與互動。 |
-
 
 ---
 
 ## Coverage 報表
 
-- **產生時間基準：** 請以本機最後一次 `pnpm test:coverage` 為準；下列數字來自 `**coverage/coverage-summary.json`**（與終端機表格一致）。
+- **產生時間基準：** 請以本機最後一次 `pnpm test:coverage` 為準；下列數字來自 `**coverage/coverage-summary.json`\*\*（與終端機表格一致）。
 - **總覽**
 
-
-| 指標             | 覆蓋率                     |
-| -------------- | ----------------------- |
+| 指標           | 覆蓋率                    |
+| -------------- | ------------------------- |
 | **Statements** | **76.9%**（1658 / 2156）  |
 | **Branches**   | **61.88%**（776 / 1254）  |
 | **Functions**  | **80.73%**（285 / 353）   |
 | **Lines**      | **78.98%**（1601 / 2027） |
 
-
 - **測試執行：** 41 個 test 檔、238 筆測試通過（與最近一次 CI 本機跑法一致時）。
 
 ### 依檔案（納入 coverage 的原始碼）
-
 
 | File                                               | % Stmts | % Branch | % Funcs | % Lines |
 | -------------------------------------------------- | ------- | -------- | ------- | ------- |
@@ -226,18 +205,15 @@
 | `modules/visualization/service.ts`                 | 63.79   | 35.71    | 64.7    | 69.38   |
 | `scripts/cron.ts`                                  | 90      | 100      | 100     | 88.88   |
 
-
-**說明：** `lib/generated/prisma/`* 為產生碼，數值高屬預期；`modules/mail/templates/*` 多為純字串模板，若未做 snapshot／單獨測試會偏低。補強優先順序可參考 **branch 明顯低於 stmt** 的列（例如 `conflict-issues/route`、`capacity-repository`、`visualization/service`）。
+**說明：** `lib/generated/prisma/`_ 為產生碼，數值高屬預期；`modules/mail/templates/_`多為純字串模板，若未做 snapshot／單獨測試會偏低。補強優先順序可參考 **branch 明顯低於 stmt** 的列（例如`conflict-issues/route`、`capacity-repository`、`visualization/service`）。
 
 ---
 
 ## 與其他驗證工具的關係
 
-
-| 工具                         | 用途                                                                                       |
-| -------------------------- | ---------------------------------------------------------------------------------------- |
+| 工具                       | 用途                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `pnpm benchmark`           | `scripts/benchmark.ts`：大規模合成資料下排程 **invariant** 與效能回歸（見 `[benchmark.md](benchmark.md)`）。 |
-| `pnpm lint` / `pnpm build` | 靜態檢查與 Next.js 建置，與單元測試互補。                                                                |
-
+| `pnpm lint` / `pnpm build` | 靜態檢查與 Next.js 建置，與單元測試互補。                                                                    |
 
 若要將本文件的 coverage **表格自動更新**，可在 CI 或本機於 `pnpm test:coverage` 後用小型腳本從 `coverage/coverage-summary.json` 產生 Markdown 片段再拼入此檔。

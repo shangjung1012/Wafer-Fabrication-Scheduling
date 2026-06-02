@@ -474,10 +474,7 @@ function ReplyBox({
   const isClosed = issueStatus === "RESOLVED" || issueStatus === "CLOSED";
   const isSales = currentUserRole === "SALES";
   const salesDelayMinDate = isSales
-    ? minSalesDelayDueDate(
-        orderDueDate,
-        new Date().toISOString().slice(0, 10),
-      )
+    ? minSalesDelayDueDate(orderDueDate, new Date().toISOString().slice(0, 10))
     : undefined;
   const currentDueDateOnly = toDateOnlyUtc(orderDueDate);
 
@@ -708,7 +705,13 @@ function ReplyBox({
                   }}
                 />
                 {isSales && (
-                  <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: 12,
+                      color: "#64748b",
+                    }}
+                  >
                     Must be after current due date ({currentDueDateOnly}).
                   </p>
                 )}

@@ -18,7 +18,7 @@ function apiFetch(path: string, options: RequestInit = {}) {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers ?? {}),
+      ...options.headers,
     },
   });
 }
@@ -109,7 +109,6 @@ const secondaryButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-
 const EMAIL_ERROR_MESSAGES: Record<string, string> = {
   missing_token: "Verification link is invalid (missing token).",
   invalid_token: "Verification link is invalid or has already been used.",
@@ -120,15 +119,27 @@ const EMAIL_ERROR_MESSAGES: Record<string, string> = {
 };
 
 function roleBadge(role: Role): React.CSSProperties {
+  let bg = "#f3e8ff";
+  if (role === "SALES") {
+    bg = "#dcfce7";
+  } else if (role === "ADMIN") {
+    bg = "#dbeafe";
+  }
+
+  let color = "#6b21a8";
+  if (role === "SALES") {
+    color = "#166534";
+  } else if (role === "ADMIN") {
+    color = "#1e40af";
+  }
+
   return {
     fontSize: 12,
     fontWeight: 700,
     padding: "3px 10px",
     borderRadius: 99,
-    background:
-      role === "SALES" ? "#dcfce7" : role === "ADMIN" ? "#dbeafe" : "#f3e8ff",
-    color:
-      role === "SALES" ? "#166534" : role === "ADMIN" ? "#1e40af" : "#6b21a8",
+    background: bg,
+    color,
   };
 }
 
