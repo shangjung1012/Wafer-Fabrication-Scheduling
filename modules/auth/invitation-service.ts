@@ -110,8 +110,6 @@ async function sendInvitationMail(
   await sendMail({
     to: [{ address: user.email }],
     subject: "Set your Wafer Scheduling password",
-    waitForDelivery: false,
-    azureSendTimeoutMs: 3000,
     plainText: [
       `Hello ${user.email},`,
       "",
