@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { updateOrderService, deleteOrdersService } from "@/modules/order/order-service";
+import {
+  updateOrderService,
+  deleteOrdersService,
+} from "@/modules/order/order-service";
 import * as scheduleStore from "@/infra/redis/schedule-store";
 
 // ---------------------------------------------------------------------------
@@ -72,7 +75,6 @@ import {
   findOrderById,
   updateOrder,
   deleteOrders,
-  OrderStatus,
 } from "@/infra/db/order-repository";
 import { resolveActorScope, getScopeGroup } from "@/modules/auth/scope";
 import { requireRole } from "@/modules/auth/rbac";
@@ -117,7 +119,10 @@ const baseOrder = {
 
 const mockDb = {
   $transaction: vi.fn(),
-  orderAssignment: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn() },
+  orderAssignment: {
+    findMany: vi.fn().mockResolvedValue([]),
+    updateMany: vi.fn(),
+  },
 } as unknown as Parameters<typeof updateOrderService>[1];
 
 // ---------------------------------------------------------------------------
@@ -200,9 +205,14 @@ describe("updateOrderService — SALES branch lock", () => {
   });
 
   it("does NOT call withScheduleLock when SALES updates only name", async () => {
-    vi.mocked(updateOrder).mockResolvedValue({ ...baseOrder, name: "New Name" });
+    vi.mocked(updateOrder).mockResolvedValue({
+      ...baseOrder,
+      name: "New Name",
+    });
 
-    await updateOrderService(mockSalesCtx, mockDb, "order-1", { name: "New Name" });
+    await updateOrderService(mockSalesCtx, mockDb, "order-1", {
+      name: "New Name",
+    });
 
     expect(scheduleStore.withScheduleLock).not.toHaveBeenCalled();
   });
@@ -243,21 +253,24 @@ describe("deleteOrdersService — lock acquisition", () => {
 
     const dbWithTx = {
       ...mockDb,
-      $transaction: vi.fn().mockImplementation((fn: (tx: unknown) => Promise<unknown>) =>
-        fn({
-          orderAssignment: {
-            findMany: vi.fn().mockResolvedValue([]),
-            updateMany: vi.fn(),
-          },
-          order: { updateMany: vi.fn() },
-        }),
-      ),
+      $transaction: vi
+        .fn()
+        .mockImplementation((fn: (tx: unknown) => Promise<unknown>) =>
+          fn({
+            orderAssignment: {
+              findMany: vi.fn().mockResolvedValue([]),
+              updateMany: vi.fn(),
+            },
+            order: { updateMany: vi.fn() },
+          }),
+        ),
     } as unknown as Parameters<typeof deleteOrdersService>[1];
 
     await deleteOrdersService(mockCtx, dbWithTx, ["order-1", "order-2"]);
 
     expect(scheduleStore.withScheduleLock).toHaveBeenCalledTimes(1);
-    const [calledTypes] = vi.mocked(scheduleStore.withScheduleLock).mock.calls[0];
+    const [calledTypes] = vi.mocked(scheduleStore.withScheduleLock).mock
+      .calls[0];
     expect(calledTypes).toEqual(["A"]);
   });
 });
