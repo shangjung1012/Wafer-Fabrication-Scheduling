@@ -94,18 +94,20 @@ describe("getSuggestions", () => {
       const end = new Date("2024-05-10");
       const iter = new Date(start);
       while (iter.getTime() <= end.getTime()) {
-        results.push({
-          factoryId: "factory-A",
-          date: new Date(iter),
-          curCapacity: 0,
-          maxCapacity: 100,
-        });
-        results.push({
-          factoryId: "factory-B",
-          date: new Date(iter),
-          curCapacity: 0,
-          maxCapacity: 100,
-        });
+        results.push(
+          {
+            factoryId: "factory-A",
+            date: new Date(iter),
+            curCapacity: 0,
+            maxCapacity: 100,
+          },
+          {
+            factoryId: "factory-B",
+            date: new Date(iter),
+            curCapacity: 0,
+            maxCapacity: 100,
+          },
+        );
         iter.setDate(iter.getDate() + 1);
       }
       // Inject live capacity = 50 (instead of snapshot's 80)
@@ -119,18 +121,20 @@ describe("getSuggestions", () => {
       const futureEnd = new Date("2024-05-13"); // just need enough to find a fit
       const futureIter = new Date(futureStart);
       while (futureIter.getTime() <= futureEnd.getTime()) {
-        results.push({
-          factoryId: "factory-A",
-          date: new Date(futureIter),
-          curCapacity: 0,
-          maxCapacity: 100,
-        });
-        results.push({
-          factoryId: "factory-B",
-          date: new Date(futureIter),
-          curCapacity: 0,
-          maxCapacity: 100,
-        });
+        results.push(
+          {
+            factoryId: "factory-A",
+            date: new Date(futureIter),
+            curCapacity: 0,
+            maxCapacity: 100,
+          },
+          {
+            factoryId: "factory-B",
+            date: new Date(futureIter),
+            curCapacity: 0,
+            maxCapacity: 100,
+          },
+        );
         futureIter.setDate(futureIter.getDate() + 1);
       }
 
@@ -186,18 +190,20 @@ describe("getSuggestions", () => {
       const end = new Date("2024-05-10");
       const iter = new Date(start);
       while (iter.getTime() <= end.getTime()) {
-        results.push({
-          factoryId: "factory-A",
-          date: new Date(iter),
-          curCapacity: 0,
-          maxCapacity: 100,
-        });
-        results.push({
-          factoryId: "factory-B",
-          date: new Date(iter),
-          curCapacity: 0,
-          maxCapacity: 100,
-        });
+        results.push(
+          {
+            factoryId: "factory-A",
+            date: new Date(iter),
+            curCapacity: 0,
+            maxCapacity: 100,
+          },
+          {
+            factoryId: "factory-B",
+            date: new Date(iter),
+            curCapacity: 0,
+            maxCapacity: 100,
+          },
+        );
         iter.setDate(iter.getDate() + 1);
       }
 
@@ -211,18 +217,20 @@ describe("getSuggestions", () => {
       const futureEnd = new Date("2024-05-13"); // just need enough to find a fit
       const futureIter = new Date(futureStart);
       while (futureIter.getTime() <= futureEnd.getTime()) {
-        results.push({
-          factoryId: "factory-A",
-          date: new Date(futureIter),
-          curCapacity: 0,
-          maxCapacity: 100,
-        });
-        results.push({
-          factoryId: "factory-B",
-          date: new Date(futureIter),
-          curCapacity: 0,
-          maxCapacity: 100,
-        });
+        results.push(
+          {
+            factoryId: "factory-A",
+            date: new Date(futureIter),
+            curCapacity: 0,
+            maxCapacity: 100,
+          },
+          {
+            factoryId: "factory-B",
+            date: new Date(futureIter),
+            curCapacity: 0,
+            maxCapacity: 100,
+          },
+        );
         futureIter.setDate(futureIter.getDate() + 1);
       }
 
