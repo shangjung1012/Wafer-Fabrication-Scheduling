@@ -6,6 +6,11 @@ generator client {
   output   = "../lib/generated/prisma"
 }
 
+generator erd {
+  provider = "prisma-erd-generator"
+  output   = "ERD.md" // 你也可以改成 .html, .png, .pdf 等格式
+}
+
 datasource db {
   provider = "postgresql"
 }
@@ -209,6 +214,7 @@ model Order {
   assignments    OrderAssignment[] // 記錄這筆訂單被拆分成哪些派工單
   conflictIssues ConflictIssue[]
 
+  @@index([type, status])
   @@map("order")
 }
 

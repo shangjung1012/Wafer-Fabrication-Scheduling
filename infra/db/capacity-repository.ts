@@ -1,3 +1,4 @@
+import { Prisma } from "@/lib/generated/prisma";
 import type { PrismaClient } from "@/lib/generated/prisma";
 
 export type CreateDailyCapacityInput = {
@@ -37,22 +38,34 @@ export async function bulkUpdateDailyCapacities(
 
   const caps = await db.dailyCapacity.findMany({
     where: { id: { in: updates.map((u) => u.id) } },
-    include: { factory: { select: { productionType: true } } },
+    select: {
+      id: true,
+      curCapacity: true,
+      factory: { select: { productionType: true } },
+    },
   });
 
-  const capMap = new Map(caps.map((c) => [c.id, c]));
+  const productionTypes = new Set(caps.map((c) => c.factory.productionType));
+  const capMap = new Map(caps.map((c) => [c.id, c.curCapacity]));
 
-  for (const { id, curCapacity } of updates) {
-    const cap = capMap.get(id);
-    if (cap && cap.curCapacity !== curCapacity) {
-      await db.dailyCapacity.update({
-        where: { id },
-        data: { curCapacity },
-      });
-    }
-  }
+  const changed = updates.filter(
+    ({ id, curCapacity }) => capMap.has(id) && capMap.get(id) !== curCapacity,
+  );
 
-  return new Set(caps.map((c) => c.factory.productionType));
+  if (changed.length === 0) return productionTypes;
+
+  const values = changed.map(({ id, curCapacity }) =>
+    Prisma.sql`(${id}::text, ${curCapacity}::int)`,
+  );
+
+  await db.$executeRaw`
+    UPDATE daily_capacity
+    SET "curCapacity" = v.cur_capacity
+    FROM (VALUES ${Prisma.join(values)}) AS v(id, cur_capacity)
+    WHERE daily_capacity.id = v.id
+  `;
+
+  return productionTypes;
 }
 
 export async function findDailyCapacity(

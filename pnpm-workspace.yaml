@@ -4,6 +4,7 @@ allowBuilds:
   esbuild: true
   msw: false
   prisma: true
+  puppeteer: true
   sharp: true
   unrs-resolver: false
 ignoredBuiltDependencies:

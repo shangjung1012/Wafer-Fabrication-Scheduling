@@ -202,7 +202,7 @@ export async function _applyScheduleTransaction(
       );
       deferredEmails = emailsToDispatch;
     }
-  });
+  }, { timeout: 30_000 });
 
   // Increment schedule versions outside the transaction (no Redis while holding DB connection)
   for (const factoryType of affectedFactoryTypes) {
