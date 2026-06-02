@@ -90,14 +90,16 @@ const PRODUCTION_TYPES = ["A", "B", "C"] as const;
 
 function buildUsers(): SeedUser[] {
   const users: SeedUser[] = [];
-  for (const t of PRODUCTION_TYPES) {
+  for (let i = 1; i <= 3; i++) {
     users.push({
-      id: `sa-${t}`,
-      username: `sa-${t}`,
-      email: `sa-${t.toLowerCase()}@mail.com`,
+      id: `sa-${i}`,
+      username: `SA-${i}`,
+      email: `sa-${i}@mail.com`,
       role: "SUPERADMIN",
-      group: t,
+      group: null,
     });
+  }
+  for (const t of PRODUCTION_TYPES) {
 
     for (let i = 1; i <= 3; i++) {
       users.push({
@@ -326,11 +328,15 @@ async function cleanupStaleState() {
     where: { id: { in: ["sales-A", "sales-B", "sales-C"] } },
   });
 
+  const legacySuperAdminsDeleted = await prisma.user.deleteMany({
+    where: { id: { in: ["sa-A", "sa-B", "sa-C"] } },
+  });
+
   console.log(
     `  Deleted: events=${eventsDeleted.count}, comments=${commentsDeleted.count}, ` +
       `issues=${issuesDeleted.count}, assignments=${assignmentsDeleted.count}, ` +
       `orders=${ordersDeleted.count}, capacities=${capacitiesDeleted.count}, ` +
-      `legacySales=${legacySalesDeleted.count}`,
+      `legacySales=${legacySalesDeleted.count}, legacySuperAdmins=${legacySuperAdminsDeleted.count}`,
   );
 }
 
