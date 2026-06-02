@@ -8,5 +8,9 @@ export default defineConfig({
     environment: "node",
     globals: true,
     setupFiles: ["dotenv/config"],
+    coverage: {
+      reporter: ["text", "lcov"],
+      reportsDirectory: "coverage",
+    },
   },
 });

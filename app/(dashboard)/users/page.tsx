@@ -19,6 +19,29 @@ import {
   type ClientAuthSession,
 } from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
+import {
+  RoleBadge,
+  StatusBadge,
+  fieldStyle,
+  formGridStyle,
+  iconButtonStyle,
+  inputStyle,
+  labelStyle,
+  mutedTextStyle,
+  pageStyle,
+  panelStyle,
+  primaryButtonStyle,
+  secondaryButtonStyle,
+  sectionHeaderStyle,
+  sectionMetaStyle,
+  sectionTitleStyle,
+  tableStyle,
+  tdStyle,
+  thStyle,
+  topBarStyle,
+  trStyle,
+  warningStyle,
+} from "@/components/users/user-admin-ui";
 
 type Role = ClientAuthSession["user"]["role"];
 
@@ -47,21 +70,6 @@ const initialForm: InviteForm = {
   group: "",
 };
 
-function roleTone(role: Role): {
-  background: string;
-  color: string;
-  border: string;
-} {
-  switch (role) {
-    case "SUPERADMIN":
-      return { background: "#f3e8ff", color: "#6b21a8", border: "#d8b4fe" };
-    case "ADMIN":
-      return { background: "#dbeafe", color: "#1e40af", border: "#93c5fd" };
-    case "SALES":
-      return { background: "#dcfce7", color: "#166534", border: "#86efac" };
-  }
-}
-
 async function parseResponse(response: Response): Promise<ApiResult> {
   const body = await response.json().catch(() => null);
   return { status: response.status, body };
@@ -76,50 +84,6 @@ function apiFetch(path: string, options: RequestInit = {}) {
       ...options.headers,
     },
   });
-}
-
-function RoleBadge({ role }: Readonly<{ role: Role }>) {
-  const tone = roleTone(role);
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        border: `1px solid ${tone.border}`,
-        background: tone.background,
-        color: tone.color,
-        borderRadius: 999,
-        padding: "2px 8px",
-        fontSize: 11,
-        fontWeight: 700,
-        lineHeight: 1.4,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {role}
-    </span>
-  );
-}
-
-function StatusBadge({ pending }: Readonly<{ pending: boolean }>) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        border: `1px solid ${pending ? "#fed7aa" : "#bbf7d0"}`,
-        background: pending ? "#fff7ed" : "#f0fdf4",
-        color: pending ? "#9a3412" : "#166534",
-        borderRadius: 999,
-        padding: "2px 8px",
-        fontSize: 11,
-        fontWeight: 700,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {pending ? "PENDING" : "ACTIVE"}
-    </span>
-  );
 }
 
 export default function UsersPage() {
@@ -510,27 +474,6 @@ export default function UsersPage() {
   );
 }
 
-const pageStyle: React.CSSProperties = {
-  fontFamily: "system-ui, sans-serif",
-  maxWidth: 1040,
-  minHeight: "100vh",
-  margin: "0 auto",
-  padding: 24,
-  color: "#0f172a",
-  background: "#f8fafc",
-  boxShadow: "0 0 0 100vmax #f8fafc",
-  clipPath: "inset(0 -100vmax)",
-};
-
-const topBarStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
-  gap: 16,
-  flexWrap: "wrap",
-  marginBottom: 18,
-};
-
 const navStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -568,152 +511,6 @@ const sessionBarStyle: React.CSSProperties = {
   marginBottom: 16,
 };
 
-const panelStyle: React.CSSProperties = {
-  border: "1px solid #dbe3ef",
-  borderRadius: 8,
-  padding: 16,
-  marginBottom: 16,
-  background: "#ffffff",
-  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
-};
-
-const sectionHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  marginBottom: 14,
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 15,
-  fontWeight: 750,
-};
-
-const sectionMetaStyle: React.CSSProperties = {
-  margin: "4px 0 0",
-  color: "#475569",
-  fontSize: 12,
-};
-
-const formGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 12,
-  alignItems: "end",
-};
-
-const fieldStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-};
-
-const labelStyle: React.CSSProperties = {
-  color: "#334155",
-  fontSize: 12,
-  fontWeight: 700,
-};
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  boxSizing: "border-box",
-  border: "1px solid #cbd5e1",
-  borderRadius: 6,
-  padding: "8px 10px",
-  fontSize: 14,
-  color: "#0f172a",
-  background: "#fff",
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  width: "100%",
-  minHeight: 38,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
-  border: "1px solid #2563eb",
-  borderRadius: 6,
-  padding: "8px 12px",
-  background: "#2563eb",
-  color: "#fff",
-  fontSize: 13,
-  fontWeight: 750,
-  cursor: "pointer",
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  minHeight: 32,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 7,
-  border: "1px solid #cbd5e1",
-  borderRadius: 6,
-  padding: "6px 10px",
-  background: "#fff",
-  color: "#1e293b",
-  fontSize: 13,
-  fontWeight: 700,
-  cursor: "pointer",
-};
-
-const iconButtonStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  border: "1px solid #cbd5e1",
-  borderRadius: 6,
-  padding: "5px 9px",
-  background: "#fff",
-  color: "#1e293b",
-  fontSize: 12,
-  fontWeight: 700,
-  cursor: "pointer",
-};
-
-const warningStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  border: "1px solid #fed7aa",
-  background: "#fff7ed",
-  color: "#9a3412",
-  borderRadius: 8,
-  padding: 12,
-  marginBottom: 16,
-  fontSize: 13,
-};
-
-const tableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse",
-  fontSize: 13,
-};
-
-const thStyle: React.CSSProperties = {
-  borderBottom: "1px solid #dbe3ef",
-  padding: "9px 10px",
-  color: "#334155",
-  fontSize: 12,
-  fontWeight: 750,
-  textAlign: "left",
-  whiteSpace: "nowrap",
-};
-
-const trStyle: React.CSSProperties = {
-  borderBottom: "1px solid #eef2f7",
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "10px",
-  verticalAlign: "middle",
-  color: "#0f172a",
-  whiteSpace: "nowrap",
-};
-
 const messageStyle: React.CSSProperties = {
   border: "1px solid #cbd5e1",
   background: "#f1f5f9",
@@ -734,9 +531,4 @@ const resultStyle: React.CSSProperties = {
   fontSize: 12,
   overflowX: "auto",
   maxHeight: 260,
-};
-
-const mutedTextStyle: React.CSSProperties = {
-  color: "#475569",
-  fontSize: 14,
 };
