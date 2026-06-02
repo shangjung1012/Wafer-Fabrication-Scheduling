@@ -3457,11 +3457,6 @@ export default function SchedulePage() {
     });
   };
 
-  const handleSimDateCommit = (val: string) => {
-    setSimDate(val);
-    patchSim({ simulationDate: dateInputToIso(val) });
-  };
-
   const handleStartDateCommit = useCallback((val: string) => {
     setStartDate(val);
     setLoading(true);
@@ -3835,16 +3830,11 @@ export default function SchedulePage() {
               >
                 +2 hours
               </button>
-              <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-                Custom:
-                <CommittedDateInput
-                  value={simDate}
-                  onCommit={handleSimDateCommit}
-                  disabled={simLoading}
-                  className="bg-transparent border-none outline-none text-amber-700 font-semibold cursor-pointer"
-                />
-                {simDateTime && <span>{simDateTime.substring(11, 16)}</span>}
-              </span>
+              {simDateTime && (
+                <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
+                  {simDate} {simDateTime.substring(11, 16)}
+                </span>
+              )}
             </>
           )}
           {!simMode && (
