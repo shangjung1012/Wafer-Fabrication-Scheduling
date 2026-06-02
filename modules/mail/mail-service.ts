@@ -44,6 +44,8 @@ let smtpTransporter: Transporter | undefined;
 const DEFAULT_SEND_TIMEOUT_MS = 15000;
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 
+type SendOperation = Awaited<ReturnType<EmailClient["beginSend"]>>;
+
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -196,16 +198,7 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
   );
   const abortController = new AbortController();
   let timedOut = false;
-  let sendOperation:
-    | {
-        getResult: () => { id?: string; status?: string } | undefined;
-        pollUntilDone: (options: { abortSignal?: AbortSignal }) => Promise<{
-          id: string;
-          status: string;
-          error?: { message?: string };
-        }>;
-      }
-    | undefined;
+  let sendOperation: SendOperation | undefined;
   const timeoutId = setTimeout(() => {
     timedOut = true;
     abortController.abort();
@@ -259,21 +252,11 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
     };
   } catch (error) {
     if (timedOut) {
-      if (sendOperation) {
-        const response = sendOperation.getResult();
-        return {
-          id: response?.id ?? "unknown",
-          status: response?.status ?? "Pending",
-        };
-      }
-
-      return fallbackOrThrow(
-        input,
-        new MailSendError(
-          `Email send timed out after ${sendTimeoutMs}ms while waiting for Azure Communication Services.`,
-        ),
-        `Azure email send timed out after ${sendTimeoutMs}ms. Falling back to SMTP.`,
-      );
+      const response = sendOperation?.getResult();
+      return {
+        id: response?.id ?? "unknown",
+        status: sendOperation ? "Pending" : "Unknown",
+      };
     }
 
     return fallbackOrThrow(

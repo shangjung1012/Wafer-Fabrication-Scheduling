@@ -262,12 +262,6 @@ describe("mail-service", () => {
     vi.useFakeTimers();
     try {
       process.env.AZURE_COMMUNICATION_EMAIL_SEND_TIMEOUT_MS = "25";
-      process.env.SMTP_FALLBACK_ENABLED = "true";
-      process.env.SMTP_FALLBACK_HOST = "smtp.gmail.com";
-      process.env.SMTP_FALLBACK_PORT = "465";
-      process.env.SMTP_FALLBACK_USER = "mailer@example.com";
-      process.env.SMTP_FALLBACK_PASSWORD = "app-password";
-      process.env.SMTP_FALLBACK_FROM_ADDRESS = "DoNotReply@example.com";
 
       const pollUntilDone = vi.fn(
         (options?: { abortSignal?: AbortSignal }) =>
@@ -294,10 +288,41 @@ describe("mail-service", () => {
       await vi.advanceTimersByTimeAsync(25);
       await expect(promise).resolves.toEqual({
         id: "operation-queued",
-        status: "Running",
+        status: "Pending",
       });
       expect(pollUntilDone).toHaveBeenCalledWith({
         abortSignal: expect.any(AbortSignal),
+      });
+      expect(sendSmtpMail).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns unknown when beginSend is still unresolved at timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      process.env.AZURE_COMMUNICATION_EMAIL_SEND_TIMEOUT_MS = "25";
+
+      beginSend.mockImplementationOnce(
+        (_message: unknown, options?: { abortSignal?: AbortSignal }) =>
+          new Promise((_, reject) => {
+            options?.abortSignal?.addEventListener("abort", () => {
+              reject(new Error("aborted"));
+            });
+          }),
+      );
+
+      const promise = sendMail({
+        to: [{ address: "user@example.com" }],
+        subject: "Timeout",
+        plainText: "This should time out before beginSend resolves.",
+      });
+
+      await vi.advanceTimersByTimeAsync(25);
+      await expect(promise).resolves.toEqual({
+        id: "unknown",
+        status: "Unknown",
       });
       expect(sendSmtpMail).not.toHaveBeenCalled();
     } finally {
