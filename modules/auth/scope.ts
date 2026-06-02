@@ -43,7 +43,9 @@ export type ActorScope = SalesScope | AdminScope | SuperAdminScope;
  */
 export function getScopeGroup(scope: ActorScope): string {
   if (scope.role === "SALES") {
-    throw new ForbiddenError("SALES users do not have a production type group.");
+    throw new ForbiddenError(
+      "SALES users do not have a production type group.",
+    );
   }
   if (scope.role === "SUPERADMIN") {
     throw new ForbiddenError(
@@ -101,7 +103,11 @@ export async function resolveActorScope(
         where: { id: ctx.user.id },
         select: { group: true },
       });
-      return { role: "SUPERADMIN", userId: ctx.user.id, group: user?.group ?? null };
+      return {
+        role: "SUPERADMIN",
+        userId: ctx.user.id,
+        group: user?.group ?? null,
+      };
     }
 
     case "SYSTEM": {

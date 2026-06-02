@@ -97,7 +97,9 @@ export function OrderCsvDropZone({
         {file ? (
           <>
             <p className="text-sm font-medium text-gray-900">{file.name}</p>
-            <p className="text-xs text-gray-500">Ready — press Send to import</p>
+            <p className="text-xs text-gray-500">
+              Ready — press Send to import
+            </p>
           </>
         ) : (
           <>

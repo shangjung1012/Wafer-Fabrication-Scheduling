@@ -132,9 +132,8 @@ describe("auth routes (mocked branches)", () => {
     });
 
     it("maps InvalidCredentialsError to 401", async () => {
-      const { InvalidCredentialsError } = await import(
-        "@/modules/auth/auth-service"
-      );
+      const { InvalidCredentialsError } =
+        await import("@/modules/auth/auth-service");
       login.mockRejectedValueOnce(new InvalidCredentialsError());
       const res = await loginPost(
         jsonRequest("http://localhost/api/auth/login", {
@@ -219,9 +218,8 @@ describe("auth routes (mocked branches)", () => {
     });
 
     it("maps InvalidRefreshTokenError from service to 401", async () => {
-      const { InvalidRefreshTokenError } = await import(
-        "@/modules/auth/auth-service"
-      );
+      const { InvalidRefreshTokenError } =
+        await import("@/modules/auth/auth-service");
       logout.mockRejectedValueOnce(new InvalidRefreshTokenError());
       const res = await logoutPost(
         jsonRequest("http://localhost/api/auth/logout", {
@@ -304,9 +302,8 @@ describe("auth routes (mocked branches)", () => {
     });
 
     it("returns 401 for invalid refresh token from service", async () => {
-      const { InvalidRefreshTokenError } = await import(
-        "@/modules/auth/auth-service"
-      );
+      const { InvalidRefreshTokenError } =
+        await import("@/modules/auth/auth-service");
       refresh.mockRejectedValueOnce(new InvalidRefreshTokenError());
       const res = await refreshPost(
         jsonRequest("http://localhost/api/auth/refresh", {

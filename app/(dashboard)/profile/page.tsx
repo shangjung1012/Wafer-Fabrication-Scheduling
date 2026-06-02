@@ -109,7 +109,6 @@ const secondaryButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-
 const EMAIL_ERROR_MESSAGES: Record<string, string> = {
   missing_token: "Verification link is invalid (missing token).",
   invalid_token: "Verification link is invalid or has already been used.",

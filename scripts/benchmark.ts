@@ -92,9 +92,7 @@ console.log(`📦 Generating Mock Data:`);
 console.log(
   `   ${NUM_ORDERS} Mutable Orders (~${PRIORITIZED_PROB * 100}% isPrioritized)`,
 );
-console.log(
-  `   ${NUM_FIXED_ORDERS} Fixed Orders (isFixed=true, pre-assigned)`,
-);
+console.log(`   ${NUM_FIXED_ORDERS} Fixed Orders (isFixed=true, pre-assigned)`);
 console.log(`   ${NUM_FACTORIES} Factories`);
 console.log(
   `   ${DAYS_OF_CAPACITY} Days × ${NUM_FACTORIES} Factories = ${NUM_FACTORIES * DAYS_OF_CAPACITY} Capacity Records`,
@@ -371,9 +369,7 @@ if (prioOrderCheck.ok) {
   );
 }
 
-console.log(
-  `\n  Invariant Pass Rate: ${invariantsPassed}/${totalInvariants}`,
-);
+console.log(`\n  Invariant Pass Rate: ${invariantsPassed}/${totalInvariants}`);
 
 // ============================================================
 // SECTION 2: FAILURE JUSTIFICATION
@@ -450,9 +446,7 @@ console.log(
 
 const justifiedCount = windowConflict + capacityExhausted;
 const justificationRate =
-  failedCount > 0
-    ? ((justifiedCount / failedCount) * 100).toFixed(1)
-    : "N/A";
+  failedCount > 0 ? ((justifiedCount / failedCount) * 100).toFixed(1) : "N/A";
 console.log(`\n  Failure Justification Rate: ${justificationRate}%`);
 if (greedyTradeoff > 0) {
   console.log(
@@ -470,9 +464,7 @@ console.log("\n" + "═".repeat(60));
 console.log("  SECTION 3: EFFICIENCY METRICS");
 console.log("═".repeat(60));
 
-const mutableOrders = strategyResult.processedOrders.filter(
-  (o) => !o.isFixed,
-);
+const mutableOrders = strategyResult.processedOrders.filter((o) => !o.isFixed);
 const mutableScheduled = mutableOrders.filter(
   (o) => o.status === OrderStatus.SCHEDULED,
 ).length;
@@ -588,7 +580,9 @@ for (let i = 1; i <= NEW_ORDER_COUNT; i++) {
 const newOrderIds = new Set(phase2NewOrders.map((o) => o.id));
 const fixedOrdersCopy = mockOrders.filter((o) => o.isFixed);
 
-console.log(`  Phase 1 baseline: ${phase1Scheduled.length} scheduled, ${phase1Failed.length} failed`);
+console.log(
+  `  Phase 1 baseline: ${phase1Scheduled.length} scheduled, ${phase1Failed.length} failed`,
+);
 console.log(`  Phase 2: +${NEW_ORDER_COUNT} new orders → run each policy\n`);
 
 // --- Run each policy ---
@@ -704,9 +698,7 @@ const COL = 16;
 const row = (label: string, v1: string, v2: string, v3: string) =>
   `  ${label.padEnd(30)} ${v1.padStart(COL)} ${v2.padStart(COL)} ${v3.padStart(COL)}`;
 
-console.log(
-  row("", "GAP_FILLING", "GLOBAL_OPT", "PRIO_RETAIN"),
-);
+console.log(row("", "GAP_FILLING", "GLOBAL_OPT", "PRIO_RETAIN"));
 console.log("  " + "─".repeat(30 + COL * 3 + 3));
 console.log(
   row(
@@ -741,12 +733,7 @@ console.log(
   ),
 );
 console.log(
-  row(
-    "Displaced",
-    `${gf.displaced}`,
-    `${go.displaced}`,
-    `${pr.displaced}`,
-  ),
+  row("Displaced", `${gf.displaced}`, `${go.displaced}`, `${pr.displaced}`),
 );
 console.log(
   row(
@@ -756,14 +743,7 @@ console.log(
     `${pr.stability.toFixed(1)}%`,
   ),
 );
-console.log(
-  row(
-    "Execution (ms)",
-    `${gf.ms}`,
-    `${go.ms}`,
-    `${pr.ms}`,
-  ),
-);
+console.log(row("Execution (ms)", `${gf.ms}`, `${go.ms}`, `${pr.ms}`));
 
 console.log(`
   Definitions:

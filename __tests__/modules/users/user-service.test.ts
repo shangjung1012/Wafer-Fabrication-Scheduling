@@ -82,7 +82,9 @@ describe("user-service", () => {
 
       await listUsers(ctx("SUPERADMIN"), prisma, { role: "ADMIN" });
 
-      expect(userRepo.findUsers).toHaveBeenCalledWith(prisma, { role: "ADMIN" });
+      expect(userRepo.findUsers).toHaveBeenCalledWith(prisma, {
+        role: "ADMIN",
+      });
     });
   });
 
@@ -180,7 +182,9 @@ describe("user-service", () => {
       vi.mocked(userRepo.updateUser).mockResolvedValue({ id: "u1" });
 
       await expect(
-        updateUserService(ctx("SUPERADMIN"), prisma, "u1", { email: "new@x.com" }),
+        updateUserService(ctx("SUPERADMIN"), prisma, "u1", {
+          email: "new@x.com",
+        }),
       ).resolves.toEqual({ id: "u1" });
     });
 
