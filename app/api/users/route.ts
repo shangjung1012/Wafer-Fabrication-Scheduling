@@ -1,8 +1,8 @@
 /**
  * app/api/users/route.ts
  *
- * GET  /api/users   — list users (ADMIN: SALES only | SUPERADMIN: all roles, scoped to own type)
- * POST /api/users   — create user (ADMIN: SALES only | SUPERADMIN: any role, scoped to own type)
+ * GET  /api/users   — list users (ADMIN: SALES only in their group | SUPERADMIN: all roles, all groups)
+ * POST /api/users   — create user (ADMIN: SALES only in their group | SUPERADMIN: any role; group required only for ADMIN)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -26,11 +26,21 @@ const ListUsersQuerySchema = z.object({
   role: UserRoleSchema.optional(),
 });
 
-const CreateUserBodySchema = z.object({
-  email: z.string().trim().email("email must be valid"),
-  role: UserRoleSchema,
-  group: z.string().min(1, "group is required"),
-});
+const CreateUserBodySchema = z
+  .object({
+    email: z.string().trim().email("email must be valid"),
+    role: UserRoleSchema,
+    group: z
+      .string()
+      .trim()
+      .nullable()
+      .optional()
+      .transform((v) => v ?? null),
+  })
+  .refine((d) => d.role !== "ADMIN" || (d.group && d.group.length > 0), {
+    message: "group is required for ADMIN role",
+    path: ["group"],
+  });
 
 // ---------------------------------------------------------------------------
 // GET /api/users

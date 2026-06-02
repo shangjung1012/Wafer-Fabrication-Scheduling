@@ -63,7 +63,7 @@ const initialForm: InviteForm = {
   group: "",
 };
 
-function roleTone(role: Role): {
+function roleTone(role: string): {
   background: string;
   color: string;
   border: string;
@@ -75,6 +75,8 @@ function roleTone(role: Role): {
       return { background: "#dbeafe", color: "#1e40af", border: "#93c5fd" };
     case "SALES":
       return { background: "#dcfce7", color: "#166534", border: "#86efac" };
+    default:
+      return { background: "#f1f5f9", color: "#475569", border: "#cbd5e1" };
   }
 }
 
@@ -94,7 +96,7 @@ function apiFetch(path: string, options: RequestInit = {}) {
   });
 }
 
-function RoleBadge({ role }: { role: Role }) {
+function RoleBadge({ role }: { role: string }) {
   const tone = roleTone(role);
   return (
     <span
@@ -168,7 +170,7 @@ export default function PermissionsPage() {
   });
 
   const isSuperAdmin = session?.user.role === "SUPERADMIN";
-  const inviteGroup = form.group.trim() || session?.user.group || "";
+  const inviteGroup = form.group.trim() || null;
 
   const visibleRoles = useMemo<Role[]>(() => {
     return ["SUPERADMIN", "ADMIN", "SALES"];
@@ -246,7 +248,7 @@ export default function PermissionsPage() {
     try {
       const response = await apiFetch("/api/users", {
         method: "POST",
-        body: JSON.stringify({ ...form, group: inviteGroup }),
+        body: JSON.stringify({ email: form.email, role: form.role, group: inviteGroup }),
       });
       const result = await parseResponse(response);
       if (!response.ok) {
@@ -274,7 +276,7 @@ export default function PermissionsPage() {
         | undefined;
 
       // reset the form
-      setForm({ ...initialForm, group: session?.user.group ?? "" });
+      setForm(initialForm);
 
       // ensure the newly invited user appears in the list even if username is null
       if (created && created.id) {
@@ -336,7 +338,7 @@ export default function PermissionsPage() {
       username: user.username ?? "",
       email: user.email,
       role: user.role,
-      group: user.group ?? session.user.group ?? "",
+      group: user.group ?? "",
     });
   };
 
@@ -353,8 +355,12 @@ export default function PermissionsPage() {
     const username = editForm.username.trim();
     const pending = !user.username;
 
-    if (!email || !group) {
-      setNotice({ kind: "error", message: "Email and group are required." });
+    if (!email) {
+      setNotice({ kind: "error", message: "Email is required." });
+      return;
+    }
+    if (editForm.role === "ADMIN" && !group) {
+      setNotice({ kind: "error", message: "Group is required for ADMIN role." });
       return;
     }
     if (user.username && !username) {
@@ -643,17 +649,19 @@ export default function PermissionsPage() {
               </label>
 
               <label style={fieldStyle}>
-                <span style={labelStyle}>Group</span>
+                <span style={labelStyle}>
+                  Group{form.role === "ADMIN" ? " *" : ""}
+                </span>
                 <input
-                  required
-                  value={form.group || session.user.group || ""}
+                  required={form.role === "ADMIN"}
+                  value={form.group || ""}
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
                       group: event.target.value,
                     }))
                   }
-                  placeholder="A"
+                  placeholder={form.role === "ADMIN" ? "A" : "Optional"}
                   style={inputStyle}
                 />
               </label>
@@ -702,13 +710,13 @@ export default function PermissionsPage() {
               </div>
             </div>
 
-            <div style={{ overflowX: "auto" }}>
+            <div style={userListScrollWrapStyle}>
               <table style={tableStyle}>
                 <thead>
                   <tr>
-                    <th style={thStyle}>Email</th>
-                    <th style={thStyle}>Username</th>
-                    <th style={thStyle}>
+                    <th style={thHeadStyle}>Email</th>
+                    <th style={thHeadStyle}>Username</th>
+                    <th style={thHeadStyle}>
                       <div
                         style={{
                           display: "flex",
@@ -742,7 +750,7 @@ export default function PermissionsPage() {
                         </select>
                       </div>
                     </th>
-                    <th style={thStyle}>
+                    <th style={thHeadStyle}>
                       <div
                         style={{
                           display: "flex",
@@ -772,7 +780,7 @@ export default function PermissionsPage() {
                         </select>
                       </div>
                     </th>
-                    <th style={thStyle}>
+                    <th style={thHeadStyle}>
                       <div
                         style={{
                           display: "flex",
@@ -803,7 +811,7 @@ export default function PermissionsPage() {
                         </select>
                       </div>
                     </th>
-                    <th style={thStyle}>Actions</th>
+                    <th style={thHeadStyle}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -879,8 +887,9 @@ export default function PermissionsPage() {
                         <td style={tdStyle}>
                           {isEditing ? (
                             <input
-                              required
+                              required={editForm.role === "ADMIN"}
                               value={editForm.group}
+                              placeholder={editForm.role === "ADMIN" ? "" : "Optional"}
                               onChange={(event) =>
                                 setEditForm((current) => ({
                                   ...current,
@@ -947,16 +956,18 @@ export default function PermissionsPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleDelete(user)}
-                                  disabled={deleteLoading || isSelf}
+                                  disabled={deleteLoading || isSelf || user.role === "SUPERADMIN"}
                                   style={{
                                     ...iconButtonStyle,
                                     ...dangerButtonStyle,
-                                    ...(isSelf ? disabledButtonStyle : {}),
+                                    ...(isSelf || user.role === "SUPERADMIN" ? disabledButtonStyle : {}),
                                   }}
                                   title={
                                     isSelf
                                       ? "You cannot delete your own account"
-                                      : "Remove account"
+                                      : user.role === "SUPERADMIN"
+                                        ? "SUPERADMIN accounts cannot be deleted"
+                                        : "Remove account"
                                   }
                                 >
                                   <Trash2 size={14} />
@@ -1168,6 +1179,16 @@ const tableStyle: React.CSSProperties = {
   fontSize: 13,
 };
 
+/** Scrollable viewport for long user lists; keeps filters + table chrome usable. */
+const userListScrollWrapStyle: React.CSSProperties = {
+  overflowX: "auto",
+  overflowY: "auto",
+  WebkitOverflowScrolling: "touch",
+  maxHeight: "min(28rem, calc(100dvh - 17rem))",
+  borderRadius: 6,
+  border: "1px solid #eef2f7",
+};
+
 const thStyle: React.CSSProperties = {
   borderBottom: "1px solid #dbe3ef",
   padding: "9px 10px",
@@ -1176,6 +1197,15 @@ const thStyle: React.CSSProperties = {
   fontWeight: 750,
   textAlign: "left",
   whiteSpace: "nowrap",
+};
+
+const thHeadStyle: React.CSSProperties = {
+  ...thStyle,
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
+  background: "#ffffff",
+  boxShadow: "0 1px 0 #dbe3ef",
 };
 
 const trStyle: React.CSSProperties = {

@@ -32,19 +32,22 @@ export type AdminScope = {
 export type SuperAdminScope = {
   role: "SUPERADMIN";
   userId: string;
-  group: string;
+  group: string | null;
 };
 
 export type ActorScope = SalesScope | AdminScope | SuperAdminScope;
 
 /**
- * Extracts the production type (A | B | C) from any ActorScope.
- * Avoids role-branching in service code — use this instead of scope.group / scope.productionType.
+ * Extracts the production type from an ADMIN scope.
+ * Throws for SALES (no group) and SUPERADMIN (global scope — callers should branch on role first).
  */
 export function getScopeGroup(scope: ActorScope): string {
   if (scope.role === "SALES") {
+    throw new ForbiddenError("SALES users do not have a production type group.");
+  }
+  if (scope.role === "SUPERADMIN") {
     throw new ForbiddenError(
-      "SALES users do not have a production type group.",
+      "SUPERADMIN has global scope — use role branching instead of getScopeGroup.",
     );
   }
   return scope.group;
@@ -98,12 +101,7 @@ export async function resolveActorScope(
         where: { id: ctx.user.id },
         select: { group: true },
       });
-      if (!user?.group) {
-        throw new ForbiddenError(
-          "Your account does not have a production type assigned.",
-        );
-      }
-      return { role: "SUPERADMIN", userId: ctx.user.id, group: user.group };
+      return { role: "SUPERADMIN", userId: ctx.user.id, group: user?.group ?? null };
     }
 
     case "SYSTEM": {

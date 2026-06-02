@@ -26,7 +26,7 @@ export type InvitationPreview = InvitationUser & {
 export type CreateInvitationInput = {
   email: string;
   role: UserRole;
-  group: string;
+  group: string | null;
 };
 
 export type CreateInvitationResult = InvitationUser & {

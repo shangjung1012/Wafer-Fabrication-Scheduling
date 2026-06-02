@@ -150,11 +150,13 @@ describe("auth API route flow", () => {
     const usersBody = (await usersResponse.json()) as {
       items: Array<{ username: string; group: string | null }>;
     };
+    // SUPERADMIN has global scope — sees all users across all groups
     expect(usersBody.items.map((user) => user.username)).toEqual(
-      expect.arrayContaining(["route-test-sa-A", "route-test-sales-A"]),
-    );
-    expect(usersBody.items.map((user) => user.username)).not.toContain(
-      "route-test-sales-B",
+      expect.arrayContaining([
+        "route-test-sa-A",
+        "route-test-sales-A",
+        "route-test-sales-B",
+      ]),
     );
   });
 
