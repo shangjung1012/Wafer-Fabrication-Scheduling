@@ -126,8 +126,13 @@ function roleBadge(role: Role): React.CSSProperties {
     bg = "#dbeafe";
   }
 
-  const color =
-    role === "SALES" ? "#166534" : role === "ADMIN" ? "#1e40af" : "#6b21a8";
+  let color = "#6b21a8";
+  if (role === "SALES") {
+    color = "#166534";
+  } else if (role === "ADMIN") {
+    color = "#1e40af";
+  }
+
   return {
     fontSize: 12,
     fontWeight: 700,
