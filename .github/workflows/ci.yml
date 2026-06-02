@@ -93,7 +93,10 @@ jobs:
       - name: Test
         run: |
           mkdir -p reports
-          pnpm test -- --reporter=default --reporter=junit --outputFile=reports/junit.xml
+          pnpm exec vitest run \
+            --reporter=default \
+            --reporter=junit \
+            --outputFile=reports/junit.xml
 
       - name: Test Report
         uses: dorny/test-reporter@v3
