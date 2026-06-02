@@ -11,7 +11,7 @@ function apiFetch(path: string, options: RequestInit = {}) {
   return fetch(path, {
     ...options,
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...options.headers },
   });
 }
 
@@ -115,7 +115,7 @@ const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   CLOSED: { bg: "#fee2e2", color: "#991b1b" },
 };
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status }: Readonly<{ status: string }>) {
   const sc = STATUS_COLOR[status] ?? { bg: "#f3f4f6", color: "#374151" };
   return (
     <span

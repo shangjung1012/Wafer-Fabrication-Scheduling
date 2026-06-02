@@ -51,7 +51,8 @@ describe("POST /api/schedule/apply", () => {
 
     vi.mocked(auth.requireAuth).mockResolvedValue({
       user: { role: "ADMIN", id: "U1" },
-    } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
+      requestId: "req-1",
+    });
 
     vi.mocked(resolveActorScope).mockResolvedValue({
       role: "ADMIN",

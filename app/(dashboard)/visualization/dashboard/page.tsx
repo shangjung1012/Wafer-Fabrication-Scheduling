@@ -87,7 +87,7 @@ function apiFetch(path: string, options: RequestInit = {}) {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers ?? {}),
+      ...options.headers,
     },
   });
 }
@@ -99,14 +99,14 @@ function OrderEditorModal({
   onClose,
   onSubmit,
   onCsvImported,
-}: {
+}: Readonly<{
   mode: "create" | "edit";
   title: string;
   initialValues: OrderEditorValues;
   onClose: () => void;
   onSubmit: (values: OrderEditorValues) => Promise<void>;
   onCsvImported?: () => void;
-}) {
+}>) {
   const isCreate = mode === "create";
   const [name, setName] = useState(initialValues.name);
   const [quantity, setQuantity] = useState(initialValues.quantity);
@@ -302,7 +302,9 @@ function OrderEditorModal({
 }
 
 /** Shown only on first dashboard fetch so the shell + nav stay mounted (no full-page flash). */
-function DashboardMainSkeleton({ variant }: { variant: "sales" | "admin" }) {
+function DashboardMainSkeleton({
+  variant,
+}: Readonly<{ variant: "sales" | "admin" }>) {
   return (
     <div
       className="flex flex-col flex-1 min-h-0 animate-pulse"

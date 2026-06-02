@@ -73,12 +73,12 @@ function apiFetch(path: string, options: RequestInit = {}) {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers ?? {}),
+      ...options.headers,
     },
   });
 }
 
-function RoleBadge({ role }: { role: Role }) {
+function RoleBadge({ role }: Readonly<{ role: Role }>) {
   const tone = roleTone(role);
   return (
     <span
@@ -101,7 +101,7 @@ function RoleBadge({ role }: { role: Role }) {
   );
 }
 
-function StatusBadge({ pending }: { pending: boolean }) {
+function StatusBadge({ pending }: Readonly<{ pending: boolean }>) {
   return (
     <span
       style={{

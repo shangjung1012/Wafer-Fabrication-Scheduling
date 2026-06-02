@@ -246,7 +246,7 @@ function lastInvitationToken(): string {
   const input = sendMail.mock.calls.at(-1)?.[0] as {
     plainText: string;
   };
-  const match = input.plainText.match(/token=([^\s]+)/);
+  const match = /token=([^\s]+)/.exec(input.plainText);
   if (!match) throw new Error("Missing token in invitation email");
   return decodeURIComponent(match[1]);
 }

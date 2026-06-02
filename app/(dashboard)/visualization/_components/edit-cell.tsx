@@ -32,14 +32,14 @@ export function DraggableAssignmentChip({
   onToggleOrderFixed,
   onToggleOrderPrioritized,
   onClickItem,
-}: {
+}: Readonly<{
   item: TimelineItem;
   isMoved: boolean;
   editMode?: boolean;
   onToggleOrderFixed?: (orderId: string, next: boolean) => void;
   onToggleOrderPrioritized?: (orderId: string, next: boolean) => void;
   onClickItem?: (item: TimelineItem) => void;
-}) {
+}>) {
   const isLockedByStatus = item.status !== "SCHEDULED";
   const isFixed = item.isFixed;
   const dragDisabled = isLockedByStatus || isFixed;
@@ -171,13 +171,13 @@ export function DroppableCell({
   className,
   disabled = false,
   invalidReason,
-}: {
+}: Readonly<{
   cellId: string;
   children: React.ReactNode;
   className?: string;
   disabled?: boolean;
   invalidReason?: string;
-}) {
+}>) {
   const { setNodeRef, isOver } = useDroppable({ id: cellId, disabled });
   return (
     <div
@@ -199,10 +199,10 @@ export function DroppableCell({
 export function DraggableSplitChip({
   splitId,
   children,
-}: {
+}: Readonly<{
   splitId: string;
   children: React.ReactNode;
-}) {
+}>) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: `pending-split:${splitId}` });
 
@@ -227,10 +227,10 @@ export function DraggableSplitChip({
 export function DraggablePendingOrderCard({
   orderId,
   children,
-}: {
+}: Readonly<{
   orderId: string;
   children: React.ReactNode;
-}) {
+}>) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: `pending-order:${orderId}` });
 

@@ -103,7 +103,7 @@ describe("DELETE /api/orders — 409 when lock is held", () => {
     vi.mocked(auth.requireAuth).mockResolvedValue({
       user: { id: "admin-1", role: "ADMIN", username: "admin-a1" },
       requestId: "req-1",
-    } as unknown as Awaited<ReturnType<typeof auth.requireAuth>>);
+    });
   });
 
   it("returns 409 with CONFLICT code when deleteOrdersService throws 'already running'", async () => {

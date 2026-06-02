@@ -38,7 +38,7 @@ export function refreshTokenTtl(): string {
 }
 
 export function durationToMs(value: string): number {
-  const match = value.trim().match(/^(\d+)([smhd])$/);
+  const match = /^(\d+)([smhd])$/.exec(value.trim());
   if (!match) {
     throw new Error(`Invalid duration '${value}'. Use formats like 15m, 7d.`);
   }

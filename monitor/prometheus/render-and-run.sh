@@ -43,7 +43,7 @@ OLD_IFS="$IFS"
 IFS=","
 for target in $MONITOR_HTTP_TARGETS; do
   trimmed="$(printf '%s' "$target" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  if [ -n "$trimmed" ]; then
+  if [[ -n "$trimmed" ]]; then
     printf '          - "%s"\n' "$trimmed" >> "$CONFIG_FILE"
   fi
 done

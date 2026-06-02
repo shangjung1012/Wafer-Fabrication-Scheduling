@@ -18,7 +18,7 @@ function apiFetch(path: string, options: RequestInit = {}) {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers ?? {}),
+      ...options.headers,
     },
   });
 }
@@ -119,15 +119,17 @@ const EMAIL_ERROR_MESSAGES: Record<string, string> = {
 };
 
 function roleBadge(role: Role): React.CSSProperties {
+  const bg =
+    role === "SALES" ? "#dcfce7" : role === "ADMIN" ? "#dbeafe" : "#f3e8ff";
+  const color =
+    role === "SALES" ? "#166534" : role === "ADMIN" ? "#1e40af" : "#6b21a8";
   return {
     fontSize: 12,
     fontWeight: 700,
     padding: "3px 10px",
     borderRadius: 99,
-    background:
-      role === "SALES" ? "#dcfce7" : role === "ADMIN" ? "#dbeafe" : "#f3e8ff",
-    color:
-      role === "SALES" ? "#166534" : role === "ADMIN" ? "#1e40af" : "#6b21a8",
+    background: bg,
+    color,
   };
 }
 
