@@ -23,12 +23,13 @@ import {
   addComment,
   getConflictIssue,
 } from "@/modules/order/conflict-issue-service";
+import { OrderQuantitySchema } from "@/modules/order/order-validation";
 import { prisma } from "@/lib/prisma";
 
 const ProposalSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("REDUCE_QUANTITY"),
-    newQuantity: z.number().int().positive(),
+    newQuantity: OrderQuantitySchema,
   }),
   z.object({
     kind: z.literal("DELAY_DUE_DATE"),

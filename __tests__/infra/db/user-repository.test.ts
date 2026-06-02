@@ -33,7 +33,10 @@ describe("user-repository", () => {
       });
 
       expect(mockDb.user.findMany).toHaveBeenCalledWith({
-        where: { role: "SALES", group: "Type A" },
+        where: {
+          AND: [{ role: { not: "SYSTEM" } }, { role: "SALES" }],
+          group: "Type A",
+        },
         select: {
           id: true,
           username: true,
@@ -56,7 +59,10 @@ describe("user-repository", () => {
       await findUsers(mockDb, { group: "Type B" });
 
       expect(mockDb.user.findMany).toHaveBeenCalledWith({
-        where: { group: "Type B" },
+        where: {
+          AND: [{ role: { not: "SYSTEM" } }],
+          group: "Type B",
+        },
         select: {
           id: true,
           username: true,
@@ -78,7 +84,7 @@ describe("user-repository", () => {
       await findUsers(mockDb);
 
       expect(mockDb.user.findMany).toHaveBeenCalledWith({
-        where: {},
+        where: { AND: [{ role: { not: "SYSTEM" } }] },
         select: {
           id: true,
           username: true,

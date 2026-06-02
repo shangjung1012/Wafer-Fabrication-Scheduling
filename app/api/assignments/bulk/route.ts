@@ -25,6 +25,7 @@ const MoveSchema = z
 
 const BulkMoveSchema = z.object({
   moves: z.array(MoveSchema).min(1),
+  expectedVersions: z.record(z.string(), z.number()).optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -55,9 +56,20 @@ export async function PATCH(request: Request) {
       prisma,
       parsed.data.moves,
       ctx.user.id,
+      parsed.data.expectedVersions,
     );
     return NextResponse.json(result);
   } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message?.includes("already running") ||
+        error.message?.includes("environment has changed"))
+    ) {
+      return NextResponse.json(
+        { code: "CONFLICT", message: error.message },
+        { status: 409 },
+      );
+    }
     if (error instanceof ManualEditValidationError) {
       return NextResponse.json(
         {

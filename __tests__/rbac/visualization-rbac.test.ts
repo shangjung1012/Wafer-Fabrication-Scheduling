@@ -40,6 +40,8 @@ describe("Visualization RBAC", () => {
     expect(data.salesContext).toBeDefined();
     expect(Array.isArray(data.salesContext!.myOrderIds)).toBe(true);
     expect(Array.isArray(data.salesContext!.pendingOrders)).toBe(true);
+    expect(data.salesContext!.scheduleVersions).toBeDefined();
+    expect(typeof data.salesContext!.scheduleVersions).toBe("object");
   });
 
   it("SALES sales-1 → 只看到有自己訂單排程的工廠", async () => {

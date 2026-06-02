@@ -844,6 +844,7 @@ function DetailPanel({
                             dueDate: item.dueDate,
                             type: factory.productionType,
                             isPrioritized: item.isPrioritized,
+                            isFixed: item.isFixed,
                           })
                         }
                         className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:text-gray-900"
@@ -1262,7 +1263,9 @@ function PendingSidebar({
                     quantity: String(o.quantity),
                     status: o.status,
                     dueDate: o.dueDate,
+                    type: o.type,
                     isPrioritized: o.isPrioritized,
+                    isFixed: o.isFixed,
                   })
                 }
                 className="text-[10px] font-semibold px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:text-gray-900"
@@ -1558,6 +1561,7 @@ type OrderEditorValues = {
   dueDate?: string;
   orderId?: string;
   status?: string;
+  isFixed?: boolean;
   isPrioritized?: boolean;
 };
 
@@ -1565,7 +1569,7 @@ function OrderFormModal({
   title,
   mode,
   initialValues,
-  canEditPrioritized = false,
+  canEditScheduleFlags = false,
   today,
   onClose,
   onSubmit,
@@ -1574,7 +1578,8 @@ function OrderFormModal({
   title: string;
   mode: "create" | "edit";
   initialValues: OrderEditorValues;
-  canEditPrioritized?: boolean;
+  /** ADMIN / SUPERADMIN: fixed + prioritize toggles on existing orders. */
+  canEditScheduleFlags?: boolean;
   today?: string;
   onClose: () => void;
   onSubmit: (values: OrderEditorValues) => Promise<void>;
@@ -1586,6 +1591,7 @@ function OrderFormModal({
   const [dueDate, setDueDate] = useState(
     toDateInputValue(initialValues.dueDate) || "2026-12-31",
   );
+  const [isFixed, setIsFixed] = useState(initialValues.isFixed ?? false);
   const [isPrioritized, setIsPrioritized] = useState(
     initialValues.isPrioritized ?? false,
   );
@@ -1594,6 +1600,7 @@ function OrderFormModal({
   const [error, setError] = useState("");
 
   const isCreate = mode === "create";
+  const isScheduledEdit = !isCreate && initialValues.status === "SCHEDULED";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1632,6 +1639,7 @@ function OrderFormModal({
         dueDate,
         orderId: initialValues.orderId,
         status: initialValues.status,
+        isFixed,
         isPrioritized,
       });
       onClose();
@@ -1726,7 +1734,8 @@ function OrderFormModal({
               value={dueDate}
               min={today}
               onChange={(e) => setDueDate(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              disabled={isScheduledEdit}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
             />
           </label>
 
@@ -1738,26 +1747,53 @@ function OrderFormModal({
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               placeholder={isCreate ? "Quantity" : "new quantity (optional)"}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              disabled={isScheduledEdit}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
             />
           </label>
 
-          {!isCreate && canEditPrioritized && (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isPrioritized}
-                onChange={(e) => setIsPrioritized(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 accent-amber-500"
-              />
-              <span className="text-sm font-medium text-gray-700 inline-flex items-center gap-1.5">
-                <Crown
-                  className="h-4 w-4 text-amber-600 shrink-0"
-                  aria-hidden
+          {isScheduledEdit && (
+            <p className="text-xs text-gray-400">
+              Quantity and due date are locked for scheduled orders.
+            </p>
+          )}
+
+          {!isCreate && canEditScheduleFlags && (
+            <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                Scheduling
+              </p>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isFixed}
+                  onChange={(e) => setIsFixed(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 accent-gray-700"
                 />
-                Prioritize (scheduled first in auto-schedule)
-              </span>
-            </label>
+                <span className="text-sm font-medium text-gray-700 inline-flex items-center gap-1.5">
+                  <Lock
+                    className="h-4 w-4 text-gray-600 shrink-0"
+                    aria-hidden
+                  />
+                  Fixed (do not move in auto-schedule)
+                </span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isPrioritized}
+                  onChange={(e) => setIsPrioritized(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 accent-amber-500"
+                />
+                <span className="text-sm font-medium text-gray-700 inline-flex items-center gap-1.5">
+                  <Crown
+                    className="h-4 w-4 text-amber-600 shrink-0"
+                    aria-hidden
+                  />
+                  Prioritize (scheduled first in auto-schedule)
+                </span>
+              </label>
+            </div>
           )}
 
           {isCreate && (
@@ -2066,7 +2102,11 @@ type AssignmentMove =
       kind: "staging";
       original: { factoryId: string; productionDate: string };
     };
-type OrderEditorState = OrderEditorValues & { orderId?: string };
+type OrderEditorState = OrderEditorValues & {
+  orderId?: string;
+  /** `getScheduleVersion(order.type)` when the dialog opened; sent as OCC on schedule-affecting saves. */
+  expectedScheduleVersionAtOpen?: number;
+};
 
 function NavLinks({
   pathname,
@@ -2220,7 +2260,7 @@ export default function SchedulePage() {
   const [draggingPendingOrder, setDraggingPendingOrder] =
     useState<PendingOrderInfo | null>(null);
   const [saveStatus, setSaveStatus] = useState<
-    "idle" | "saving" | "success" | "error"
+    "idle" | "saving" | "success" | "conflict" | "error"
   >("idle");
   const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
 
@@ -2234,6 +2274,27 @@ export default function SchedulePage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOrder, setEditOrder] = useState<OrderEditorState | null>(null);
+
+  const openEditOrder = useCallback(
+    (order: OrderEditorValues) => {
+      const versions =
+        data?.adminContext?.scheduleVersions ??
+        data?.salesContext?.scheduleVersions;
+      const type = order.type;
+      const expectedScheduleVersionAtOpen =
+        type != null &&
+        type !== "" &&
+        versions != null &&
+        Object.prototype.hasOwnProperty.call(versions, type)
+          ? versions[type]
+          : undefined;
+      setEditOrder({
+        ...order,
+        expectedScheduleVersionAtOpen,
+      });
+    },
+    [data?.adminContext?.scheduleVersions, data?.salesContext?.scheduleVersions],
+  );
 
   // T4A: multi-select pending orders for targeted preview.
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(
@@ -2620,14 +2681,56 @@ export default function SchedulePage() {
     try {
       let movePartialWarning: string | null = null;
 
+      const factoryTypeMap = new Map(
+        data.factories.map((f) => [f.id, f.productionType]),
+      );
+
+      // Mutable copy of versions — bumped locally after each successful write
+      // so sequential PUTs within the same Save don't false-positive on OCC.
+      const liveVersions: Record<string, number> = {
+        ...(data.adminContext?.scheduleVersions ?? {}),
+      };
+      const getVersionForOrder = (orderId: string) => {
+        const item = data.timeline.find((t) => t.orderId === orderId);
+        if (!item) return undefined;
+        const type = factoryTypeMap.get(item.factoryId);
+        if (!type) return undefined;
+        return liveVersions[type];
+      };
+      const bumpVersionForFactory = (factoryId: string) => {
+        const type = factoryTypeMap.get(factoryId);
+        if (type !== undefined && liveVersions[type] !== undefined) {
+          liveVersions[type]++;
+        }
+      };
+      const bumpVersionForOrder = (orderId: string) => {
+        const item = data.timeline.find((t) => t.orderId === orderId);
+        if (item) bumpVersionForFactory(item.factoryId);
+      };
+
+      const onConflict = (msg: string) => {
+        setSaveStatus("conflict");
+        setSaveErrorMsg(msg);
+        setTimeout(() => setSaveStatus("idle"), 10000);
+      };
+
       for (const id of toUnlock) {
         const res = await fetch(`/api/orders/${id}`, {
           method: "PUT",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isFixed: false }),
+          body: JSON.stringify({
+            isFixed: false,
+            expectedScheduleVersion: getVersionForOrder(id),
+          }),
         });
         const unlockBody = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          onConflict(
+            "Schedule has been modified by another user. Please refresh the page before editing.",
+          );
+          return;
+        }
         if (!res.ok) {
           setSaveStatus("error");
           setSaveErrorMsg(
@@ -2636,6 +2739,7 @@ export default function SchedulePage() {
           setTimeout(() => setSaveStatus("idle"), 6000);
           return;
         }
+        bumpVersionForOrder(id);
       }
 
       const pendingPlaceEntries = Array.from(pendingPlaceByOrderId.entries());
@@ -2667,9 +2771,18 @@ export default function SchedulePage() {
           method: "PATCH",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ moves }),
+          body: JSON.stringify({
+            moves,
+            expectedVersions: liveVersions,
+          }),
         });
         const body = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          onConflict(
+            "Schedule has been modified by another user. Please refresh the page before editing.",
+          );
+          return;
+        }
         if (!res.ok) {
           setSaveStatus("error");
           const violations: { reason: string }[] = Array.isArray(
@@ -2699,6 +2812,9 @@ export default function SchedulePage() {
         if (errors.length > 0) {
           movePartialWarning = `${applied} saved, ${errors.length} rejected: ${errors[0].reason}`;
         }
+        for (const m of moves) {
+          bumpVersionForFactory(m.factoryId);
+        }
       }
 
       for (const id of toLock) {
@@ -2706,15 +2822,25 @@ export default function SchedulePage() {
           method: "PUT",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isFixed: true }),
+          body: JSON.stringify({
+            isFixed: true,
+            expectedScheduleVersion: getVersionForOrder(id),
+          }),
         });
         const lockBody = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          onConflict(
+            "Schedule has been modified by another user. Please refresh the page before editing.",
+          );
+          return;
+        }
         if (!res.ok) {
           setSaveStatus("error");
           setSaveErrorMsg(lockBody.message ?? `Failed to lock (${res.status})`);
           setTimeout(() => setSaveStatus("idle"), 6000);
           return;
         }
+        bumpVersionForOrder(id);
       }
 
       for (const id of [...toPrioritize, ...toUnprioritize]) {
@@ -2723,9 +2849,18 @@ export default function SchedulePage() {
           method: "PUT",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isPrioritized: next }),
+          body: JSON.stringify({
+            isPrioritized: next,
+            expectedScheduleVersion: getVersionForOrder(id),
+          }),
         });
         const body = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          onConflict(
+            "Schedule has been modified by another user. Please refresh the page before editing.",
+          );
+          return;
+        }
         if (!res.ok) {
           setSaveStatus("error");
           setSaveErrorMsg(
@@ -2734,6 +2869,7 @@ export default function SchedulePage() {
           setTimeout(() => setSaveStatus("idle"), 6000);
           return;
         }
+        bumpVersionForOrder(id);
       }
 
       setSaveStatus("success");
@@ -3173,9 +3309,24 @@ export default function SchedulePage() {
     if (values.isPrioritized !== undefined && !isSales) {
       body.isPrioritized = values.isPrioritized;
     }
+    if (values.isFixed !== undefined && !isSales) {
+      body.isFixed = values.isFixed;
+    }
 
     if (Object.keys(body).length === 0) {
       throw new Error("Name, quantity, or due date is required.");
+    }
+
+    const affectsScheduleFields =
+      body.quantity !== undefined ||
+      body.dueDate !== undefined ||
+      body.isPrioritized !== undefined ||
+      body.isFixed !== undefined;
+    if (
+      affectsScheduleFields &&
+      editOrder.expectedScheduleVersionAtOpen !== undefined
+    ) {
+      body.expectedScheduleVersion = editOrder.expectedScheduleVersionAtOpen;
     }
 
     const res = await fetch(`/api/orders/${editOrder.orderId}`, {
@@ -3184,6 +3335,12 @@ export default function SchedulePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+
+    if (res.status === 409) {
+      throw new Error(
+        "Schedule has been modified by another user. Please refresh the page before editing.",
+      );
+    }
 
     if (!res.ok) {
       const bodyJson = await res.json().catch(() => ({}));
@@ -3298,11 +3455,6 @@ export default function SchedulePage() {
         data?.today ?? format(new Date(), "yyyy-MM-dd"),
       ),
     });
-  };
-
-  const handleSimDateCommit = (val: string) => {
-    setSimDate(val);
-    patchSim({ simulationDate: dateInputToIso(val) });
   };
 
   const handleStartDateCommit = useCallback((val: string) => {
@@ -3678,16 +3830,11 @@ export default function SchedulePage() {
               >
                 +2 hours
               </button>
-              <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
-                Custom:
-                <CommittedDateInput
-                  value={simDate}
-                  onCommit={handleSimDateCommit}
-                  disabled={simLoading}
-                  className="bg-transparent border-none outline-none text-amber-700 font-semibold cursor-pointer"
-                />
-                {simDateTime && <span>{simDateTime.substring(11, 16)}</span>}
-              </span>
+              {simDateTime && (
+                <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-100 border border-amber-200 rounded px-2 py-0.5">
+                  {simDate} {simDateTime.substring(11, 16)}
+                </span>
+              )}
             </>
           )}
           {!simMode && (
@@ -3821,6 +3968,12 @@ export default function SchedulePage() {
                 <span className="text-xs text-green-600 font-medium inline-flex items-center gap-1">
                   <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   {saveErrorMsg ? `Saved (${saveErrorMsg})` : "Saved"}
+                </span>
+              )}
+              {saveStatus === "conflict" && (
+                <span className="text-xs text-yellow-600 font-medium inline-flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Another edit is running — refresh the page
                 </span>
               )}
               {saveStatus === "error" && (
@@ -4053,7 +4206,7 @@ export default function SchedulePage() {
               <PendingSidebar
                 orders={data.salesContext.pendingOrders}
                 today={data.today}
-                onEditOrder={(order) => setEditOrder(order)}
+                onEditOrder={openEditOrder}
                 onCreate={() => setCreateOpen(true)}
               />
             )}
@@ -4067,7 +4220,7 @@ export default function SchedulePage() {
                     : data.adminContext.pendingOrders
                 }
                 today={data.today}
-                onEditOrder={(order) => setEditOrder(order)}
+                onEditOrder={openEditOrder}
                 pendingOrdersTitle="Pending Orders"
                 selectedOrderIds={selectedOrderIds}
                 setSelectedOrderIds={setSelectedOrderIds}
@@ -4304,7 +4457,7 @@ export default function SchedulePage() {
                                 onClickItem={
                                   editMode
                                     ? (item) =>
-                                        setEditOrder({
+                                        openEditOrder({
                                           orderId: item.orderId,
                                           name: item.orderName,
                                           quantity: String(
@@ -4312,7 +4465,9 @@ export default function SchedulePage() {
                                           ),
                                           status: item.status,
                                           dueDate: item.dueDate,
+                                          type: factory.productionType,
                                           isPrioritized: item.isPrioritized,
+                                          isFixed: item.isFixed,
                                         })
                                     : undefined
                                 }
@@ -4413,7 +4568,7 @@ export default function SchedulePage() {
             etaByOrderId={etaByOrderId}
             editMode={editMode}
             isSales={isSales}
-            onEditOrder={(order) => setEditOrder(order)}
+            onEditOrder={openEditOrder}
             onToggleOrderFixed={handleToggleOrderFixed}
             onToggleOrderPrioritized={handleToggleOrderPrioritized}
             onClose={() => setSelectedCell(null)}
@@ -4456,8 +4611,9 @@ export default function SchedulePage() {
             dueDate: editOrder.dueDate,
             type: editOrder.type,
             isPrioritized: editOrder.isPrioritized,
+            isFixed: editOrder.isFixed,
           }}
-          canEditPrioritized={!isSales}
+          canEditScheduleFlags={!isSales}
           today={data?.today}
           onClose={() => setEditOrder(null)}
           onSubmit={handleUpdateOrder}

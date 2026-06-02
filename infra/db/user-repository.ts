@@ -45,7 +45,10 @@ export async function findUsers(
 ): Promise<UserRow[]> {
   return db.user.findMany({
     where: {
-      ...(filters.role ? { role: filters.role } : {}),
+      AND: [
+        { role: { not: "SYSTEM" } },
+        ...(filters.role ? [{ role: filters.role }] : []),
+      ],
       ...(filters.group ? { group: filters.group } : {}),
     },
     select: {

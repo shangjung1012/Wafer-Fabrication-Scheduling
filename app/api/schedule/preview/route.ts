@@ -11,6 +11,10 @@ import { getScheduleVersion, setPreview } from "@/infra/redis/schedule-store";
 import crypto from "crypto";
 import { OrderStatus } from "@/lib/generated/prisma";
 import { getTime } from "@/lib/get-time";
+import { prisma } from "@/lib/prisma";
+import { ForbiddenError } from "@/modules/auth/rbac";
+import { assertCanManageScheduleType } from "@/modules/schedule/access-control";
+import { OrderTypeSchema } from "@/modules/order/order-validation";
 
 const SchedulingConfigSchema = z
   .object({
@@ -36,7 +40,7 @@ const SchedulingConfigSchema = z
   });
 
 const PreviewScheduleSchema = z.object({
-  type: z.string().min(1, "Type is required"),
+  type: OrderTypeSchema,
   config: SchedulingConfigSchema,
 });
 
@@ -66,6 +70,7 @@ export async function POST(request: Request) {
     }
 
     const { type, config } = parsed.data;
+    await assertCanManageScheduleType(ctx, prisma, type);
 
     const currentDate = await getTime();
 
@@ -121,6 +126,12 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof CsrfError) {
+      return NextResponse.json(
+        { code: error.code, message: error.message },
+        { status: error.status },
+      );
+    }
+    if (error instanceof ForbiddenError) {
       return NextResponse.json(
         { code: error.code, message: error.message },
         { status: error.status },

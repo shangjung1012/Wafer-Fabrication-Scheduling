@@ -26,10 +26,14 @@ import {
   createOrderService,
   deleteOrdersService,
 } from "@/modules/order/order-service";
+import {
+  OrderQuantitySchema,
+  OrderTypeSchema,
+} from "@/modules/order/order-validation";
 import { OrderStatus } from "@/infra/db/order-repository";
 import { prisma } from "@/lib/prisma";
 import { getTime } from "@/lib/get-time";
-import { format } from "date-fns";
+import { isBeforeDateOnly } from "@/lib/date-utils";
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -42,11 +46,11 @@ const ListOrdersQuerySchema = z.object({
 
 const CreateOrderBodySchema = z.object({
   name: z.string().min(1, "name is required"),
-  type: z.string().min(1, "type is required"),
+  type: OrderTypeSchema,
   dueDate: z
     .string()
     .datetime({ message: "dueDate must be a valid ISO datetime string" }),
-  quantity: z.number().int().positive("quantity must be a positive integer"),
+  quantity: OrderQuantitySchema,
 });
 
 const DeleteOrdersBodySchema = z.object({
@@ -107,8 +111,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const todayStr = format(await getTime(), "yyyy-MM-dd");
-    if (format(new Date(parsed.data.dueDate), "yyyy-MM-dd") < todayStr) {
+    if (isBeforeDateOnly(new Date(parsed.data.dueDate), await getTime())) {
       return badRequestResponse("Due date cannot be in the past.");
     }
 
@@ -154,6 +157,12 @@ export async function DELETE(req: NextRequest) {
     const result = await deleteOrdersService(ctx, prisma, parsed.data.ids);
     return NextResponse.json(result);
   } catch (err) {
+    if (err instanceof Error && err.message?.includes("already running")) {
+      return NextResponse.json(
+        { code: "CONFLICT", message: err.message },
+        { status: 409 },
+      );
+    }
     if (err instanceof UnauthorizedError)
       return unauthorizedResponse(err.message);
     if (err instanceof CsrfError) return csrfResponse(err.message);

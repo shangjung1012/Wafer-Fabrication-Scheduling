@@ -18,6 +18,7 @@ import {
   getAutoSchedulerConfigs,
   updateAutoSchedulerConfig,
 } from "@/infra/db/auto-scheduler-config-repository";
+import { assertCanManageScheduleType } from "@/modules/schedule/access-control";
 
 export async function GET(request: Request) {
   try {
@@ -66,6 +67,7 @@ export async function PATCH(request: Request) {
     }
 
     const { type, ...patchData } = parsed.data;
+    await assertCanManageScheduleType(ctx, prisma, type);
     const config = await updateAutoSchedulerConfig(prisma, type, patchData);
     return NextResponse.json(config);
   } catch (error) {

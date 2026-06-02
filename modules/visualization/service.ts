@@ -22,14 +22,14 @@ import type {
   PendingOrderInfo,
   OrderRisk,
 } from "./types";
+import { STANDARD_PRODUCTION_TYPES } from "@/modules/schedule/constants";
+import { getScheduleVersion } from "@/infra/redis/schedule-store";
 
 export type TimelineFilters = {
   factoryId?: string;
   startDate?: string;
   endDate?: string;
 };
-
-const STANDARD_PRODUCTION_TYPES = ["A", "B", "C"] as const;
 
 export async function getTimeline(
   ctx: RequestContext,
@@ -70,6 +70,14 @@ export async function getTimeline(
 
   const pendingOrders = mapPendingOrders(pendingRows, today);
 
+  const scopedTypes = isSuperAdmin
+    ? [...STANDARD_PRODUCTION_TYPES]
+    : [productionType!];
+  const versionEntries = await Promise.all(
+    scopedTypes.map(async (t) => [t, await getScheduleVersion(t)] as const),
+  );
+  const scheduleVersions = Object.fromEntries(versionEntries);
+
   return {
     factories,
     timeline,
@@ -77,7 +85,7 @@ export async function getTimeline(
     dailyCapacities,
     diffs: [],
     today,
-    adminContext: { pendingOrders },
+    adminContext: { pendingOrders, scheduleVersions },
   };
 }
 
@@ -99,7 +107,17 @@ async function getSalesTimeline(
 
   const pendingOrders = mapPendingOrders(pendingRows, today);
 
+  async function salesScheduleVersionsForTypes(types: string[]) {
+    const unique = [...new Set(types)];
+    const versionEntries = await Promise.all(
+      unique.map(async (t) => [t, await getScheduleVersion(t)] as const),
+    );
+    return Object.fromEntries(versionEntries);
+  }
+
   if (factoryIds.length === 0) {
+    const types = pendingOrders.map((p) => p.type);
+    const scheduleVersions = await salesScheduleVersionsForTypes(types);
     return {
       factories: [],
       timeline: [],
@@ -107,7 +125,7 @@ async function getSalesTimeline(
       dailyCapacities: [],
       diffs: [],
       today,
-      salesContext: { myOrderIds: [], pendingOrders },
+      salesContext: { myOrderIds: [], pendingOrders, scheduleVersions },
     };
   }
 
@@ -123,6 +141,13 @@ async function getSalesTimeline(
   const dailyCapacities = mapCapacities(capacityRows);
   const conflicts = detectConflicts(timeline, capacityRows);
 
+  const versionTypes = new Set<string>();
+  for (const p of pendingOrders) versionTypes.add(p.type);
+  for (const f of factories) versionTypes.add(f.productionType);
+  const scheduleVersions = await salesScheduleVersionsForTypes([
+    ...versionTypes,
+  ]);
+
   return {
     factories,
     timeline,
@@ -130,7 +155,7 @@ async function getSalesTimeline(
     dailyCapacities,
     diffs: [],
     today,
-    salesContext: { myOrderIds, pendingOrders },
+    salesContext: { myOrderIds, pendingOrders, scheduleVersions },
   };
 }
 
@@ -154,6 +179,7 @@ function mapPendingOrders(
     dueDate: r.dueDate,
     createdAt: r.createdAt,
     risk: calcRisk(r.dueDate, today),
+    isFixed: r.isFixed,
     isPrioritized: r.isPrioritized,
   }));
 }

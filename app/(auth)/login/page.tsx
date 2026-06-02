@@ -24,7 +24,7 @@ type ApiResult = {
 };
 
 const QUICK_ACCOUNTS = [
-  { label: "SuperAdmin A", username: "sa-A", email: "sa-a@mail.shangjung.com" },
+  { label: "SuperAdmin 1", username: "SA-1", email: "sa-1@mail.com" },
   {
     label: "Admin A1",
     username: "admin-A1",
@@ -44,7 +44,7 @@ async function parseResponse(response: Response): Promise<ApiResult> {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("sa-A");
+  const [username, setUsername] = useState("SA-1");
   const [password, setPassword] = useState("Password123!");
   const [showPassword, setShowPassword] = useState(false);
   const session = useClientAuthSession() ?? null;
@@ -274,7 +274,7 @@ export default function LoginPage() {
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 autoComplete="username"
-                placeholder="sa-A or sa-a@mail.shangjung.com"
+                placeholder="SA-1 or sa-1@mail.com"
                 style={{
                   display: "block",
                   width: "100%",

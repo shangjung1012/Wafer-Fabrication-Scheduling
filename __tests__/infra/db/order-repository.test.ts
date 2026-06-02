@@ -6,11 +6,6 @@ import {
   OrderStatus,
 } from "@/infra/db/order-repository";
 import type { PrismaClient } from "@/lib/generated/prisma";
-import * as scheduleStore from "@/infra/redis/schedule-store";
-
-vi.mock("@/infra/redis/schedule-store", () => ({
-  incrementScheduleVersion: vi.fn(),
-}));
 
 describe("order-repository", () => {
   describe("findOrdersForScheduling", () => {
@@ -108,10 +103,10 @@ describe("order-repository", () => {
   });
 
   describe("updateOrder", () => {
-    it("should update isFixed and isPrioritized and increment schedule version", async () => {
+    it("should update isFixed and isPrioritized without schedule side effects", async () => {
       const mockDb = {
         order: {
-          findUnique: vi.fn().mockResolvedValue({ id: "O1", type: "Type A" }),
+          findUnique: vi.fn().mockResolvedValue({ id: "O1" }),
           update: vi.fn().mockResolvedValue({
             id: "O1",
             isFixed: true,
@@ -127,9 +122,6 @@ describe("order-repository", () => {
         data: { isFixed: true, isPrioritized: true },
         select: expect.any(Object),
       });
-      expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
-        "Type A",
-      );
     });
   });
 

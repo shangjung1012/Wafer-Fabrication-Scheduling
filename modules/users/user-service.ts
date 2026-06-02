@@ -2,7 +2,7 @@
  * modules/users/user-service.ts
  *
  * Business logic for User management.
- * - SUPERADMIN: full CRUD over ADMIN + SALES users in their group (root)
+ * - SUPERADMIN: full CRUD over all users across all groups (global scope)
  * - ADMIN: can list/create SALES users in their group only; account updates and
  *   deletion are reserved for SUPERADMIN.
  */
@@ -42,15 +42,15 @@ export async function listUsers(
 ): Promise<UserRow[]> {
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
-  const group = getScopeGroup(scope);
 
   if (scope.role === "ADMIN") {
+    const group = getScopeGroup(scope);
     // ADMIN can only list SALES users in their group
     return findUsers(db, { role: "SALES", group });
   }
 
-  // SUPERADMIN: list by optional role filter, scoped to their group
-  return findUsers(db, { role: input.role, group });
+  // SUPERADMIN: global scope, no group restriction
+  return findUsers(db, { role: input.role });
 }
 
 export type CreateUserServiceInput = {
@@ -68,26 +68,33 @@ export async function createUserService(
 ): Promise<{ id: string }> {
   requireRole(ctx, ["ADMIN", "SUPERADMIN"]);
   const scope = await resolveActorScope(ctx, db);
-  const adminGroup = getScopeGroup(scope);
 
   if (scope.role === "ADMIN") {
+    const adminGroup = getScopeGroup(scope);
     if (input.role !== "SALES") {
       throw new ForbiddenError("Admins can only create SALES users.");
     }
+    const targetGroup = input.group ?? adminGroup;
+    if (targetGroup !== adminGroup) {
+      throw new ForbiddenError(
+        `Cannot create user in type '${targetGroup}'. You manage type '${adminGroup}'.`,
+      );
+    }
+    return createUser(db, {
+      username: input.username,
+      email: input.email,
+      role: input.role,
+      group: targetGroup,
+      password: input.password ? await hashPassword(input.password) : null,
+    } satisfies CreateUserInput);
   }
 
-  const targetGroup = input.group ?? adminGroup;
-  if (targetGroup !== adminGroup) {
-    throw new ForbiddenError(
-      `Cannot create user in type '${targetGroup}'. You manage type '${adminGroup}'.`,
-    );
-  }
-
+  // SUPERADMIN: global scope, group from input
   return createUser(db, {
     username: input.username,
     email: input.email,
     role: input.role,
-    group: targetGroup,
+    group: input.group ?? null,
     password: input.password ? await hashPassword(input.password) : null,
   } satisfies CreateUserInput);
 }
@@ -107,23 +114,10 @@ export async function updateUserService(
   input: UpdateUserServiceInput,
 ): Promise<{ id: string }> {
   requireRole(ctx, ["SUPERADMIN"]);
-  const scope = await resolveActorScope(ctx, db);
-  const adminGroup = getScopeGroup(scope);
 
   const target = await findUserById(db, targetId);
   if (!target) {
     throw new NotFoundError("User not found.");
-  }
-  if (target.group !== adminGroup) {
-    throw new ForbiddenError(
-      `User '${targetId}' belongs to type '${target.group}', not your type '${adminGroup}'.`,
-    );
-  }
-
-  if (input.group !== undefined && input.group !== adminGroup) {
-    throw new ForbiddenError(
-      `Cannot move user to type '${input.group}'. You manage type '${adminGroup}'.`,
-    );
   }
 
   const result = await updateUser(db, targetId, {
@@ -144,8 +138,6 @@ export async function deleteUserService(
   targetId: string,
 ): Promise<{ id: string }> {
   requireRole(ctx, ["SUPERADMIN"]);
-  const scope = await resolveActorScope(ctx, db);
-  const adminGroup = getScopeGroup(scope);
 
   if (targetId === ctx.user.id) {
     throw new ForbiddenError("You cannot delete your own account.");
@@ -155,10 +147,8 @@ export async function deleteUserService(
   if (!target) {
     throw new NotFoundError("User not found.");
   }
-  if (target.group !== adminGroup) {
-    throw new ForbiddenError(
-      `User '${targetId}' belongs to type '${target.group}', not your type '${adminGroup}'.`,
-    );
+  if (target.role === "SUPERADMIN") {
+    throw new ForbiddenError("SUPERADMIN accounts cannot be deleted.");
   }
 
   const result = await deleteUser(db, targetId);

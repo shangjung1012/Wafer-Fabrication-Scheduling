@@ -17,14 +17,20 @@ const LEGACY_ORDERS_TOKEN_KEY = "dev_token";
 const LEGACY_VISUALIZATION_TOKEN_KEY = "viz_dev_token";
 export const CLIENT_AUTH_SESSION_EVENT = "client-auth-session-change";
 
+function getBrowserStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage;
+}
+
 function emitClientAuthSessionChange(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(CLIENT_AUTH_SESSION_EVENT));
 }
 
 export function loadClientAuthSession(): ClientAuthSession | null {
-  if (typeof localStorage === "undefined") return null;
-  const rawUser = localStorage.getItem(AUTH_USER_KEY);
+  const storage = getBrowserStorage();
+  if (!storage) return null;
+  const rawUser = storage.getItem(AUTH_USER_KEY);
   if (!rawUser) return null;
 
   try {
@@ -37,19 +43,22 @@ export function loadClientAuthSession(): ClientAuthSession | null {
 }
 
 export function persistClientAuthSession(session: ClientAuthSession): void {
-  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(session.user));
-  localStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
-  localStorage.removeItem(AUTH_REFRESH_TOKEN_KEY);
+  const storage = getBrowserStorage();
+  if (!storage) return;
+  storage.setItem(AUTH_USER_KEY, JSON.stringify(session.user));
+  storage.removeItem(AUTH_ACCESS_TOKEN_KEY);
+  storage.removeItem(AUTH_REFRESH_TOKEN_KEY);
   emitClientAuthSessionChange();
 }
 
 export function clearClientAuthSession(): void {
-  if (typeof localStorage === "undefined") return;
-  localStorage.removeItem(AUTH_ACCESS_TOKEN_KEY);
-  localStorage.removeItem(AUTH_REFRESH_TOKEN_KEY);
-  localStorage.removeItem(AUTH_USER_KEY);
-  localStorage.removeItem(LEGACY_ORDERS_TOKEN_KEY);
-  localStorage.removeItem(LEGACY_VISUALIZATION_TOKEN_KEY);
+  const storage = getBrowserStorage();
+  if (!storage) return;
+  storage.removeItem(AUTH_ACCESS_TOKEN_KEY);
+  storage.removeItem(AUTH_REFRESH_TOKEN_KEY);
+  storage.removeItem(AUTH_USER_KEY);
+  storage.removeItem(LEGACY_ORDERS_TOKEN_KEY);
+  storage.removeItem(LEGACY_VISUALIZATION_TOKEN_KEY);
   emitClientAuthSessionChange();
 }
 

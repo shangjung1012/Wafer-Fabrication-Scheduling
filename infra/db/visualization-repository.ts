@@ -57,6 +57,7 @@ export type PendingOrderRow = {
   quantity: number;
   dueDate: string; // YYYY-MM-DD
   createdAt: string; // YYYY-MM-DD
+  isFixed: boolean;
   isPrioritized: boolean;
 };
 
@@ -216,6 +217,7 @@ export async function findPendingOrdersForSales(
       quantity: true,
       dueDate: true,
       createdAt: true,
+      isFixed: true,
       isPrioritized: true,
     },
     orderBy: { dueDate: "asc" },
@@ -229,6 +231,7 @@ export async function findPendingOrdersForSales(
     quantity: r.quantity,
     dueDate: format(r.dueDate, "yyyy-MM-dd"),
     createdAt: format(r.createdAt, "yyyy-MM-dd"),
+    isFixed: r.isFixed,
     isPrioritized: r.isPrioritized,
   }));
 }
@@ -267,6 +270,7 @@ export async function findPendingOrdersForAdmin(
       quantity: true,
       dueDate: true,
       createdAt: true,
+      isFixed: true,
       isPrioritized: true,
     },
     orderBy: [{ type: "asc" }, { dueDate: "asc" }],
@@ -280,6 +284,7 @@ export async function findPendingOrdersForAdmin(
     quantity: r.quantity,
     dueDate: format(r.dueDate, "yyyy-MM-dd"),
     createdAt: format(r.createdAt, "yyyy-MM-dd"),
+    isFixed: r.isFixed,
     isPrioritized: r.isPrioritized,
   }));
 }

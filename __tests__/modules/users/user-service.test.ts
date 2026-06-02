@@ -72,20 +72,17 @@ describe("user-service", () => {
       });
     });
 
-    it("SUPERADMIN passes optional role and group from scope", async () => {
+    it("SUPERADMIN lists all users globally (no group filter)", async () => {
       vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
         role: "SUPERADMIN",
         userId: "sa-1",
-        group: "Type B",
+        group: null,
       });
       vi.mocked(userRepo.findUsers).mockResolvedValue([]);
 
       await listUsers(ctx("SUPERADMIN"), prisma, { role: "ADMIN" });
 
-      expect(userRepo.findUsers).toHaveBeenCalledWith(prisma, {
-        role: "ADMIN",
-        group: "Type B",
-      });
+      expect(userRepo.findUsers).toHaveBeenCalledWith(prisma, { role: "ADMIN" });
     });
   });
 
@@ -109,12 +106,13 @@ describe("user-service", () => {
       expect(userRepo.createUser).not.toHaveBeenCalled();
     });
 
-    it("rejects creating user in a different type than the actor manages", async () => {
+    it("SUPERADMIN can create user in any group (global scope)", async () => {
       vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
         role: "SUPERADMIN",
         userId: "sa-1",
-        group: "Type A",
+        group: null,
       });
+      vi.mocked(userRepo.createUser).mockResolvedValue({ id: "new-u" });
 
       await expect(
         createUserService(ctx("SUPERADMIN"), prisma, {
@@ -123,8 +121,11 @@ describe("user-service", () => {
           role: "SALES",
           group: "Type B",
         }),
-      ).rejects.toMatchObject({ name: "ForbiddenError" });
-      expect(userRepo.createUser).not.toHaveBeenCalled();
+      ).resolves.toEqual({ id: "new-u" });
+      expect(userRepo.createUser).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ group: "Type B" }),
+      );
     });
 
     it("hashes password and creates SALES user for ADMIN", async () => {
@@ -158,11 +159,6 @@ describe("user-service", () => {
 
   describe("updateUserService", () => {
     it("throws NotFound when target id does not exist", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "SUPERADMIN",
-        userId: "sa-1",
-        group: "Type A",
-      });
       vi.mocked(userRepo.findUserById).mockResolvedValue(null);
 
       await expect(
@@ -173,12 +169,7 @@ describe("user-service", () => {
       expect(userRepo.updateUser).not.toHaveBeenCalled();
     });
 
-    it("throws Forbidden when target belongs to another type", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "SUPERADMIN",
-        userId: "sa-1",
-        group: "Type A",
-      });
+    it("SUPERADMIN can update user in any group (global scope)", async () => {
       vi.mocked(userRepo.findUserById).mockResolvedValue({
         id: "u1",
         username: "x",
@@ -186,41 +177,21 @@ describe("user-service", () => {
         role: "SALES",
         group: "Type B",
       });
+      vi.mocked(userRepo.updateUser).mockResolvedValue({ id: "u1" });
 
       await expect(
-        updateUserService(ctx("SUPERADMIN"), prisma, "u1", {}),
-      ).rejects.toBeInstanceOf(ForbiddenError);
+        updateUserService(ctx("SUPERADMIN"), prisma, "u1", { email: "new@x.com" }),
+      ).resolves.toEqual({ id: "u1" });
     });
 
-    it("ADMIN cannot update non-SALES users", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "ADMIN",
-        userId: "actor-1",
-        factoryIds: ["f1"],
-        productionType: "Type A",
-        group: "Type A",
-      });
-      vi.mocked(userRepo.findUserById).mockResolvedValue({
-        id: "u1",
-        username: "adm",
-        email: "a@x.com",
-        role: "ADMIN",
-        group: "Type A",
-      });
-
+    it("ADMIN cannot update any user (SUPERADMIN-only operation)", async () => {
       await expect(
         updateUserService(ctx("ADMIN"), prisma, "u1", { email: "z@z.com" }),
       ).rejects.toMatchObject({ name: "ForbiddenError" });
+      expect(userRepo.findUserById).not.toHaveBeenCalled();
     });
 
-    it("ADMIN cannot promote to ADMIN", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "ADMIN",
-        userId: "actor-1",
-        factoryIds: ["f1"],
-        productionType: "Type A",
-        group: "Type A",
-      });
+    it("SUPERADMIN can move user to a different group", async () => {
       vi.mocked(userRepo.findUserById).mockResolvedValue({
         id: "u1",
         username: "s",
@@ -228,39 +199,14 @@ describe("user-service", () => {
         role: "SALES",
         group: "Type A",
       });
+      vi.mocked(userRepo.updateUser).mockResolvedValue({ id: "u1" });
 
       await expect(
-        updateUserService(ctx("ADMIN"), prisma, "u1", { role: "ADMIN" }),
-      ).rejects.toMatchObject({ name: "ForbiddenError" });
-    });
-
-    it("rejects moving user to another type via group", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "SUPERADMIN",
-        userId: "sa-1",
-        group: "Type A",
-      });
-      vi.mocked(userRepo.findUserById).mockResolvedValue({
-        id: "u1",
-        username: "s",
-        email: "s@x.com",
-        role: "SALES",
-        group: "Type A",
-      });
-
-      await expect(
-        updateUserService(ctx("SUPERADMIN"), prisma, "u1", {
-          group: "Type B",
-        }),
-      ).rejects.toBeInstanceOf(ForbiddenError);
+        updateUserService(ctx("SUPERADMIN"), prisma, "u1", { group: "Type B" }),
+      ).resolves.toEqual({ id: "u1" });
     });
 
     it("throws NotFound when repository update returns null", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "SUPERADMIN",
-        userId: "sa-1",
-        group: "Type A",
-      });
       vi.mocked(userRepo.findUserById).mockResolvedValue({
         id: "u1",
         username: "s",
@@ -278,11 +224,6 @@ describe("user-service", () => {
     });
 
     it("returns id on successful update", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "SUPERADMIN",
-        userId: "sa-1",
-        group: "Type A",
-      });
       vi.mocked(userRepo.findUserById).mockResolvedValue({
         id: "u1",
         username: "s",
@@ -302,12 +243,6 @@ describe("user-service", () => {
 
   describe("deleteUserService", () => {
     it("forbids deleting own account", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "SUPERADMIN",
-        userId: "self-id",
-        group: "Type A",
-      });
-
       await expect(
         deleteUserService(ctx("SUPERADMIN", "self-id"), prisma, "self-id"),
       ).rejects.toBeInstanceOf(ForbiddenError);
@@ -315,11 +250,6 @@ describe("user-service", () => {
     });
 
     it("throws NotFound when target id does not exist", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "SUPERADMIN",
-        userId: "sa-1",
-        group: "Type A",
-      });
       vi.mocked(userRepo.findUserById).mockResolvedValue(null);
 
       await expect(
@@ -327,22 +257,7 @@ describe("user-service", () => {
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
-    it("ADMIN cannot delete non-SALES users", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "ADMIN",
-        userId: "actor-1",
-        factoryIds: ["f1"],
-        productionType: "Type A",
-        group: "Type A",
-      });
-      vi.mocked(userRepo.findUserById).mockResolvedValue({
-        id: "u1",
-        username: "adm",
-        email: "a@x.com",
-        role: "ADMIN",
-        group: "Type A",
-      });
-
+    it("ADMIN cannot delete any user (SUPERADMIN-only operation)", async () => {
       await expect(
         deleteUserService(ctx("ADMIN"), prisma, "u1"),
       ).rejects.toMatchObject({ name: "ForbiddenError" });
@@ -350,11 +265,6 @@ describe("user-service", () => {
     });
 
     it("throws NotFound when repository delete returns null", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "SUPERADMIN",
-        userId: "sa-1",
-        group: "Type A",
-      });
       vi.mocked(userRepo.findUserById).mockResolvedValue({
         id: "u1",
         username: "s",
@@ -370,11 +280,6 @@ describe("user-service", () => {
     });
 
     it("returns id on successful delete", async () => {
-      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
-        role: "SUPERADMIN",
-        userId: "sa-1",
-        group: "Type A",
-      });
       vi.mocked(userRepo.findUserById).mockResolvedValue({
         id: "u1",
         username: "s",
