@@ -245,7 +245,6 @@ async function main() {
     create: {
       username: "stress-operator",
       email: "stress-operator@stress.internal",
-      password: "not-a-real-hash",
       role: UserRole.SUPERADMIN,
     },
   });
