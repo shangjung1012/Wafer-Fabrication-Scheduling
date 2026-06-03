@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi, afterEach } from "vitest";
 
 import {
   clearClientAuthSession,
@@ -136,5 +136,58 @@ describe("post-logout login path", () => {
   it("ignores invalid stored values", () => {
     window.sessionStorage.setItem("post_logout_login_path", "/evil");
     expect(getPostLogoutLoginPath()).toBe("/login");
+  });
+});
+
+describe("logoutClientAuthSession", () => {
+  beforeEach(() => {
+    installLocalStorage();
+    installSessionStorage();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("calls logout API and clears the session on success", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    persistClientAuthSession({
+      user: {
+        id: "u1",
+        username: "alice",
+        email: "a@x.com",
+        role: "ADMIN",
+        group: null,
+      },
+    });
+
+    const { logoutClientAuthSession } =
+      await import("@/modules/auth/client-session");
+    await logoutClientAuthSession();
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/auth/logout",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(loadClientAuthSession()).toBeNull();
+  });
+
+  it("still clears the session even when the logout API call fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network")));
+    persistClientAuthSession({
+      user: {
+        id: "u1",
+        username: "alice",
+        email: "a@x.com",
+        role: "ADMIN",
+        group: null,
+      },
+    });
+
+    const { logoutClientAuthSession } =
+      await import("@/modules/auth/client-session");
+    await logoutClientAuthSession();
+
+    expect(loadClientAuthSession()).toBeNull();
   });
 });
