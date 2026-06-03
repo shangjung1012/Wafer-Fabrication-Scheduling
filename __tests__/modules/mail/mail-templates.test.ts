@@ -3,6 +3,7 @@ import { cancelRequestTemplate } from "@/modules/mail/templates/cancel-request";
 import { emailChangeNotifyTemplate } from "@/modules/mail/templates/email-change-notify";
 import { emailChangeVerifyTemplate } from "@/modules/mail/templates/email-change-verify";
 import { issueCreatedTemplate } from "@/modules/mail/templates/issue-created";
+import { issuesDigestTemplate } from "@/modules/mail/templates/issues-digest";
 
 describe("mail templates", () => {
   afterEach(() => {
@@ -124,5 +125,78 @@ describe("mail templates", () => {
     expect(mail.html).toContain(
       "https://woms.example/verify?token=a&amp;next=&lt;home&gt;&amp;label=&quot;go&quot;&#39;",
     );
+  });
+
+  it("builds a single conflict issue digest with the order name in the subject", () => {
+    vi.stubEnv("APP_BASE_URL", "https://woms.example");
+
+    const mail = issuesDigestTemplate.build({
+      recipientEmail: "sales@example.com",
+      recipientUsername: null,
+      issues: [
+        {
+          orderName: `A&B <Lot "7"> 'Y'`,
+          orderQuantity: 1200,
+          dueDate: "2026-06-15",
+          deficit: 75,
+          issueNumber: 42,
+        },
+      ],
+    });
+
+    expect(mail.to).toEqual([
+      { address: "sales@example.com", displayName: "sales@example.com" },
+    ]);
+    expect(mail.subject).toBe(
+      `Your order "A&B <Lot "7"> 'Y'" could not be scheduled`,
+    );
+    expect(mail.plainText).toContain("Order: A&B <Lot \"7\"> 'Y'");
+    expect(mail.plainText).toContain(
+      "https://woms.example/conflict-issues?issue=42",
+    );
+    expect(mail.html).toContain(
+      "A&amp;B &lt;Lot &quot;7&quot;&gt; &#39;Y&#39;",
+    );
+    expect(mail.html).toContain("−75 units");
+    expect(mail.html).toContain(
+      `href="https://woms.example/conflict-issues?issue=42"`,
+    );
+  });
+
+  it("builds a multi-issue conflict digest with escaped recipient names", () => {
+    const mail = issuesDigestTemplate.build({
+      recipientEmail: "planner@example.com",
+      recipientUsername: `Planner & <"Lead">`,
+      issues: [
+        {
+          orderName: "Order A",
+          orderQuantity: 100,
+          dueDate: "2026-06-10",
+          deficit: 10,
+          issueNumber: 1,
+        },
+        {
+          orderName: "Order B",
+          orderQuantity: 200,
+          dueDate: "2026-06-11",
+          deficit: 20,
+          issueNumber: 2,
+        },
+      ],
+    });
+
+    expect(mail.to).toEqual([
+      {
+        address: "planner@example.com",
+        displayName: `Planner & <"Lead">`,
+      },
+    ]);
+    expect(mail.subject).toBe("2 orders could not be scheduled");
+    expect(mail.plainText).toContain("The following 2 orders");
+    expect(mail.plainText).toContain("/conflict-issues?issue=1");
+    expect(mail.plainText).toContain("/conflict-issues?issue=2");
+    expect(mail.html).toContain("Planner &amp; &lt;&quot;Lead&quot;&gt;");
+    expect(mail.html).toContain("Order A");
+    expect(mail.html).toContain("Order B");
   });
 });
