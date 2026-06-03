@@ -376,3 +376,84 @@ describe("auth-service", () => {
     ).rejects.toThrow(InvalidRefreshTokenError);
   });
 });
+
+describe("logout (direct mock)", () => {
+  beforeEach(() => {
+    process.env.JWT_SECRET = "test-secret-at-least-32-characters-long";
+    vi.clearAllMocks();
+  });
+
+  function makeDb(token: Record<string, unknown> | null) {
+    return {
+      refreshToken: {
+        findUnique: vi.fn().mockResolvedValue(token),
+        update: vi.fn().mockResolvedValue({}),
+      },
+    } as unknown as Parameters<typeof logout>[0];
+  }
+
+  const NOW = new Date("2026-06-03T10:00:00.000Z");
+
+  it("returns ok:true when the token does not exist in the DB", async () => {
+    const result = await logout(
+      makeDb(null),
+      { refreshToken: "no-token" },
+      NOW,
+    );
+    expect(result).toEqual({ ok: true });
+    expect(deleteAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("revokes a valid active token and deletes the Redis session", async () => {
+    const token = {
+      id: "rt-1",
+      sessionId: "sess-1",
+      revokedAt: null,
+      expiresAt: new Date(NOW.getTime() + 60_000),
+    };
+    const db = makeDb(token);
+    const result = await logout(db, { refreshToken: "valid-token" }, NOW);
+    expect(result).toEqual({ ok: true });
+    expect(db.refreshToken.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "rt-1" } }),
+    );
+    expect(deleteAuthSession).toHaveBeenCalledWith("sess-1");
+  });
+
+  it("skips deleteAuthSession when sessionId is null", async () => {
+    const token = {
+      id: "rt-1",
+      sessionId: null,
+      revokedAt: null,
+      expiresAt: new Date(NOW.getTime() + 60_000),
+    };
+    await logout(makeDb(token), { refreshToken: "t" }, NOW);
+    expect(deleteAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("returns ok:true without revoking when token is already revoked", async () => {
+    const token = {
+      id: "rt-1",
+      sessionId: "sess-1",
+      revokedAt: new Date(NOW.getTime() - 5000),
+      expiresAt: new Date(NOW.getTime() + 60_000),
+    };
+    const db = makeDb(token);
+    const result = await logout(db, { refreshToken: "t" }, NOW);
+    expect(result).toEqual({ ok: true });
+    expect(db.refreshToken.update).not.toHaveBeenCalled();
+  });
+
+  it("returns ok:true without revoking when token is expired", async () => {
+    const token = {
+      id: "rt-1",
+      sessionId: "sess-1",
+      revokedAt: null,
+      expiresAt: new Date(NOW.getTime() - 5000),
+    };
+    const db = makeDb(token);
+    const result = await logout(db, { refreshToken: "t" }, NOW);
+    expect(result).toEqual({ ok: true });
+    expect(db.refreshToken.update).not.toHaveBeenCalled();
+  });
+});

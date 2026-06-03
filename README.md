@@ -174,15 +174,64 @@ CI runs the full suite on every PR targeting `main` (PostgreSQL 17 + Redis 7 ser
 
 ## Code Quality
 
-| Tool                              | What it enforces                                                          |
-| --------------------------------- | ------------------------------------------------------------------------- |
-| **ESLint** (pre-commit via Husky) | Code style, accessibility (a11y), TypeScript rules                        |
-| **Prettier**                      | Consistent formatting across all files                                    |
-| **TypeScript strict mode**        | Compile errors block the build                                            |
-| **Vitest + v8**                   | >80% line coverage; lcov report uploaded to SonarCloud                    |
-| **SonarCloud**                    | Security, reliability, maintainability scan on every push to `main`/`dev` |
+We maintain quality through multiple layers of automated checks, each catching a different class of problem.
 
-SonarCloud badges above reflect the latest `main` branch analysis.
+### 1. Pre-commit gate — ESLint + Prettier (Husky)
+
+Every `git commit` triggers a Husky hook that runs ESLint and Prettier before the commit is allowed to land locally. This means:
+
+- **Accessibility violations** (missing keyboard handlers, non-semantic interactive elements) are caught before code is even pushed.
+- **TypeScript type errors** surface immediately, not just in CI.
+- **Formatting** is enforced uniformly — no style debates in PRs.
+
+Config: [`eslint.config.mjs`](./eslint.config.mjs) extends `eslint-config-next/core-web-vitals` + `typescript`, which includes the `jsx-a11y` and `@typescript-eslint` rule sets.
+
+### 2. Pull Request gate — GitHub Actions CI (lint → test → build)
+
+Every PR targeting `main` must pass the full pipeline:
+
+```
+pnpm lint  →  pnpm vitest run --coverage  →  pnpm build  →  docker build
+```
+
+The job runs against **PostgreSQL 17** and **Redis 7** service containers so integration tests hit a real DB and real Redis, not mocks. A PR cannot be merged if any step fails.
+
+### 3. TypeScript strict mode
+
+`tsconfig.json` enables `strict: true`, which activates `strictNullChecks`, `noImplicitAny`, and the full suite of strict checks. Build failures from TypeScript are blocking — Next.js won't produce a production bundle if there are type errors.
+
+### 4. Test coverage — Vitest + v8
+
+```bash
+pnpm test:coverage   # generates coverage/lcov.info
+```
+
+- **>83% combined line + branch coverage** across ~300 test cases.
+- Coverage is measured by `@vitest/coverage-v8` (V8 native instrumentation — no Babel transforms, accurate branch tracking).
+- The lcov report is uploaded as a CI artifact and consumed by SonarCloud for the coverage badge.
+- Tests run in isolation: unit tests use mocks; integration tests (schedule engine, Redis lock, DB repositories) use real services spun up by the CI job.
+
+### 5. SonarCloud — continuous static analysis
+
+SonarCloud scans every push to `main` and `dev` and every PR via the CI pipeline. It checks:
+
+| Category            | What it catches                                                                       | Current rating |
+| ------------------- | ------------------------------------------------------------------------------------- | -------------- |
+| **Security**        | Injection risks, hardcoded secrets, missing SRI, unsafe regex (ReDoS)                 | A              |
+| **Reliability**     | Accessibility bugs (S1082), incorrect sort comparators (S2871), nested function depth | A              |
+| **Maintainability** | Cognitive complexity, dead code, void-operator misuse, architectural tangles          | A              |
+| **Coverage**        | Line + branch coverage delta on new code vs baseline                                  | >83%           |
+| **Duplications**    | Copy-paste blocks flagged for extraction                                              | <4%            |
+
+**Why the ratings are strong:**
+
+- The circular dependency between `modules/schedule/validation-utils.ts` and `strategy.ts` was resolved by importing `SchedulingConfig` directly from `config.ts`.
+- All `void fn()` floating-promise patterns were replaced with explicit calls, removing 18 S3735 HIGH-impact issues.
+- Bearer token parsing was rewritten without regex (no ReDoS risk).
+- Swagger UI CDN resources are pinned to a specific version with SHA-384 Subresource Integrity hashes.
+- Migration SQL files are excluded from analysis (`prisma/migrations/**`) since intentional schema-level DELETEs without WHERE are expected.
+
+SonarCloud badges at the top of this file reflect the latest `main` branch analysis.
 
 ---
 
