@@ -40,21 +40,21 @@ export function DashboardShell({
   const isVisDashboard = pathname?.startsWith("/visualization/dashboard");
   const isVisualization = pathname?.startsWith("/visualization");
   return (
-    <div className="flex flex-col h-screen bg-gray-50 font-sans">
+    <div className="flex min-h-dvh flex-col bg-gray-50 font-sans lg:h-screen">
       {/* Top bar */}
       {!hideTop && (
-        <div className="flex-none bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="w-80 flex-shrink-0 overflow-hidden">
+        <div className="flex-none border-b border-gray-200 bg-white px-3 py-3 sm:px-4 lg:px-6 lg:py-4">
+          <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 overflow-hidden lg:w-80 lg:flex-shrink-0">
               <h1 className="text-xl font-bold text-gray-900 truncate">
                 {title}
               </h1>
               <p className="text-sm text-gray-500 mt-1 truncate">{subtitle}</p>
             </div>
             {/* Navigation + session (underline-style tabs) */}
-            <div className="flex-1 flex items-center justify-center">
+            <div className="-mx-3 min-w-0 overflow-x-auto px-3 sm:-mx-4 sm:px-4 lg:mx-0 lg:flex lg:flex-1 lg:items-center lg:justify-center lg:overflow-visible lg:px-0">
               <nav
-                className="flex items-center gap-2 flex-wrap"
+                className="flex min-w-max items-center gap-1.5 lg:min-w-0 lg:flex-wrap lg:gap-2"
                 aria-label="Dashboard navigation"
               >
                 {/* Order: Schedule, Dashboard, Issues, Permissions (superadmin), Profile */}
@@ -122,7 +122,7 @@ export function DashboardShell({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-6 flex flex-col gap-6">
+      <div className="flex flex-1 flex-col gap-4 overflow-auto p-3 sm:p-4 lg:gap-6 lg:p-6">
         {!hideTop && topSection ? (
           <section className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
             {topSection}
@@ -130,10 +130,10 @@ export function DashboardShell({
         ) : null}
 
         {/* Bottom split layout */}
-        <div className="flex flex-1 gap-6 min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6">
           {/* Left section: wide when right hidden, otherwise 2/3 width */}
           <div
-            className={`${leftSectionClassName ?? (hideRight ? "flex-1" : "flex-[2]")} ${leftSectionSurfaceClassName ?? "flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"}`}
+            className={`min-w-0 w-full ${leftSectionClassName ?? (hideRight ? "flex-1" : "lg:flex-[2]")} ${leftSectionSurfaceClassName ?? "flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"}`}
           >
             {leftSection}
           </div>
@@ -141,7 +141,7 @@ export function DashboardShell({
           {/* Right section: render only when not hidden */}
           {!hideRight && (
             <div
-              className={`${rightSectionClassName ?? "flex-1"} ${rightSectionSurfaceClassName ?? "flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"}`}
+              className={`min-w-0 w-full ${rightSectionClassName ?? "lg:flex-1"} ${rightSectionSurfaceClassName ?? "flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"}`}
             >
               {rightSection}
             </div>
@@ -166,14 +166,16 @@ function SessionBox({ onBack }: { onBack: () => void }) {
   if (session === null) return null;
 
   return (
-    <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
+    <div className="flex min-w-0 flex-wrap items-center gap-2 rounded border border-gray-200 bg-gray-50 px-2 py-1 lg:max-w-[36rem] lg:flex-nowrap">
       <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
         Signed in as:
       </span>
-      <span className="text-xs font-semibold text-gray-800">
+      <span className="min-w-0 truncate text-xs font-semibold text-gray-800">
         {session.user.username}
       </span>
-      <span className="text-xs text-gray-500">({session.user.email})</span>
+      <span className="min-w-0 max-w-full truncate text-xs text-gray-500 lg:max-w-52">
+        ({session.user.email})
+      </span>
       <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
         {session.user.role}
       </span>

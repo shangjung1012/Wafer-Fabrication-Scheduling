@@ -66,11 +66,12 @@ export const pageStyle: React.CSSProperties = {
   maxWidth: 1040,
   minHeight: "100vh",
   margin: "0 auto",
-  padding: 24,
+  padding: "clamp(12px, 4vw, 24px)",
   color: "#0f172a",
   background: "#f8fafc",
   boxShadow: "0 0 0 100vmax #f8fafc",
   clipPath: "inset(0 -100vmax)",
+  overflowX: "hidden",
 };
 
 export const topBarStyle: React.CSSProperties = {
@@ -85,7 +86,7 @@ export const topBarStyle: React.CSSProperties = {
 export const panelStyle: React.CSSProperties = {
   border: "1px solid #dbe3ef",
   borderRadius: 8,
-  padding: 16,
+  padding: "clamp(12px, 3vw, 16px)",
   marginBottom: 16,
   background: "#ffffff",
   boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
@@ -96,6 +97,7 @@ export const sectionHeaderStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 12,
+  flexWrap: "wrap",
   marginBottom: 14,
 };
 
@@ -113,7 +115,7 @@ export const sectionMetaStyle: React.CSSProperties = {
 
 export const formGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
   gap: 12,
   alignItems: "end",
 };
@@ -203,6 +205,7 @@ export const warningStyle: React.CSSProperties = {
 
 export const tableStyle: React.CSSProperties = {
   width: "100%",
+  minWidth: 720,
   borderCollapse: "collapse",
   fontSize: 13,
 };

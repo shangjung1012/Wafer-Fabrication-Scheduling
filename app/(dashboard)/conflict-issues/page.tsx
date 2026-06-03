@@ -255,8 +255,8 @@ function ConflictIssuesPageContent() {
     <DashboardShell
       title="Order Issues"
       subtitle="Review and resolve scheduling conflicts and cancellation requests."
-      leftSectionClassName="flex-[2] min-w-0 min-h-0"
-      rightSectionClassName="flex-[3] min-w-0 min-h-0"
+      leftSectionClassName="min-w-0 min-h-0 lg:flex-[2]"
+      rightSectionClassName="min-w-0 min-h-0 lg:flex-[3]"
       leftSectionSurfaceClassName="flex flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden min-h-0 h-full min-w-0"
       rightSectionSurfaceClassName="flex flex-col bg-transparent rounded-none border-0 shadow-none overflow-hidden min-h-0 h-full min-w-0"
       leftSection={
