@@ -99,6 +99,11 @@ function runAz(args: string[]): Promise<void> {
   return new Promise((resolveCommand, rejectCommand) => {
     const child = spawn("az", args, {
       stdio: ["ignore", "inherit", "inherit"],
+      env: {
+        ...process.env,
+        // Restrict PATH to fixed system directories to prevent untrusted-path attacks.
+        PATH: "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin",
+      },
     });
 
     child.on("error", rejectCommand);
