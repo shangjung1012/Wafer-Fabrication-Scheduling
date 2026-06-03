@@ -87,6 +87,36 @@ function conflict(message: string): never {
 }
 
 // ---------------------------------------------------------------------------
+// Proposal guard helper — shared by acceptProposal and rejectProposal
+// ---------------------------------------------------------------------------
+
+async function assertCommentProposal(
+  ctx: RequestContext,
+  db: PrismaClient,
+  commentId: string,
+  action: "accept" | "reject",
+) {
+  const comment = await findCommentById(db, commentId);
+  if (!comment) commentNotFound();
+
+  const issueId = comment.issueId;
+  await assertIssueAccess(ctx, db, issueId);
+
+  if (comment.authorId === ctx.user.id) {
+    throw new ForbiddenError(`You cannot ${action} your own proposal.`);
+  }
+
+  if (!comment.proposal) {
+    throw Object.assign(new Error("This comment has no proposal."), {
+      status: 400,
+      code: "BAD_REQUEST",
+    });
+  }
+
+  return { comment, issueId };
+}
+
+// ---------------------------------------------------------------------------
 // Scope helpers
 // ---------------------------------------------------------------------------
 
@@ -315,23 +345,12 @@ export async function acceptProposal(
   db: PrismaClient,
   commentId: string,
 ): Promise<void> {
-  const comment = await findCommentById(db, commentId);
-  if (!comment) commentNotFound();
-
-  const issueId = comment.issueId;
-  await assertIssueAccess(ctx, db, issueId);
-
-  // Cannot accept your own proposal
-  if (comment.authorId === ctx.user.id) {
-    throw new ForbiddenError("You cannot accept your own proposal.");
-  }
-
-  if (!comment.proposal) {
-    throw Object.assign(new Error("This comment has no proposal."), {
-      status: 400,
-      code: "BAD_REQUEST",
-    });
-  }
+  const { comment, issueId } = await assertCommentProposal(
+    ctx,
+    db,
+    commentId,
+    "accept",
+  );
 
   const proposalData = comment.proposal as {
     proposal: {
@@ -485,23 +504,12 @@ export async function rejectProposal(
   db: PrismaClient,
   commentId: string,
 ): Promise<void> {
-  const comment = await findCommentById(db, commentId);
-  if (!comment) commentNotFound();
-
-  const issueId = comment.issueId;
-  await assertIssueAccess(ctx, db, issueId);
-
-  // Cannot reject your own proposal
-  if (comment.authorId === ctx.user.id) {
-    throw new ForbiddenError("You cannot reject your own proposal.");
-  }
-
-  if (!comment.proposal) {
-    throw Object.assign(new Error("This comment has no proposal."), {
-      status: 400,
-      code: "BAD_REQUEST",
-    });
-  }
+  const { comment, issueId } = await assertCommentProposal(
+    ctx,
+    db,
+    commentId,
+    "reject",
+  );
 
   const proposalData = comment.proposal as { status: string };
   if (proposalData.status !== "PENDING") {
@@ -881,51 +889,23 @@ export async function getSuggestions(
       if (cap > maxBlockForDay) maxBlockForDay = cap;
     }
 
-    if (isSplittable) {
-      cumulativeCapacity += dayCapacity;
-      if (cumulativeCapacity >= requiredQty) {
-        const foundProdDate = new Date(iterDate);
+    const capacityMet = isSplittable
+      ? (cumulativeCapacity += dayCapacity) >= requiredQty
+      : maxBlockForDay >= requiredQty;
 
-        // Convert found production date back to due date format by adding delays
-        const newDueDate = new Date(foundProdDate);
-        newDueDate.setDate(newDueDate.getDate() + productionDays + bufferDays);
-
-        // calculate actual days delayed from the original due date
-        const origDueDateObj = new Date(originalDueDate);
-        const daysDelayed = Math.round(
-          (newDueDate.getTime() - origDueDateObj.getTime()) /
-            (1000 * 60 * 60 * 24),
-        );
-
-        earliestFitForOriginalQty = {
-          dueDate: newDueDate.toISOString().slice(0, 10),
-          daysDelayed,
-          searchHorizonDays: SEARCH_HORIZON_DAYS,
-        };
-        break;
-      }
-    } else {
-      if (maxBlockForDay >= requiredQty) {
-        const foundProdDate = new Date(iterDate);
-
-        // Convert found production date back to due date format by adding delays
-        const newDueDate = new Date(foundProdDate);
-        newDueDate.setDate(newDueDate.getDate() + productionDays + bufferDays);
-
-        // calculate actual days delayed from the original due date
-        const origDueDateObj = new Date(originalDueDate);
-        const daysDelayed = Math.round(
-          (newDueDate.getTime() - origDueDateObj.getTime()) /
-            (1000 * 60 * 60 * 24),
-        );
-
-        earliestFitForOriginalQty = {
-          dueDate: newDueDate.toISOString().slice(0, 10),
-          daysDelayed,
-          searchHorizonDays: SEARCH_HORIZON_DAYS,
-        };
-        break;
-      }
+    if (capacityMet) {
+      const newDueDate = new Date(iterDate);
+      newDueDate.setDate(newDueDate.getDate() + productionDays + bufferDays);
+      const daysDelayed = Math.round(
+        (newDueDate.getTime() - new Date(originalDueDate).getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
+      earliestFitForOriginalQty = {
+        dueDate: newDueDate.toISOString().slice(0, 10),
+        daysDelayed,
+        searchHorizonDays: SEARCH_HORIZON_DAYS,
+      };
+      break;
     }
 
     iterDate.setDate(iterDate.getDate() + 1);

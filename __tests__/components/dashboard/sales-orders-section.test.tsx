@@ -148,6 +148,91 @@ describe("SalesOrdersSection", () => {
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
+  it("shows only matching status when filter is applied", () => {
+    const orders = [
+      { ...BASE_ORDER, id: "O1", status: "PENDING", name: "Alpha" },
+      { ...BASE_ORDER, id: "O2", status: "SCHEDULED", name: "Beta" },
+      { ...BASE_ORDER, id: "O3", status: "COMPLETED", name: "Gamma" },
+    ];
+    flushSync(() => {
+      root.render(
+        <SalesOrdersSection
+          orders={orders}
+          scheduleByOrderId={new Map()}
+          onEdit={vi.fn()}
+          onCreate={vi.fn()}
+        />,
+      );
+    });
+    const statusSelect = container.querySelector("select") as HTMLSelectElement;
+    flushSync(() => {
+      statusSelect.value = "SCHEDULED";
+      statusSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Beta");
+    expect(container.textContent).not.toContain("Gamma");
+  });
+
+  it("toggles sort direction between Ascending and Descending", () => {
+    flushSync(() => {
+      root.render(
+        <SalesOrdersSection
+          orders={[BASE_ORDER]}
+          scheduleByOrderId={new Map()}
+          onEdit={vi.fn()}
+          onCreate={vi.fn()}
+        />,
+      );
+    });
+    expect(container.textContent).toContain("Ascending");
+    const toggleBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Ascending"),
+    )!;
+    flushSync(() => {
+      toggleBtn.click();
+    });
+    expect(container.textContent).toContain("Descending");
+  });
+
+  it("shows result count in filter bar", () => {
+    const orders = [
+      { ...BASE_ORDER, id: "O1" },
+      { ...BASE_ORDER, id: "O2", name: "Beta" },
+    ];
+    flushSync(() => {
+      root.render(
+        <SalesOrdersSection
+          orders={orders}
+          scheduleByOrderId={new Map()}
+          onEdit={vi.fn()}
+          onCreate={vi.fn()}
+        />,
+      );
+    });
+    expect(container.textContent).toContain("Showing 2 of 2 orders");
+  });
+
+  it("changes sort key via the Sort By select", () => {
+    flushSync(() => {
+      root.render(
+        <SalesOrdersSection
+          orders={[BASE_ORDER]}
+          scheduleByOrderId={new Map()}
+          onEdit={vi.fn()}
+          onCreate={vi.fn()}
+        />,
+      );
+    });
+    const selects = container.querySelectorAll("select");
+    // Sort By is the 2nd select (after Filter)
+    const sortSelect = selects[1] as HTMLSelectElement;
+    flushSync(() => {
+      sortSelect.value = "name";
+      sortSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(sortSelect.value).toBe("name");
+  });
+
   it("shows all orders when filter is ALL", () => {
     const orders = [
       { ...BASE_ORDER, id: "O1", status: "PENDING" },
