@@ -33,6 +33,17 @@ vi.mock("@/modules/auth/password-service", () => ({
 
 const prisma = {} as unknown as PrismaClient;
 
+function prismaWithFactories(factoryIds: string[] = ["factory-A1"]) {
+  return {
+    factory: {
+      findMany: vi.fn(async () => factoryIds.map((id) => ({ id }))),
+    },
+    user: {
+      update: vi.fn(async () => ({ id: "updated-user" })),
+    },
+  } as unknown as PrismaClient;
+}
+
 function ctx(
   role: RequestContext["user"]["role"],
   id = "actor-1",
@@ -157,6 +168,39 @@ describe("user-service", () => {
       });
       expect(out).toEqual({ id: "new-u" });
     });
+
+    it("SUPERADMIN assigns new ADMIN users to factories in their group", async () => {
+      const db = prismaWithFactories(["factory-A1", "factory-A2"]);
+      vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
+        role: "SUPERADMIN",
+        userId: "sa-1",
+        group: null,
+      });
+      vi.mocked(userRepo.createUser).mockResolvedValue({ id: "new-admin" });
+
+      await expect(
+        createUserService(ctx("SUPERADMIN"), db, {
+          username: "admin-a",
+          email: "admin-a@x.com",
+          role: "ADMIN",
+          group: "A",
+        }),
+      ).resolves.toEqual({ id: "new-admin" });
+
+      expect(db.factory.findMany).toHaveBeenCalledWith({
+        where: { productionType: "A" },
+        select: { id: true },
+      });
+      expect(db.user.update).toHaveBeenCalledWith({
+        where: { id: "new-admin" },
+        data: {
+          managedFactories: {
+            set: [{ id: "factory-A1" }, { id: "factory-A2" }],
+          },
+        },
+        select: { id: true },
+      });
+    });
   });
 
   describe("updateUserService", () => {
@@ -208,6 +252,36 @@ describe("user-service", () => {
       await expect(
         updateUserService(ctx("SUPERADMIN"), prisma, "u1", { group: "Type B" }),
       ).resolves.toEqual({ id: "u1" });
+    });
+
+    it("SUPERADMIN reassigns factory links when moving an ADMIN to another group", async () => {
+      const db = prismaWithFactories(["factory-B1", "factory-B2"]);
+      vi.mocked(userRepo.findUserById).mockResolvedValue({
+        id: "u1",
+        username: "admin-a",
+        email: "admin-a@x.com",
+        role: "ADMIN",
+        group: "A",
+      });
+      vi.mocked(userRepo.updateUser).mockResolvedValue({ id: "u1" });
+
+      await expect(
+        updateUserService(ctx("SUPERADMIN"), db, "u1", { group: "B" }),
+      ).resolves.toEqual({ id: "u1" });
+
+      expect(db.factory.findMany).toHaveBeenCalledWith({
+        where: { productionType: "B" },
+        select: { id: true },
+      });
+      expect(db.user.update).toHaveBeenCalledWith({
+        where: { id: "u1" },
+        data: {
+          managedFactories: {
+            set: [{ id: "factory-B1" }, { id: "factory-B2" }],
+          },
+        },
+        select: { id: true },
+      });
     });
 
     it("throws NotFound when repository update returns null", async () => {
