@@ -36,7 +36,10 @@ export default function DocsPage() {
     // 1. Inject Swagger UI CSS
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "https://unpkg.com/swagger-ui-dist@5/swagger-ui.css";
+    link.href = "https://unpkg.com/swagger-ui-dist@5.32.6/swagger-ui.css";
+    link.integrity =
+      "sha384-9Q2fpS+xeS4ffJy6CagnwoUl+4ldAYhOs9pgZuEKxypVModhmZFzeMlvVsAjf7uT";
+    link.crossOrigin = "anonymous";
     document.head.appendChild(link);
 
     const style = document.createElement("style");
@@ -89,7 +92,11 @@ export default function DocsPage() {
 
     // 2. Load Swagger UI bundle, then initialise
     const script = document.createElement("script");
-    script.src = "https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js";
+    script.src =
+      "https://unpkg.com/swagger-ui-dist@5.32.6/swagger-ui-bundle.js";
+    script.integrity =
+      "sha384-EYdOaiRwn44zNjrw+Tfs06qYz9BGQVo2f4/pLY5i7VorbjnZNhdplAbTBk8FXHUJ";
+    script.crossOrigin = "anonymous";
     script.onload = () => {
       if (!containerRef.current) return;
       window.SwaggerUIBundle({

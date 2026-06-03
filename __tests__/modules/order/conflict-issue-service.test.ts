@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   acceptProposal,
   createIssuesForFailedOrders,
+  createCancellationRequest,
+  rejectProposal,
+  updateIssueStatus,
   listConflictIssues,
 } from "@/modules/order/conflict-issue-service";
 import * as orderRepo from "@/infra/db/order-repository";
@@ -11,6 +14,7 @@ import * as scopeModule from "@/modules/auth/scope";
 import * as mailTemplate from "@/modules/mail/mail-template";
 import * as userRepo from "@/infra/db/user-repository";
 import * as strategy from "@/modules/schedule/strategy";
+import * as orderService from "@/modules/order/order-service";
 import type { PrismaClient } from "@/lib/generated/prisma";
 import type { RequestContext } from "@/modules/auth/request-context";
 import type { SchedulingConfig } from "@/modules/schedule/config";
@@ -26,8 +30,13 @@ vi.mock("@/infra/db/order-repository", async () => {
     findCompetingScheduledOrders: vi.fn(),
     findCompetingScheduledOrdersBatch: vi.fn(),
     updateOrder: vi.fn(),
+    findOrderById: vi.fn(),
   };
 });
+
+vi.mock("@/modules/order/order-service", () => ({
+  cancelOrdersAndReleaseCapacity: vi.fn(),
+}));
 
 vi.mock("@/infra/db/conflict-issue-repository", async () => {
   const actual = await vi.importActual<
@@ -748,5 +757,397 @@ describe("acceptProposal — OCC", () => {
     );
     // SALES path skips resolveActorScope entirely
     expect(scopeModule.resolveActorScope).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rejectProposal
+// ---------------------------------------------------------------------------
+
+describe("rejectProposal", () => {
+  const ORDER_UPDATED_AT = new Date("2026-05-21T08:00:00Z");
+
+  const adminCtx: RequestContext = {
+    user: { id: "ADMIN1", role: "ADMIN", username: "admin-A" },
+    requestId: "req-1",
+  };
+
+  function makeComment(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "C1",
+      issueId: "ISSUE1",
+      authorId: "SALES1",
+      body: "Please cancel",
+      proposal: {
+        proposal: { kind: "CANCEL" },
+        expectedOrderUpdatedAt: ORDER_UPDATED_AT.toISOString(),
+        status: "PENDING",
+      },
+      editedAt: null,
+      createdAt: new Date(),
+      issue: {
+        id: "ISSUE1",
+        orderId: "O1",
+        status: conflictRepo.ConflictIssueStatus.IN_DISCUSSION,
+        order: {
+          type: "A",
+          updatedAt: ORDER_UPDATED_AT,
+          quantity: 100,
+          dueDate: new Date(),
+        },
+      },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    vi.mocked(conflictRepo.findConflictIssueById).mockResolvedValue({
+      id: "ISSUE1",
+      orderId: "O1",
+      assigneeId: "SALES1",
+      status: conflictRepo.ConflictIssueStatus.IN_DISCUSSION,
+      order: { type: "A", updatedAt: ORDER_UPDATED_AT },
+    });
+    vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
+      role: "ADMIN",
+      userId: "ADMIN1",
+      factoryIds: ["F1"],
+      productionType: "A",
+      group: "A",
+    });
+    vi.mocked(conflictRepo.updateCommentProposalStatus).mockResolvedValue(
+      undefined as unknown as Awaited<
+        ReturnType<typeof conflictRepo.updateCommentProposalStatus>
+      >,
+    );
+    vi.mocked(conflictRepo.createConflictIssueEvent).mockResolvedValue(
+      undefined as unknown as Awaited<
+        ReturnType<typeof conflictRepo.createConflictIssueEvent>
+      >,
+    );
+  });
+
+  it("rejects a pending proposal and writes PROPOSAL_REJECTED event", async () => {
+    vi.mocked(conflictRepo.findCommentById).mockResolvedValue(
+      makeComment() as unknown as Awaited<
+        ReturnType<typeof conflictRepo.findCommentById>
+      >,
+    );
+    await expect(
+      rejectProposal(adminCtx, prisma, "C1"),
+    ).resolves.toBeUndefined();
+    expect(conflictRepo.updateCommentProposalStatus).toHaveBeenCalledWith(
+      prisma,
+      "C1",
+      "REJECTED",
+    );
+    expect(conflictRepo.createConflictIssueEvent).toHaveBeenCalledWith(
+      prisma,
+      expect.objectContaining({
+        type: conflictRepo.ConflictIssueEventType.PROPOSAL_REJECTED,
+      }),
+    );
+  });
+
+  it("throws when the author tries to reject their own proposal", async () => {
+    vi.mocked(conflictRepo.findCommentById).mockResolvedValue(
+      makeComment({ authorId: "ADMIN1" }) as unknown as Awaited<
+        ReturnType<typeof conflictRepo.findCommentById>
+      >,
+    );
+    await expect(rejectProposal(adminCtx, prisma, "C1")).rejects.toThrow(
+      /your own proposal/i,
+    );
+    expect(conflictRepo.updateCommentProposalStatus).not.toHaveBeenCalled();
+  });
+
+  it("throws 409 when proposal is already REJECTED", async () => {
+    vi.mocked(conflictRepo.findCommentById).mockResolvedValue(
+      makeComment({
+        proposal: {
+          proposal: { kind: "CANCEL" },
+          expectedOrderUpdatedAt: ORDER_UPDATED_AT.toISOString(),
+          status: "REJECTED",
+        },
+      }) as unknown as Awaited<ReturnType<typeof conflictRepo.findCommentById>>,
+    );
+    await expect(rejectProposal(adminCtx, prisma, "C1")).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
+  it("throws when comment has no proposal", async () => {
+    vi.mocked(conflictRepo.findCommentById).mockResolvedValue(
+      makeComment({ proposal: null }) as unknown as Awaited<
+        ReturnType<typeof conflictRepo.findCommentById>
+      >,
+    );
+    await expect(rejectProposal(adminCtx, prisma, "C1")).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// updateIssueStatus
+// ---------------------------------------------------------------------------
+
+describe("updateIssueStatus", () => {
+  const ORDER_UPDATED_AT = new Date("2026-05-21T08:00:00Z");
+
+  const adminCtx: RequestContext = {
+    user: { id: "ADMIN1", role: "ADMIN", username: "admin-A" },
+    requestId: "req-1",
+  };
+
+  beforeEach(() => {
+    vi.mocked(conflictRepo.findConflictIssueById).mockResolvedValue({
+      id: "ISSUE1",
+      orderId: "O1",
+      assigneeId: "SALES1",
+      status: conflictRepo.ConflictIssueStatus.OPEN,
+      order: { type: "A", updatedAt: ORDER_UPDATED_AT },
+    });
+    vi.mocked(scopeModule.resolveActorScope).mockResolvedValue({
+      role: "ADMIN",
+      userId: "ADMIN1",
+      factoryIds: ["F1"],
+      productionType: "A",
+      group: "A",
+    });
+    vi.mocked(conflictRepo.updateConflictIssue).mockResolvedValue(
+      undefined as unknown as Awaited<
+        ReturnType<typeof conflictRepo.updateConflictIssue>
+      >,
+    );
+    vi.mocked(conflictRepo.createConflictIssueEvent).mockResolvedValue(
+      undefined as unknown as Awaited<
+        ReturnType<typeof conflictRepo.createConflictIssueEvent>
+      >,
+    );
+    vi.mocked(orderService.cancelOrdersAndReleaseCapacity).mockResolvedValue(
+      undefined,
+    );
+  });
+
+  it("CLOSE: updates issue to CLOSED and writes CLOSED event", async () => {
+    await expect(
+      updateIssueStatus(adminCtx, prisma, "ISSUE1", { action: "CLOSE" }),
+    ).resolves.toBeUndefined();
+    expect(conflictRepo.updateConflictIssue).toHaveBeenCalledWith(
+      prisma,
+      "ISSUE1",
+      expect.objectContaining({
+        status: conflictRepo.ConflictIssueStatus.CLOSED,
+      }),
+    );
+    expect(conflictRepo.createConflictIssueEvent).toHaveBeenCalledWith(
+      prisma,
+      expect.objectContaining({
+        type: conflictRepo.ConflictIssueEventType.CLOSED,
+      }),
+    );
+  });
+
+  it("CLOSE: throws 409 when issue is already closed", async () => {
+    vi.mocked(conflictRepo.findConflictIssueById).mockResolvedValue({
+      id: "ISSUE1",
+      orderId: "O1",
+      assigneeId: "SALES1",
+      status: conflictRepo.ConflictIssueStatus.CLOSED,
+      order: { type: "A", updatedAt: ORDER_UPDATED_AT },
+    });
+    await expect(
+      updateIssueStatus(adminCtx, prisma, "ISSUE1", { action: "CLOSE" }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("REOPEN: reopens a closed issue and writes REOPENED event", async () => {
+    vi.mocked(conflictRepo.findConflictIssueById).mockResolvedValue({
+      id: "ISSUE1",
+      orderId: "O1",
+      assigneeId: "SALES1",
+      status: conflictRepo.ConflictIssueStatus.CLOSED,
+      order: { type: "A", updatedAt: ORDER_UPDATED_AT },
+    });
+    await expect(
+      updateIssueStatus(adminCtx, prisma, "ISSUE1", { action: "REOPEN" }),
+    ).resolves.toBeUndefined();
+    expect(conflictRepo.updateConflictIssue).toHaveBeenCalledWith(
+      prisma,
+      "ISSUE1",
+      expect.objectContaining({
+        status: conflictRepo.ConflictIssueStatus.IN_DISCUSSION,
+      }),
+    );
+    expect(conflictRepo.createConflictIssueEvent).toHaveBeenCalledWith(
+      prisma,
+      expect.objectContaining({
+        type: conflictRepo.ConflictIssueEventType.REOPENED,
+      }),
+    );
+  });
+
+  it("REOPEN: throws 409 when issue is not closed or resolved", async () => {
+    await expect(
+      updateIssueStatus(adminCtx, prisma, "ISSUE1", { action: "REOPEN" }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("REASSIGN: updates assignee when new user is a SALES user", async () => {
+    vi.mocked(userRepo.findUserById).mockResolvedValue({
+      id: "SALES2",
+      role: "SALES",
+    } as unknown as Awaited<ReturnType<typeof userRepo.findUserById>>);
+    await expect(
+      updateIssueStatus(adminCtx, prisma, "ISSUE1", {
+        action: "REASSIGN",
+        assigneeId: "SALES2",
+      }),
+    ).resolves.toBeUndefined();
+    expect(conflictRepo.updateConflictIssue).toHaveBeenCalledWith(
+      prisma,
+      "ISSUE1",
+      { assigneeId: "SALES2" },
+    );
+  });
+
+  it("REASSIGN: throws 400 when new assignee is not a SALES user", async () => {
+    vi.mocked(userRepo.findUserById).mockResolvedValue({
+      id: "ADMIN2",
+      role: "ADMIN",
+    } as unknown as Awaited<ReturnType<typeof userRepo.findUserById>>);
+    await expect(
+      updateIssueStatus(adminCtx, prisma, "ISSUE1", {
+        action: "REASSIGN",
+        assigneeId: "ADMIN2",
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("CANCEL_ORDER: cancels the order and closes the issue", async () => {
+    await expect(
+      updateIssueStatus(adminCtx, prisma, "ISSUE1", { action: "CANCEL_ORDER" }),
+    ).resolves.toBeUndefined();
+    expect(orderService.cancelOrdersAndReleaseCapacity).toHaveBeenCalledWith(
+      prisma,
+      ["O1"],
+    );
+    expect(conflictRepo.updateConflictIssue).toHaveBeenCalledWith(
+      prisma,
+      "ISSUE1",
+      expect.objectContaining({
+        status: conflictRepo.ConflictIssueStatus.CLOSED,
+      }),
+    );
+  });
+
+  it("CANCEL_ORDER: throws 409 when issue is already resolved", async () => {
+    vi.mocked(conflictRepo.findConflictIssueById).mockResolvedValue({
+      id: "ISSUE1",
+      orderId: "O1",
+      assigneeId: "SALES1",
+      status: conflictRepo.ConflictIssueStatus.RESOLVED,
+      order: { type: "A", updatedAt: ORDER_UPDATED_AT },
+    });
+    await expect(
+      updateIssueStatus(adminCtx, prisma, "ISSUE1", { action: "CANCEL_ORDER" }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createCancellationRequest
+// ---------------------------------------------------------------------------
+
+describe("createCancellationRequest", () => {
+  const salesCtx: RequestContext = {
+    user: { id: "SALES1", role: "SALES", username: "sales-1" },
+    requestId: "req-1",
+  };
+
+  beforeEach(() => {
+    vi.mocked(orderRepo.findOrderById).mockResolvedValue({
+      id: "O1",
+      name: "TestOrder",
+      type: "A",
+      status: orderRepo.OrderStatus.PENDING,
+      applicantId: "SALES1",
+      quantity: 100,
+      dueDate: new Date("2026-12-31"),
+    } as unknown as Awaited<ReturnType<typeof orderRepo.findOrderById>>);
+    vi.mocked(conflictRepo.findOpenIssueByOrderId).mockResolvedValue(null);
+    vi.mocked(conflictRepo.createConflictIssue).mockResolvedValue({
+      id: "ISSUE1",
+      number: 1,
+      createdAt: new Date(),
+    } as unknown as Awaited<
+      ReturnType<typeof conflictRepo.createConflictIssue>
+    >);
+    vi.mocked(conflictRepo.createConflictIssueEvent).mockResolvedValue(
+      undefined as unknown as Awaited<
+        ReturnType<typeof conflictRepo.createConflictIssueEvent>
+      >,
+    );
+    vi.mocked(factoryRepo.findFactoriesForIssueSnapshot).mockResolvedValue([]);
+    vi.mocked(mailTemplate.renderAndSend).mockResolvedValue(undefined);
+  });
+
+  it("creates a cancellation request issue for a PENDING order", async () => {
+    const result = await createCancellationRequest(salesCtx, prisma, "O1");
+    expect(result).toEqual({ issueId: "ISSUE1", issueNumber: 1 });
+    expect(conflictRepo.createConflictIssue).toHaveBeenCalledWith(
+      prisma,
+      expect.objectContaining({ orderId: "O1", assigneeId: "SALES1" }),
+    );
+  });
+
+  it("throws 404 when order is not found", async () => {
+    vi.mocked(orderRepo.findOrderById).mockResolvedValue(null);
+    await expect(
+      createCancellationRequest(salesCtx, prisma, "O1"),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("throws ForbiddenError when caller is not the applicant", async () => {
+    vi.mocked(orderRepo.findOrderById).mockResolvedValue({
+      id: "O1",
+      name: "Other",
+      type: "A",
+      status: orderRepo.OrderStatus.PENDING,
+      applicantId: "SALES2",
+      quantity: 10,
+      dueDate: new Date(),
+    } as unknown as Awaited<ReturnType<typeof orderRepo.findOrderById>>);
+    await expect(
+      createCancellationRequest(salesCtx, prisma, "O1"),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("throws 409 when order status is not PENDING or SCHEDULED", async () => {
+    vi.mocked(orderRepo.findOrderById).mockResolvedValue({
+      id: "O1",
+      name: "Done",
+      type: "A",
+      status: orderRepo.OrderStatus.COMPLETED,
+      applicantId: "SALES1",
+      quantity: 10,
+      dueDate: new Date(),
+    } as unknown as Awaited<ReturnType<typeof orderRepo.findOrderById>>);
+    await expect(
+      createCancellationRequest(salesCtx, prisma, "O1"),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("throws 409 when an open issue already exists for the order", async () => {
+    vi.mocked(conflictRepo.findOpenIssueByOrderId).mockResolvedValue({
+      id: "EXISTING",
+      status: conflictRepo.ConflictIssueStatus.OPEN,
+    } as unknown as Awaited<
+      ReturnType<typeof conflictRepo.findOpenIssueByOrderId>
+    >);
+    await expect(
+      createCancellationRequest(salesCtx, prisma, "O1"),
+    ).rejects.toMatchObject({ status: 409 });
   });
 });

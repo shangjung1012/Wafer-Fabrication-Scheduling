@@ -141,7 +141,7 @@ export default function PermissionsPage() {
   const groupOptions = useMemo(() => {
     const s = new Set<string>();
     for (const it of items) if (it.group) s.add(it.group);
-    return Array.from(s).sort();
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
   }, [items]);
 
   const loadUsers = useCallback(
