@@ -1,4 +1,5 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/quality_gate?project=shangjung1012_Wafer-Fabrication-Scheduling)](https://sonarcloud.io/summary/new_code?id=shangjung1012_Wafer-Fabrication-Scheduling)
+
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=shangjung1012_Wafer-Fabrication-Scheduling&metric=coverage)](https://sonarcloud.io/summary/new_code?id=shangjung1012_Wafer-Fabrication-Scheduling)
 [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=shangjung1012_Wafer-Fabrication-Scheduling&metric=bugs)](https://sonarcloud.io/summary/new_code?id=shangjung1012_Wafer-Fabrication-Scheduling)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=shangjung1012_Wafer-Fabrication-Scheduling&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=shangjung1012_Wafer-Fabrication-Scheduling)
