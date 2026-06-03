@@ -59,6 +59,7 @@ import {
 import { renderAndSend } from "@/modules/mail/mail-template";
 import { issueCreatedTemplate } from "@/modules/mail/templates/issue-created";
 import { cancelRequestTemplate } from "@/modules/mail/templates/cancel-request";
+import { issuesDigestTemplate } from "@/modules/mail/templates/issues-digest";
 import { cancelOrdersAndReleaseCapacity } from "@/modules/order/order-service";
 
 // ---------------------------------------------------------------------------
@@ -1288,6 +1289,22 @@ export async function createIssuesForFailedOrdersTx(
       newIssuesData.map((d) => d.orderId),
     );
 
+    // Accumulate per-recipient digest: one email per recipient covering all failed orders
+    const digestByEmail = new Map<
+      string,
+      {
+        email: string;
+        username: string | null;
+        issues: Array<{
+          orderName: string;
+          orderQuantity: number;
+          dueDate: string;
+          deficit: number;
+          issueNumber: number;
+        }>;
+      }
+    >();
+
     for (const issue of createdIssues) {
       const meta = metadataMap.get(issue.orderId);
       if (!meta) continue;
@@ -1302,28 +1319,42 @@ export async function createIssuesForFailedOrdersTx(
         } as Prisma.InputJsonValue,
       });
 
-      // Prepare deferred email dispatches with DB-generated issue.number
+      // Accumulate into digest map keyed by recipient email
       const dueDateString = toIsoDateOnly(meta.order.dueDate);
       const issueNumber = issue.number;
 
-      meta.uniqueRecipients.forEach((r) => {
-        emailsToDispatch.push(() =>
-          renderAndSend(issueCreatedTemplate, {
-            orderName: meta.order.name,
-            orderQuantity: meta.order.quantity,
-            dueDate: dueDateString,
-            deficit: meta.deficit,
-            issueNumber,
-            recipientEmail: r.email,
-            recipientUsername: r.username,
-          }).catch((err) => {
-            console.error(
-              `[createIssuesForFailedOrders] Email failed for order ${meta.order.id} → ${r.email}:`,
-              err,
-            );
-          }),
-        );
-      });
+      for (const r of meta.uniqueRecipients) {
+        if (!digestByEmail.has(r.email)) {
+          digestByEmail.set(r.email, {
+            email: r.email,
+            username: r.username,
+            issues: [],
+          });
+        }
+        digestByEmail.get(r.email)!.issues.push({
+          orderName: meta.order.name,
+          orderQuantity: meta.order.quantity,
+          dueDate: dueDateString,
+          deficit: meta.deficit,
+          issueNumber,
+        });
+      }
+    }
+
+    // One digest email per unique recipient
+    for (const [, d] of digestByEmail) {
+      emailsToDispatch.push(() =>
+        renderAndSend(issuesDigestTemplate, {
+          recipientEmail: d.email,
+          recipientUsername: d.username,
+          issues: d.issues,
+        }).catch((err) => {
+          console.error(
+            `[createIssuesForFailedOrders] Digest email failed → ${d.email}:`,
+            err,
+          );
+        }),
+      );
     }
   }
 
