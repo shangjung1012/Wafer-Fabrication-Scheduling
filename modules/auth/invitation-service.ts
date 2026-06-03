@@ -9,6 +9,7 @@ import {
   usernameValidationMessage,
 } from "@/modules/auth/username";
 import { sendMail } from "@/modules/mail/mail-service";
+import { syncAdminFactoryAssignments } from "@/modules/users/user-service";
 
 const INVITATION_TTL_MS = 180 * 1000;
 
@@ -185,6 +186,14 @@ export async function createUserInvitation(
         group: true,
       },
     });
+    if (createdUser.role === "ADMIN") {
+      await syncAdminFactoryAssignments(
+        tx,
+        createdUser.id,
+        createdUser.role,
+        createdUser.group,
+      );
+    }
 
     await tx.userInvitation.create({
       data: {

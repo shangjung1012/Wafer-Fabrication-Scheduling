@@ -48,6 +48,10 @@ function createDb() {
       password: "hash",
     },
   ];
+  const factories: Row[] = [
+    { id: "factory-A1", productionType: "A" },
+    { id: "factory-A2", productionType: "A" },
+  ];
   const invitations: Row[] = [];
   let userSeq = 0;
   let invitationSeq = 0;
@@ -121,6 +125,25 @@ function createDb() {
             }
           }
           return project(deleted, select);
+        },
+      ),
+    },
+    factory: {
+      findMany: vi.fn(
+        async ({
+          where,
+          select,
+        }: {
+          where: { productionType?: string };
+          select?: Record<string, unknown>;
+        }) => {
+          return factories
+            .filter(
+              (item) =>
+                !where.productionType ||
+                item.productionType === where.productionType,
+            )
+            .map((item) => project(item, select));
         },
       ),
     },
@@ -276,6 +299,10 @@ describe("invitation-service", () => {
       username: null,
       password: null,
       email: "admin-a1@mail.shangjung.com",
+    });
+    expect(db.factory.findMany).toHaveBeenCalledWith({
+      where: { productionType: "A" },
+      select: { id: true },
     });
     expect(invitations[0].tokenHash).toMatch(/^[a-f0-9]{64}$/);
     expect(sendMail).toHaveBeenCalledWith(
