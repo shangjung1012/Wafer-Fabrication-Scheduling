@@ -71,3 +71,23 @@
 - **修改**：
   - **失敗快取**：`getEmailClient()` 在第一次建構失敗後設定 `emailClientInitFailed = true`，後續呼叫立即拋出 `MailConfigurationError`，不再重試建構子。將 24 × 100ms 降至 1 × 100ms。
   - **微任務延遲 (queueMicrotask)**：將 Email 派送邏輯包裹在 `queueMicrotask` 內，確保 `return { failedIds }` 在主執行緒上優先執行，前端取得 Response 後才處理 Email 發送。
+
+## 13. Cron Worker 優雅關閉 (Graceful Shutdown)
+
+- **原因**：`scripts/cron.ts` 在容器被終止時（SIGTERM/SIGINT），執行中的排程任務會被強制中斷，可能導致資料庫狀態不一致。
+- **修改**：註冊 `process.on("SIGTERM", ...)` 與 `process.on("SIGINT", ...)` 處理器。收到訊號時依序停止 Cron Scheduler → 等待進行中的任務完成（最長 30 秒）→ 斷開 Prisma 連線 → 以 code 0 離開。
+
+## 14. Cron Worker 重疊執行防護
+
+- **原因**：`node-cron` 預設允許重疊執行。若 Auto Scheduler 或 Daily Execution 的執行時間超過觸發間隔，同一個 Job 會再次啟動，可能導致資料競爭。
+- **修改**：分別加入 `autoSchedulerRunning` 與 `dailyExecutionRunning` 布林旗標。每次觸發時先檢查旗標，若已有任務在執行則跳過該次 trigger。旗標在 `finally` 區塊中確實清除，確保例外發生時不卡死。
+
+## 15. Cron Worker 啟動組態驗證
+
+- **原因**：缺少 `BUSINESS_TIMEZONE_OFFSET` 或 `REDIS_URL` 等必要環境變數時，Cron Worker 會在執行階段才拋出錯誤，難以定位問題。
+- **修改**：於模組初始化階段呼叫 `validateConfiguration()`，檢查必要環境變數是否存在。缺少時輸出明確錯誤訊息並以 code 1 退出行程（Fail-Fast）。
+
+## 16. Auto Scheduler 跳過午夜時段
+
+- **原因**：Auto Scheduler（每 2 小時執行）與 Daily Execution（每日 00:00 執行）在同一時間觸發，可能導致資料競爭。
+- **修改**：將 Auto Scheduler 的 Cron Expression 從 `0 */2 * * *` 改為 `0 2-22/2 * * *`，跳過 00:00 時段，保留 02:00–22:00 每 2 小時執行。
