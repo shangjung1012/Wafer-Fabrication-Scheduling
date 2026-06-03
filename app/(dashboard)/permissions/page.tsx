@@ -185,7 +185,7 @@ export default function PermissionsPage() {
       return;
     }
     const timer = window.setTimeout(() => {
-      void loadUsers();
+      loadUsers();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadUsers, router, session]);
@@ -260,7 +260,7 @@ export default function PermissionsPage() {
       }
 
       // refresh from server to get authoritative list (non-blocking)
-      void loadUsers();
+      loadUsers();
     } finally {
       setLoading(null);
     }
@@ -382,7 +382,7 @@ export default function PermissionsPage() {
       );
       cancelEdit();
       setNotice({ kind: "success", message: `${email} updated.` });
-      void loadUsers(roleFilter);
+      loadUsers(roleFilter);
     } finally {
       setLoading(null);
     }
@@ -700,7 +700,7 @@ export default function PermissionsPage() {
                             onChange={(e) => {
                               const val = e.target.value as Role | "";
                               setRoleFilter(val);
-                              void loadUsers(val);
+                              loadUsers(val);
                             }}
                             style={{
                               padding: "5px 8px",

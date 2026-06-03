@@ -299,7 +299,7 @@ function ProposalCard({
     return "Unknown proposal";
   };
 
-  void currentUserRole; // used for display checks in parent
+  // currentUserRole is passed from parent for display context
 
   return (
     <div
@@ -477,8 +477,6 @@ function ReplyBox({
     ? minSalesDelayDueDate(orderDueDate, new Date().toISOString().slice(0, 10))
     : undefined;
   const currentDueDateOnly = toDateOnlyUtc(orderDueDate);
-
-  void issueId;
 
   const handleSubmit = async () => {
     if (!body.trim()) {
@@ -989,7 +987,9 @@ function Sidebar({
                 as of {timeAgo(suggestions.computedAt)}
                 <button
                   type="button"
-                  onClick={() => void fetchSuggestions()}
+                  onClick={() => {
+                    fetchSuggestions();
+                  }}
                   style={{
                     marginLeft: 6,
                     background: "none",
@@ -1109,7 +1109,9 @@ function Sidebar({
                 <button
                   type="button"
                   disabled={actioning}
-                  onClick={() => void doCancelOrder()}
+                  onClick={() => {
+                    doCancelOrder();
+                  }}
                   style={{
                     display: "block",
                     width: "100%",
@@ -1133,7 +1135,7 @@ function Sidebar({
                   disabled={actioning}
                   onClick={() => {
                     setAdminAction("CLOSE");
-                    void setTimeout(doAdminAction, 0);
+                    setTimeout(doAdminAction, 0);
                   }}
                   style={{
                     display: "block",
@@ -1162,7 +1164,7 @@ function Sidebar({
                 disabled={actioning}
                 onClick={() => {
                   setAdminAction("REOPEN");
-                  void setTimeout(doAdminAction, 0);
+                  setTimeout(doAdminAction, 0);
                 }}
                 style={{
                   display: "block",
@@ -1290,7 +1292,7 @@ export function IssueDetailPanel({
   useEffect(() => {
     if (session === undefined || session === null) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetchIssue sets loading/error state before the async fetch; this is intentional
-    void fetchIssue();
+    fetchIssue();
   }, [session, issueNumber, fetchIssue]);
 
   if (session === undefined) {
@@ -1431,7 +1433,6 @@ export function IssueDetailPanel({
                   bg: "#f3f4f6",
                   color: "#374151",
                 };
-                void rc;
                 const isOwn = comment.authorId === session.user.id;
 
                 return (
@@ -1500,7 +1501,9 @@ export function IssueDetailPanel({
                           commentAuthorId={comment.authorId}
                           currentUserRole={role}
                           issueStatus={issue.status}
-                          onAction={() => void fetchIssue()}
+                          onAction={() => {
+                            fetchIssue();
+                          }}
                         />
                       )}
                     </div>
@@ -1516,7 +1519,9 @@ export function IssueDetailPanel({
                   orderDueDate={issue.orderDueDate}
                   currentUserRole={role}
                   issueStatus={issue.status}
-                  onSubmit={() => void fetchIssue()}
+                  onSubmit={() => {
+                    fetchIssue();
+                  }}
                 />
               </div>
             </div>
@@ -1533,7 +1538,9 @@ export function IssueDetailPanel({
               <Sidebar
                 issue={issue}
                 currentUserRole={role}
-                onAction={() => void fetchIssue()}
+                onAction={() => {
+                  fetchIssue();
+                }}
               />
             </div>
           </div>

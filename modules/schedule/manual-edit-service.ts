@@ -97,25 +97,23 @@ export async function applyAssignmentMoves(
     return { applied: 0 };
   }
 
+  if (expectedVersions) {
+    for (const [type, expected] of Object.entries(expectedVersions)) {
+      const current = await getScheduleVersion(type);
+      if (current !== expected) {
+        throw new Error(
+          `environment has changed: schedule was modified for type ${type}, please reload`,
+        );
+      }
+    }
+  }
+
   const types = await getAffectedOrderTypes(db, moves);
   if (types.length === 0) {
     return { applied: 0 };
   }
 
   return withScheduleLock(types, async () => {
-    if (expectedVersions) {
-      for (const type of types) {
-        if (expectedVersions[type] !== undefined) {
-          const current = await getScheduleVersion(type);
-          if (current !== expectedVersions[type]) {
-            throw new Error(
-              `environment has changed: schedule was modified for type ${type}, please reload`,
-            );
-          }
-        }
-      }
-    }
-
     const violations: ManualEditViolation[] = [];
 
     // 1. Fetch data

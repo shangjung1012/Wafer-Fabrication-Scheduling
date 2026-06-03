@@ -227,9 +227,12 @@ export async function applyScheduleTransaction(
   emailsToDispatch: Array<() => Promise<void>>;
 }> {
   return withScheduleLock(type, async () => {
+    const vBefore = await getScheduleVersion(type);
+    console.log(
+      `[OCC-APPLY] START type=${type}, currentVersion=${vBefore}, expectedVersion=${expectedVersion}`,
+    );
     if (expectedVersion !== undefined) {
-      const currentVersion = await getScheduleVersion(type);
-      if (expectedVersion !== currentVersion) {
+      if (expectedVersion !== vBefore) {
         throw new Error(
           "Schedule environment has changed. Please preview again.",
         );
@@ -242,7 +245,8 @@ export async function applyScheduleTransaction(
       operatorId,
     );
     if (expectedVersion !== undefined && previewId !== undefined) {
-      await incrementScheduleVersion(type);
+      const vAfter = await incrementScheduleVersion(type);
+      console.log(`[OCC-APPLY] DONE type=${type}, versionAfter=${vAfter}`);
       await deletePreview(previewId);
     }
     return result;
