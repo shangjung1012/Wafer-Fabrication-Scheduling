@@ -898,6 +898,7 @@ function DetailPanel({
                     <label
                       className="flex items-center justify-between gap-2 pt-2 mt-1 border-t border-gray-100 cursor-pointer"
                       onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
                     >
                       <span className="text-[10px] text-gray-600 leading-snug">
                         Lock schedule (excluded from auto-reschedule; not
@@ -919,6 +920,7 @@ function DetailPanel({
                     <label
                       className="flex items-center justify-between gap-2 pt-1 cursor-pointer"
                       onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
                     >
                       <span className="text-[10px] text-amber-600 leading-snug inline-flex items-center gap-1">
                         <Crown className="h-3 w-3 shrink-0" aria-hidden />
@@ -4562,8 +4564,15 @@ export default function SchedulePage() {
       {selectedCell && selectedCellData && selectedFactory && (
         <>
           <div
+            role="button"
+            aria-label="Close panel"
+            tabIndex={0}
             className="fixed inset-0 bg-black/10 z-40"
             onClick={() => setSelectedCell(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" || e.key === "Enter")
+                setSelectedCell(null);
+            }}
           />
           <DetailPanel
             cell={selectedCellData}

@@ -24,6 +24,18 @@ describe("SalesOrdersSection", () => {
     vi.clearAllMocks();
   });
 
+  const BASE_ORDER = {
+    id: "O1",
+    name: "Alpha Order",
+    type: "A",
+    status: "PENDING",
+    dueDate: "2026-12-31T00:00:00.000Z",
+    quantity: 100,
+    applicantId: "sales-1",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    lastModifiedById: null,
+  };
+
   it("shows FAILED orders and lets users filter by FAILED status", () => {
     flushSync(() => {
       root.render(
@@ -55,5 +67,103 @@ describe("SalesOrdersSection", () => {
 
     expect(container.textContent).toContain("FAILED");
     expect(statusFilter).toBeDefined();
+  });
+
+  it("renders the New Order button when orders array is empty", () => {
+    flushSync(() => {
+      root.render(
+        <SalesOrdersSection
+          orders={[]}
+          scheduleByOrderId={new Map()}
+          onEdit={vi.fn()}
+          onCreate={vi.fn()}
+        />,
+      );
+    });
+    const newOrderBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("New Order"),
+    );
+    expect(newOrderBtn).toBeDefined();
+    expect(container.textContent).toContain("My Orders");
+  });
+
+  it("renders the order name and status badge", () => {
+    flushSync(() => {
+      root.render(
+        <SalesOrdersSection
+          orders={[BASE_ORDER]}
+          scheduleByOrderId={new Map()}
+          onEdit={vi.fn()}
+          onCreate={vi.fn()}
+        />,
+      );
+    });
+    expect(container.textContent).toContain("Alpha Order");
+    expect(container.textContent).toContain("PENDING");
+  });
+
+  it("shows Edit button only for PENDING and SCHEDULED orders", () => {
+    const pending = { ...BASE_ORDER, id: "O1", status: "PENDING" };
+    const completed = {
+      ...BASE_ORDER,
+      id: "O2",
+      status: "COMPLETED",
+      name: "Done",
+    };
+    flushSync(() => {
+      root.render(
+        <SalesOrdersSection
+          orders={[pending, completed]}
+          scheduleByOrderId={new Map()}
+          onEdit={vi.fn()}
+          onCreate={vi.fn()}
+        />,
+      );
+    });
+    const editButtons = Array.from(container.querySelectorAll("button")).filter(
+      (b) => b.textContent?.trim() === "Edit",
+    );
+    expect(editButtons.length).toBe(1);
+  });
+
+  it("calls onCreate when the Create Order button is clicked", () => {
+    const onCreate = vi.fn();
+    flushSync(() => {
+      root.render(
+        <SalesOrdersSection
+          orders={[]}
+          scheduleByOrderId={new Map()}
+          onEdit={vi.fn()}
+          onCreate={onCreate}
+        />,
+      );
+    });
+    const createBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("New Order"),
+    );
+    expect(createBtn).toBeDefined();
+    flushSync(() => {
+      createBtn?.click();
+    });
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows all orders when filter is ALL", () => {
+    const orders = [
+      { ...BASE_ORDER, id: "O1", status: "PENDING" },
+      { ...BASE_ORDER, id: "O2", status: "SCHEDULED", name: "Beta" },
+    ];
+    flushSync(() => {
+      root.render(
+        <SalesOrdersSection
+          orders={orders}
+          scheduleByOrderId={new Map()}
+          onEdit={vi.fn()}
+          onCreate={vi.fn()}
+        />,
+      );
+    });
+    expect(container.textContent).toContain("Alpha Order");
+    expect(container.textContent).toContain("Beta");
   });
 });

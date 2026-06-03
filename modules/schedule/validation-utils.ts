@@ -1,4 +1,4 @@
-import { SchedulingConfig } from "@/modules/schedule/strategy";
+import { SchedulingConfig } from "@/modules/schedule/config";
 
 export function calculateOrderDeadline(
   dueDate: Date,
