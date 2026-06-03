@@ -3731,11 +3731,11 @@ export default function SchedulePage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 font-sans">
+    <div className="flex min-h-dvh flex-col bg-gray-50 font-sans lg:h-screen">
       {/* Top bar */}
-      <div className="flex-none bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="w-80 flex-shrink-0 overflow-hidden">
+      <div className="flex-none border-b border-gray-200 bg-white px-3 py-3 sm:px-4 lg:px-6 lg:py-4">
+        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 overflow-hidden lg:w-80 lg:flex-shrink-0">
             <h1 className="text-xl font-bold text-gray-900 truncate">
               Production Schedule
             </h1>
@@ -3744,9 +3744,9 @@ export default function SchedulePage() {
             </p>
           </div>
 
-          <div className="flex-1 flex items-center justify-center">
+          <div className="-mx-3 min-w-0 overflow-x-auto px-3 sm:-mx-4 sm:px-4 lg:mx-0 lg:flex lg:flex-1 lg:items-center lg:justify-center lg:overflow-visible lg:px-0">
             <nav
-              className="flex items-center gap-2 flex-wrap"
+              className="flex min-w-max items-center gap-1.5 lg:min-w-0 lg:flex-wrap lg:gap-2"
               aria-label="Dashboard navigation"
             >
               {/* determine active link */}
@@ -3759,14 +3759,14 @@ export default function SchedulePage() {
             </nav>
           </div>
 
-          <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1 bg-gray-50">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 rounded border border-gray-200 bg-gray-50 px-2 py-1 lg:max-w-[36rem] lg:flex-nowrap">
             <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
               Signed in as:
             </span>
-            <span className="text-xs font-semibold text-gray-800">
+            <span className="min-w-0 truncate text-xs font-semibold text-gray-800">
               {session.user.username}
             </span>
-            <span className="text-xs text-gray-500">
+            <span className="min-w-0 max-w-full truncate text-xs text-gray-500 lg:max-w-52">
               ({session.user.email})
             </span>
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
@@ -3783,7 +3783,7 @@ export default function SchedulePage() {
         </div>
 
         {/* Summary badges */}
-        <div className="flex items-center gap-2 text-xs">
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs lg:mt-2">
           {capacityConflicts > 0 && (
             <span className="flex items-center gap-1 bg-red-50 text-red-700 border border-red-200 rounded px-2 py-1 font-medium">
               <Zap className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -3807,7 +3807,7 @@ export default function SchedulePage() {
 
       {!isSales && (
         <div
-          className={`flex-none px-6 py-2 flex items-center gap-3 flex-wrap border-b text-xs ${
+          className={`flex-none px-3 py-2 sm:px-4 lg:px-6 flex items-center gap-3 flex-wrap border-b text-xs ${
             simMode
               ? "bg-amber-50 border-amber-200"
               : "bg-white border-gray-100"
@@ -3878,9 +3878,9 @@ export default function SchedulePage() {
       )}
 
       {/* Date range + schedule controls */}
-      <div className="flex-none px-6 py-3 border-b border-gray-100 bg-white">
+      <div className="flex-none border-b border-gray-100 bg-white px-3 py-3 sm:px-4 lg:px-6">
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <CommittedDateInput
               value={startDate}
               onCommit={handleStartDateCommit}
@@ -4019,7 +4019,7 @@ export default function SchedulePage() {
 
       {/* Preview banner */}
       {previewData && (
-        <div className="flex-none px-6 py-2 bg-indigo-50 border-b border-indigo-200 flex items-center gap-3">
+        <div className="flex-none bg-indigo-50 border-b border-indigo-200 px-3 py-2 sm:px-4 lg:px-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <span className="text-xs font-semibold text-indigo-700 shrink-0 inline-flex items-center gap-1">
             <Search className="h-3.5 w-3.5 shrink-0" aria-hidden />
             Preview · {previewData.algorithm}
@@ -4036,7 +4036,7 @@ export default function SchedulePage() {
               </span>
             )}
           </span>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:ml-auto">
             <button
               onClick={handleApplyPreview}
               disabled={
@@ -4067,7 +4067,7 @@ export default function SchedulePage() {
         </div>
       )}
       {previewError && (
-        <div className="flex-none px-6 py-2 bg-red-50 border-b border-red-200 text-xs text-red-700">
+        <div className="flex-none bg-red-50 border-b border-red-200 px-3 py-2 text-xs text-red-700 sm:px-4 lg:px-6">
           Preview failed: {previewError}
           <button
             type="button"
@@ -4082,7 +4082,7 @@ export default function SchedulePage() {
 
       {/* Edit-mode banner */}
       {editMode && (
-        <div className="flex-none px-6 py-2 bg-purple-50 border-b border-purple-200 flex items-center gap-3">
+        <div className="flex-none bg-purple-50 border-b border-purple-200 px-3 py-2 sm:px-4 lg:px-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <span className="text-xs font-semibold text-purple-700 shrink-0 inline-flex items-center gap-1">
             <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden />
             Edit mode
@@ -4099,7 +4099,7 @@ export default function SchedulePage() {
               </span>
             )}
           </span>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:ml-auto">
             <button
               onClick={handleSaveEdits}
               disabled={saveStatus === "saving" || hasPendingStaging}
@@ -4131,7 +4131,7 @@ export default function SchedulePage() {
 
       {/* Preview-driven FAILED hint — auto-issue + email fires on apply */}
       {previewData && previewData.unscheduledOrders.length > 0 && (
-        <div className="flex-none px-6 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
+        <div className="flex-none bg-amber-50 border-b border-amber-200 px-3 py-2 text-xs text-amber-800 sm:px-4 lg:px-6">
           {previewData.unscheduledOrders.length} order(s) cannot be scheduled —
           applying will automatically open conflict issues.
         </div>
@@ -4139,7 +4139,7 @@ export default function SchedulePage() {
 
       {/* Post-apply conflict notice — persistent until dismissed */}
       {applyConflictNotice && (
-        <div className="flex-none px-6 py-2 bg-amber-100 border-b border-amber-300 flex items-center justify-between gap-3 text-xs text-amber-900">
+        <div className="flex-none bg-amber-100 border-b border-amber-300 px-3 py-2 sm:px-4 lg:px-6 flex flex-col gap-3 text-xs text-amber-900 sm:flex-row sm:items-center sm:justify-between">
           <span className="inline-flex items-start gap-2">
             <AlertTriangle
               className="h-4 w-4 shrink-0 text-amber-700 mt-0.5"
@@ -4170,58 +4170,60 @@ export default function SchedulePage() {
       )}
 
       {/* Legend */}
-      <div className="flex-none px-6 py-2 flex items-center gap-4 text-xs text-gray-500 bg-white border-b border-gray-100">
-        <span className="font-medium">Legend:</span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-blue-400 inline-block" />{" "}
-          Normal
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-yellow-400 inline-block" />{" "}
-          High load (&gt;80%)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" /> Due
-          date conflict
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" />{" "}
-          Capacity exceeded
-        </span>
-        <span className="flex items-center gap-1.5">
-          <AlertTriangle
-            className="h-3 w-3 shrink-0 text-amber-600"
-            aria-hidden
-          />
-          Conflict
-        </span>
-        <span className="flex items-center gap-1.5">
-          <ArrowDownUp
-            className="h-3 w-3 shrink-0 text-purple-500"
-            aria-hidden
-          />
-          Rescheduled
-        </span>
-        <span className="flex items-center gap-1.5">
-          <Plus className="h-3 w-3 shrink-0 text-emerald-600" aria-hidden />
-          Newly placed
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="text-[10px] font-bold text-gray-500">×N</span> Order
-          count
-        </span>
-        <span className="flex items-center gap-1.5">
-          <Lock className="h-3 w-3 shrink-0 text-gray-600" aria-hidden />
-          Fixed
-        </span>
-        <span className="flex items-center gap-1.5">
-          <Crown className="h-3 w-3 shrink-0 text-amber-600" aria-hidden />
-          Prioritized
-        </span>
+      <div className="flex-none overflow-x-auto border-b border-gray-100 bg-white px-3 py-2 text-xs text-gray-500 sm:px-4 lg:px-6">
+        <div className="flex min-w-max items-center gap-4">
+          <span className="font-medium">Legend:</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm bg-blue-400 inline-block" />{" "}
+            Normal
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm bg-yellow-400 inline-block" />{" "}
+            High load (&gt;80%)
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" />{" "}
+            Due date conflict
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" />{" "}
+            Capacity exceeded
+          </span>
+          <span className="flex items-center gap-1.5">
+            <AlertTriangle
+              className="h-3 w-3 shrink-0 text-amber-600"
+              aria-hidden
+            />
+            Conflict
+          </span>
+          <span className="flex items-center gap-1.5">
+            <ArrowDownUp
+              className="h-3 w-3 shrink-0 text-purple-500"
+              aria-hidden
+            />
+            Rescheduled
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Plus className="h-3 w-3 shrink-0 text-emerald-600" aria-hidden />
+            Newly placed
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold text-gray-500">×N</span>{" "}
+            Order count
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Lock className="h-3 w-3 shrink-0 text-gray-600" aria-hidden />
+            Fixed
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Crown className="h-3 w-3 shrink-0 text-amber-600" aria-hidden />
+            Prioritized
+          </span>
+        </div>
       </div>
 
       {/* Gantt body */}
-      <div className="flex-1 overflow-hidden flex">
+      <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
         {!loading && !fetchError && data ? (
           <DndContext
             sensors={sensors}
@@ -4276,7 +4278,7 @@ export default function SchedulePage() {
                 }
               />
             )}
-            <div className="flex-1 overflow-auto">
+            <div className="min-h-[60vh] flex-1 overflow-auto lg:min-h-0">
               {editMode && (
                 <div className="px-4 py-2 border-b border-amber-200 bg-amber-50/90">
                   <div className="text-[11px] font-semibold text-amber-950">

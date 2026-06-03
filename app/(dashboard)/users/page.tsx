@@ -257,9 +257,25 @@ export default function UsersPage() {
       </header>
 
       <section style={sessionBarStyle}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            minWidth: 0,
+            flexWrap: "wrap",
+          }}
+        >
           <Users size={16} />
-          <strong style={{ fontSize: 13 }}>{session.user.username}</strong>
+          <strong
+            style={{
+              fontSize: 13,
+              minWidth: 0,
+              overflowWrap: "anywhere",
+            }}
+          >
+            {session.user.username}
+          </strong>
           <RoleBadge role={session.user.role} />
           {session.user.group && (
             <span style={{ color: "#475569", fontSize: 12 }}>
@@ -376,7 +392,14 @@ export default function UsersPage() {
               Pending means the recipient has not set a username and password.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
             <select
               value={roleFilter}
               onChange={(e) => {
@@ -410,7 +433,7 @@ export default function UsersPage() {
           </div>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
+        <div style={tableScrollWrapStyle}>
           <table style={tableStyle}>
             <thead>
               <tr>
@@ -480,6 +503,7 @@ const navStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 8,
   flexWrap: "wrap",
+  maxWidth: "100%",
 };
 
 const navLinkStyle: React.CSSProperties = {
@@ -510,6 +534,14 @@ const sessionBarStyle: React.CSSProperties = {
   borderRadius: 8,
   padding: 12,
   marginBottom: 16,
+};
+
+const tableScrollWrapStyle: React.CSSProperties = {
+  maxWidth: "100%",
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
+  border: "1px solid #eef2f7",
+  borderRadius: 6,
 };
 
 const messageStyle: React.CSSProperties = {

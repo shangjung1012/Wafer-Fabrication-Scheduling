@@ -718,8 +718,8 @@ export default function DashboardPage() {
         topSection={<DashboardSummary statusCounts={statusCounts} />}
         leftSection={leftSection}
         rightSection={rightSection}
-        leftSectionClassName="flex-[5]"
-        rightSectionClassName="flex-[3]"
+        leftSectionClassName="lg:flex-[5]"
+        rightSectionClassName="lg:flex-[3]"
         onBack={() => router.push("/visualization")}
       />
 
