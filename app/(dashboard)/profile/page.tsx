@@ -3,6 +3,7 @@
 import { Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  getPostLogoutLoginPath,
   logoutClientAuthSession,
   persistClientAuthSession,
   type ClientAuthSession,
@@ -220,7 +221,7 @@ function ProfilePageInner() {
 
   useEffect(() => {
     if (session === undefined) return;
-    if (session === null) router.replace("/login");
+    if (session === null) router.replace(getPostLogoutLoginPath());
   }, [session, router]);
 
   const handleEmailChange = useCallback(
@@ -296,7 +297,7 @@ function ProfilePageInner() {
 
   const handleLogout = useCallback(async () => {
     await logoutClientAuthSession();
-    router.replace("/login");
+    router.replace(getPostLogoutLoginPath());
   }, [router]);
 
   if (session === undefined)

@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { type ClientAuthSession } from "@/modules/auth/client-session";
+import {
+  type ClientAuthSession,
+  getPostLogoutLoginPath,
+} from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 
 type Role = ClientAuthSession["user"]["role"];
@@ -1259,7 +1262,7 @@ export function IssueDetailPanel({
   const role: Role = session?.user.role ?? "SALES";
 
   useEffect(() => {
-    if (session === null) router.replace("/login");
+    if (session === null) router.replace(getPostLogoutLoginPath());
   }, [router, session]);
 
   const [issue, setIssue] = useState<IssueDetail | null>(null);

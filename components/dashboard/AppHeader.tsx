@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
-import { logoutClientAuthSession } from "@/modules/auth/client-session";
+import {
+  getPostLogoutLoginPath,
+  logoutClientAuthSession,
+} from "@/modules/auth/client-session";
 
 const NAV = [
   { label: "Orders", href: "/orders" },
@@ -37,7 +40,7 @@ export function AppHeader({
 
   const handleLogout = async () => {
     await logoutClientAuthSession();
-    router.replace("/login");
+    router.replace(getPostLogoutLoginPath());
   };
 
   return (

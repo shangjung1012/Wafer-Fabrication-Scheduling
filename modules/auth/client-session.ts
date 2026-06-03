@@ -10,6 +10,8 @@ export type ClientAuthSession = {
   user: ClientAuthUser;
 };
 
+const POST_LOGOUT_LOGIN_PATH_KEY = "post_logout_login_path";
+
 const AUTH_USER_KEY = "auth_user";
 const AUTH_ACCESS_TOKEN_KEY = "auth_access_token";
 const AUTH_REFRESH_TOKEN_KEY = "auth_refresh_token";
@@ -49,6 +51,28 @@ export function persistClientAuthSession(session: ClientAuthSession): void {
   storage.removeItem(AUTH_ACCESS_TOKEN_KEY);
   storage.removeItem(AUTH_REFRESH_TOKEN_KEY);
   emitClientAuthSessionChange();
+}
+
+export type PostLogoutLoginPath = "/login" | "/login-demo";
+
+export function setPostLogoutLoginPath(path: PostLogoutLoginPath): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(POST_LOGOUT_LOGIN_PATH_KEY, path);
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+export function getPostLogoutLoginPath(): PostLogoutLoginPath {
+  if (typeof window === "undefined") return "/login";
+  try {
+    const raw = window.sessionStorage.getItem(POST_LOGOUT_LOGIN_PATH_KEY);
+    if (raw === "/login-demo") return "/login-demo";
+    return "/login";
+  } catch {
+    return "/login";
+  }
 }
 
 export function clearClientAuthSession(): void {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
+  getPostLogoutLoginPath,
   logoutClientAuthSession,
   type ClientAuthSession,
 } from "@/modules/auth/client-session";
@@ -363,7 +364,7 @@ export default function OrdersPage() {
   const isAdminOrSuper = isAdmin || isSuperAdmin;
 
   useEffect(() => {
-    if (session === null) router.replace("/login");
+    if (session === null) router.replace(getPostLogoutLoginPath());
   }, [router, session]);
 
   // ---- List Orders ----
@@ -495,7 +496,7 @@ export default function OrdersPage() {
 
   const handleLogout = useCallback(async () => {
     await logoutClientAuthSession();
-    router.replace("/login");
+    router.replace(getPostLogoutLoginPath());
   }, [router]);
 
   // ---------------------------------------------------------------------------

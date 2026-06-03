@@ -47,6 +47,7 @@ vi.mock("@/modules/auth/use-client-auth-session", () => ({
 }));
 
 vi.mock("@/modules/auth/client-session", () => ({
+  getPostLogoutLoginPath: () => "/login",
   logoutClientAuthSession: () => mocks.logout(),
 }));
 

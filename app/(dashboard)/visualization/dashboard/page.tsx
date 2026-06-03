@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { addDays, format, parseISO } from "date-fns";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
+import { getPostLogoutLoginPath } from "@/modules/auth/client-session";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { DashboardSummary } from "@/components/dashboard/DashboardSummary";
 import { AdminPendingSection } from "../../../../components/dashboard/AdminPendingSection";
@@ -378,7 +379,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (session === null) {
-      router.replace("/login");
+      router.replace(getPostLogoutLoginPath());
       return;
     }
     if (session === undefined) return;

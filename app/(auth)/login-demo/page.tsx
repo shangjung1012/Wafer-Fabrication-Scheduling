@@ -24,15 +24,29 @@ type ApiResult = {
   body: unknown;
 };
 
+const QUICK_ACCOUNTS = [
+  { label: "SuperAdmin 1", username: "SA-1", email: "sa-1@mail.com" },
+  {
+    label: "Admin A1",
+    username: "admin-A1",
+    email: "admin-a1@mail.shangjung.com",
+  },
+  {
+    label: "Sales 1",
+    username: "sales-1",
+    email: "sales-1@mail.com",
+  },
+];
+
 async function parseResponse(response: Response): Promise<ApiResult> {
   const body = await response.json().catch(() => null);
   return { status: response.status, body };
 }
 
-export default function LoginPage() {
+export default function LoginDemoPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("SA-1");
+  const [password, setPassword] = useState("Password123!");
   const [showPassword, setShowPassword] = useState(false);
   const session = useClientAuthSession() ?? null;
   const [loading, setLoading] = useState<
@@ -60,7 +74,7 @@ export default function LoginPage() {
     setApiResult(null);
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch("/api/auth/login-demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -74,7 +88,7 @@ export default function LoginPage() {
 
       const nextSession = result.body as ClientAuthSession;
       persistClientAuthSession(nextSession);
-      setPostLogoutLoginPath("/login");
+      setPostLogoutLoginPath("/login-demo");
       router.replace("/visualization/dashboard");
     } finally {
       setLoading(null);
@@ -147,6 +161,11 @@ export default function LoginPage() {
     }
   };
 
+  const fillAccount = (nextUsername: string) => {
+    setUsername(nextUsername);
+    setPassword("Password123!");
+  };
+
   return (
     <main
       style={{
@@ -168,7 +187,7 @@ export default function LoginPage() {
         >
           <div>
             <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.2 }}>
-              Wafer Scheduling Auth
+              Wafer Scheduling Auth (login-demo)
             </h1>
             <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: 14 }}>
               Sign in once, then use the issued JWT across protected scheduling
@@ -215,6 +234,35 @@ export default function LoginPage() {
               You can sign in with either your username or email address.
             </p>
 
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                marginBottom: 16,
+              }}
+            >
+              {QUICK_ACCOUNTS.map((account) => (
+                <button
+                  key={account.username}
+                  type="button"
+                  onClick={() => fillAccount(account.username)}
+                  style={{
+                    border: "1px solid #cbd5e1",
+                    background:
+                      username === account.username ? "#e0f2fe" : "#fff",
+                    color: "#0f172a",
+                    borderRadius: 6,
+                    padding: "7px 9px",
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  {account.label}
+                </button>
+              ))}
+            </div>
+
             <label
               style={{
                 display: "block",
@@ -228,7 +276,7 @@ export default function LoginPage() {
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 autoComplete="username"
-                placeholder="Username or email"
+                placeholder="SA-1 or sa-1@mail.com"
                 style={{
                   display: "block",
                   width: "100%",
@@ -250,10 +298,10 @@ export default function LoginPage() {
                 marginBottom: 16,
               }}
             >
-              <label htmlFor="login-password">Password</label>
+              <label htmlFor="login-demo-password">Password</label>
               <span style={{ display: "flex", gap: 8, marginTop: 6 }}>
                 <input
-                  id="login-password"
+                  id="login-demo-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   type={showPassword ? "text" : "password"}
