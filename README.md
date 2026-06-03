@@ -1,3 +1,4 @@
+[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=shangjung1012_Wafer-Fabrication-Scheduling)](https://sonarcloud.io/summary/new_code?id=shangjung1012_Wafer-Fabrication-Scheduling)
 # 工廠訂單管理排程系統
 
 A Next.js + Prisma (PostgreSQL) wafer factory order scheduling system，包含訂單流程、RBAC、排程視覺化與 Azure Communication Services Email 邀請機制。

@@ -57,8 +57,8 @@ import {
   type SchedulingConfig,
 } from "@/modules/schedule/strategy";
 import { renderAndSend } from "@/modules/mail/mail-template";
-import { issueCreatedTemplate } from "@/modules/mail/templates/issue-created";
 import { cancelRequestTemplate } from "@/modules/mail/templates/cancel-request";
+import { issuesDigestTemplate } from "@/modules/mail/templates/issues-digest";
 import { cancelOrdersAndReleaseCapacity } from "@/modules/order/order-service";
 
 // ---------------------------------------------------------------------------
@@ -1246,6 +1246,59 @@ export async function prepareIssueCreationPrep(
   return { newIssuesData, eventsData, metadataMap, createdCount, skippedCount };
 }
 
+// ---------------------------------------------------------------------------
+// Digest email helpers
+// ---------------------------------------------------------------------------
+
+type DigestEntry = {
+  email: string;
+  username: string | null;
+  issues: Array<{
+    orderName: string;
+    orderQuantity: number;
+    dueDate: string;
+    deficit: number;
+    issueNumber: number;
+  }>;
+};
+
+/** Accumulate one issue into the per-recipient digest map. */
+function accumulateDigest(
+  digestByEmail: Map<string, DigestEntry>,
+  recipients: Array<{ email: string; username: string | null }>,
+  issueData: DigestEntry["issues"][number],
+): void {
+  for (const r of recipients) {
+    let entry = digestByEmail.get(r.email);
+    if (!entry) {
+      entry = { email: r.email, username: r.username, issues: [] };
+      digestByEmail.set(r.email, entry);
+    }
+    entry.issues.push(issueData);
+  }
+}
+
+/** Convert a digest map into deferred email thunks (one per recipient). */
+function buildDigestThunks(
+  digestByEmail: Map<string, DigestEntry>,
+): Array<() => Promise<void>> {
+  return Array.from(digestByEmail.values()).map(
+    (d) => () =>
+      renderAndSend(issuesDigestTemplate, {
+        recipientEmail: d.email,
+        recipientUsername: d.username,
+        issues: d.issues,
+      }).catch((err) => {
+        console.error(
+          `[createIssuesForFailedOrders] Digest email failed → ${d.email}:`,
+          err,
+        );
+      }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 /**
  * Phase 2+3 of issue creation: bulk writes and email prep.
  * Runs INSIDE the DB transaction. Accepts pre-computed data from
@@ -1288,43 +1341,31 @@ export async function createIssuesForFailedOrdersTx(
       newIssuesData.map((d) => d.orderId),
     );
 
+    // Accumulate per-recipient digest: one email per recipient covering all failed orders
+    const digestByEmail = new Map<string, DigestEntry>();
+
     for (const issue of createdIssues) {
       const meta = metadataMap.get(issue.orderId);
       if (!meta) continue;
 
-      // Attach OPENED event data
       eventsData.push({
         issueId: issue.id,
         actorId,
         type: ConflictIssueEventType.OPENED,
-        payload: {
-          snapshot: meta.contextSnapshot,
-        } as Prisma.InputJsonValue,
+        payload: { snapshot: meta.contextSnapshot } as Prisma.InputJsonValue,
       });
 
-      // Prepare deferred email dispatches with DB-generated issue.number
-      const dueDateString = toIsoDateOnly(meta.order.dueDate);
-      const issueNumber = issue.number;
-
-      meta.uniqueRecipients.forEach((r) => {
-        emailsToDispatch.push(() =>
-          renderAndSend(issueCreatedTemplate, {
-            orderName: meta.order.name,
-            orderQuantity: meta.order.quantity,
-            dueDate: dueDateString,
-            deficit: meta.deficit,
-            issueNumber,
-            recipientEmail: r.email,
-            recipientUsername: r.username,
-          }).catch((err) => {
-            console.error(
-              `[createIssuesForFailedOrders] Email failed for order ${meta.order.id} → ${r.email}:`,
-              err,
-            );
-          }),
-        );
+      accumulateDigest(digestByEmail, meta.uniqueRecipients, {
+        orderName: meta.order.name,
+        orderQuantity: meta.order.quantity,
+        dueDate: toIsoDateOnly(meta.order.dueDate),
+        deficit: meta.deficit,
+        issueNumber: issue.number,
       });
     }
+
+    // One digest email per unique recipient
+    emailsToDispatch.push(...buildDigestThunks(digestByEmail));
   }
 
   // Phase 3: Bulk Insert Events

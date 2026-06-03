@@ -99,10 +99,10 @@ function applyPendingIsPrioritizedByOrder(
   });
 }
 
-/** Default window: 10 calendar days starting 2 days before anchor (anchor - 2 through anchor + 7). */
+/** Default window: 15 calendar days starting 2 days before anchor (anchor - 2 through anchor + 12). */
 function defaultTimelineRange(anchorDayYmd: string) {
   const startDate = toDateStr(addDays(parseISO(anchorDayYmd.slice(0, 10)), -2));
-  const endDate = toDateStr(addDays(parseISO(startDate), 9));
+  const endDate = toDateStr(addDays(parseISO(startDate), 14));
   return { startDate, endDate };
 }
 
@@ -3357,7 +3357,7 @@ export default function SchedulePage() {
     setRefreshKey((k) => k + 1);
   };
 
-  // Load simulation state on mount and seed the timeline range (10-day default from anchor) before the first fetch.
+  // Load simulation state on mount and seed the timeline range (15-day default from anchor) before the first fetch.
   useEffect(() => {
     if (!session) return;
     fetch("/api/system/simulation", { credentials: "same-origin" })
