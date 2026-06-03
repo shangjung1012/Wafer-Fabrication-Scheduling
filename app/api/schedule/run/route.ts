@@ -1,40 +1,16 @@
 import { NextResponse } from "next/server";
-import {
-  CsrfError,
-  requireAuth,
-  UnauthorizedError,
-} from "@/modules/auth/require-auth";
+import { requireAuth } from "@/modules/auth/require-auth";
 import { z } from "zod";
 import { runScheduleWithIssues } from "@/modules/order/schedule-orchestrator";
 import { type SchedulingConfig } from "@/modules/schedule/strategy";
 import { getTime } from "@/lib/get-time";
 import { prisma } from "@/lib/prisma";
-import { ForbiddenError } from "@/modules/auth/rbac";
 import { assertCanManageScheduleType } from "@/modules/schedule/access-control";
 import { OrderTypeSchema } from "@/modules/order/order-validation";
-
-const SchedulingConfigSchema = z
-  .object({
-    startDate: z.coerce.date().optional(),
-    endDate: z.coerce.date().optional(),
-    frozenDays: z.number().int().min(0).default(0),
-    productionDays: z.number().int().min(1).default(1),
-    bufferDays: z.number().int().min(0).default(0),
-    reschedulePolicy: z
-      .enum(["GLOBAL_OPTIMIZE", "PRIORITY_RETAIN", "GAP_FILLING"])
-      .default("GAP_FILLING"),
-    algorithm: z.enum(["GREEDY_BEST_FIT"]).default("GREEDY_BEST_FIT"),
-    splittable: z.boolean().default(true),
-    targetOrderIds: z.array(z.string()).optional(),
-  })
-  .default({
-    frozenDays: 0,
-    productionDays: 1,
-    bufferDays: 0,
-    reschedulePolicy: "GAP_FILLING",
-    algorithm: "GREEDY_BEST_FIT",
-    splittable: true,
-  });
+import {
+  SchedulingConfigSchema,
+  handleScheduleError,
+} from "@/app/api/schedule/_shared";
 
 const RunScheduleSchema = z
   .object({
@@ -84,35 +60,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ message: "Schedule run successfully" });
   } catch (error: unknown) {
-    if (error instanceof Error && error.message?.includes("already running")) {
-      return NextResponse.json(
-        { code: "CONFLICT", message: error.message },
-        { status: 409 },
-      );
-    }
-    if (error instanceof UnauthorizedError) {
-      return NextResponse.json(
-        { code: "UNAUTHORIZED", message: error.message },
-        { status: 401 },
-      );
-    }
-    if (error instanceof CsrfError) {
-      return NextResponse.json(
-        { code: error.code, message: error.message },
-        { status: error.status },
-      );
-    }
-    if (error instanceof ForbiddenError) {
-      return NextResponse.json(
-        { code: error.code, message: error.message },
-        { status: error.status },
-      );
-    }
-
-    console.error("Error running schedule:", error);
-    return NextResponse.json(
-      { code: "INTERNAL_SERVER_ERROR", message: "Failed to run schedule" },
-      { status: 500 },
-    );
+    return handleScheduleError(error, "run schedule");
   }
 }

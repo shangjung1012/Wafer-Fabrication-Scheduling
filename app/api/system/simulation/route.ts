@@ -15,32 +15,33 @@ import {
   handleSimulationRevert,
 } from "@/modules/schedule/simulation-service";
 
+function handleSimulationError(error: unknown, context: string): NextResponse {
+  if (error instanceof UnauthorizedError) {
+    return NextResponse.json(
+      { code: "UNAUTHORIZED", message: error.message },
+      { status: 401 },
+    );
+  }
+  if (error instanceof CsrfError) {
+    return NextResponse.json(
+      { code: error.code, message: error.message },
+      { status: error.status },
+    );
+  }
+  console.error(`Error ${context}:`, error);
+  return NextResponse.json(
+    { code: "INTERNAL_SERVER_ERROR", message: `Failed to ${context}` },
+    { status: 500 },
+  );
+}
+
 export async function GET(request: Request) {
   try {
     await requireAuth(request);
     const state = await getSystemState(prisma);
     return NextResponse.json(state);
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      return NextResponse.json(
-        { code: "UNAUTHORIZED", message: error.message },
-        { status: 401 },
-      );
-    }
-    if (error instanceof CsrfError) {
-      return NextResponse.json(
-        { code: error.code, message: error.message },
-        { status: error.status },
-      );
-    }
-    console.error("Error fetching simulation state:", error);
-    return NextResponse.json(
-      {
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Failed to fetch simulation state",
-      },
-      { status: 500 },
-    );
+    return handleSimulationError(error, "fetch simulation state");
   }
 }
 
@@ -110,25 +111,6 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json(state);
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      return NextResponse.json(
-        { code: "UNAUTHORIZED", message: error.message },
-        { status: 401 },
-      );
-    }
-    if (error instanceof CsrfError) {
-      return NextResponse.json(
-        { code: error.code, message: error.message },
-        { status: error.status },
-      );
-    }
-    console.error("Error updating simulation state:", error);
-    return NextResponse.json(
-      {
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Failed to update simulation state",
-      },
-      { status: 500 },
-    );
+    return handleSimulationError(error, "update simulation state");
   }
 }

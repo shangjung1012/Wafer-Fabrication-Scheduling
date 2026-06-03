@@ -153,6 +153,56 @@ describe("mail-service", () => {
     });
   });
 
+  it("uses SMTP_FALLBACK_USER as from address when SMTP_FALLBACK_FROM_ADDRESS is unset", async () => {
+    process.env.SMTP_FALLBACK_ENABLED = "true";
+    process.env.SMTP_FALLBACK_HOST = "smtp.example.com";
+    process.env.SMTP_FALLBACK_PORT = "587";
+    process.env.SMTP_FALLBACK_SECURE = "false";
+    process.env.SMTP_FALLBACK_USER = "noreply@example.com";
+    process.env.SMTP_FALLBACK_PASSWORD = "pass";
+    delete process.env.SMTP_FALLBACK_FROM_ADDRESS;
+
+    await sendMail({
+      to: [{ address: "user@example.com" }],
+      subject: "Test",
+      plainText: "Hello",
+    });
+
+    expect(sendSmtpMail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: "noreply@example.com" }),
+    );
+  });
+
+  it("includes cc, bcc, and replyTo fields in SMTP send when provided", async () => {
+    process.env.SMTP_FALLBACK_ENABLED = "true";
+    process.env.SMTP_FALLBACK_HOST = "smtp.example.com";
+    process.env.SMTP_FALLBACK_PORT = "587";
+    process.env.SMTP_FALLBACK_USER = "noreply@example.com";
+    process.env.SMTP_FALLBACK_PASSWORD = "pass";
+    process.env.SMTP_FALLBACK_FROM_ADDRESS = "DoNotReply@example.com";
+
+    await sendMail({
+      to: [{ address: "to@example.com" }],
+      cc: [{ address: "cc@example.com" }],
+      bcc: [{ address: "bcc@example.com" }],
+      replyTo: [{ address: "reply@example.com" }],
+      subject: "Full Test",
+      plainText: "Body",
+      html: "<p>Body</p>",
+    });
+
+    expect(sendSmtpMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cc: expect.arrayContaining([
+          expect.objectContaining({ address: "cc@example.com" }),
+        ]),
+        bcc: expect.arrayContaining([
+          expect.objectContaining({ address: "bcc@example.com" }),
+        ]),
+      }),
+    );
+  });
+
   it("defaults SMTP fallback secure to true on port 465", async () => {
     process.env.SMTP_FALLBACK_ENABLED = "true";
     process.env.SMTP_FALLBACK_HOST = "smtp.gmail.com";

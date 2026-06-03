@@ -1,44 +1,73 @@
-[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=shangjung1012_Wafer-Fabrication-Scheduling)](https://sonarcloud.io/summary/new_code?id=shangjung1012_Wafer-Fabrication-Scheduling)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/quality_gate?project=shangjung1012_Wafer-Fabrication-Scheduling)](https://sonarcloud.io/summary/new_code?id=shangjung1012_Wafer-Fabrication-Scheduling)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=shangjung1012_Wafer-Fabrication-Scheduling&metric=coverage)](https://sonarcloud.io/summary/new_code?id=shangjung1012_Wafer-Fabrication-Scheduling)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=shangjung1012_Wafer-Fabrication-Scheduling&metric=bugs)](https://sonarcloud.io/summary/new_code?id=shangjung1012_Wafer-Fabrication-Scheduling)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=shangjung1012_Wafer-Fabrication-Scheduling&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=shangjung1012_Wafer-Fabrication-Scheduling)
+
 # 工廠訂單管理排程系統
 
-A Next.js + Prisma (PostgreSQL) wafer factory order scheduling system，包含訂單流程、RBAC、排程視覺化與 Azure Communication Services Email 邀請機制。
+A **Next.js 15 + Prisma (PostgreSQL) + Redis** wafer factory order scheduling system. Features include multi-role order workflow (SALES → ADMIN → SUPERADMIN), a drag-and-drop scheduling visualisation, auto-scheduling engine, conflict-issue management, and Azure Communication Services email notifications.
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Browser (Next.js App Router — React Server + Client)   │
+│  app/(auth)/   app/(dashboard)/   app/api/              │
+└────────────────────────┬────────────────────────────────┘
+                         │ HTTP / fetch
+┌────────────────────────▼────────────────────────────────┐
+│  Business Logic  (modules/)                             │
+│  auth · order · schedule · visualization · mail · users │
+└──────────┬──────────────────────────────────────────────┘
+           │
+┌──────────▼──────────┐   ┌──────────────┐
+│  infra/db (Prisma)  │   │  infra/redis │
+│  PostgreSQL         │   │  Redis       │
+└─────────────────────┘   └──────────────┘
+```
 
 ## Folder Structure
 
 ```text
 wafer-fabrication-scheduling/
-├── app/                    # Presentation layer: UI + API route handlers
-│   ├── (auth)/             # Login / set-password pages
-│   ├── (dashboard)/        # Orders / visualization / users UI
-│   ├── api/                # API endpoints (Next.js App Router)
-│   │   ├── auth/           # Login, refresh, logout, invitations
-│   │   ├── assignments/    # Manual assignment move / pending order placement API
-│   │   ├── conflict-issues/ # Scheduling conflict and cancellation issue workflow
-│   │   ├── docs/           # Swagger UI (http://localhost:3000/docs)
-│   │   ├── orders/
-│   │   ├── schedule/       # Schedule runner API
-│   │   ├── system/         # Health, simulation clock, auto-scheduler config
-│   │   ├── users/          # User invitation/listing API
-│   │   └── visualization/  # Timeline data API
-├── modules/                # Business logic layer
-│   ├── auth/               # JWT auth, RBAC, invitations
-│   ├── mail/               # Azure Email adapter
-│   ├── order/              # Order and conflict issue services
-│   ├── schedule/           # Scheduling engine
-│   ├── users/              # User listing/invitation service
-│   └── visualization/      # Timeline/read model service
+├── app/                        # Presentation layer: UI + API route handlers
+│   ├── (auth)/                 # Login / set-password / accept-invitation pages
+│   ├── (dashboard)/            # Orders, visualization, users, profile UI
+│   └── api/                    # API endpoints (Next.js App Router)
+│       ├── auth/               # Login, refresh, logout, register (disabled)
+│       ├── assignments/        # Manual assignment move / bulk operations
+│       ├── conflict-issues/    # Conflict & cancellation issue workflow
+│       ├── docs/               # Swagger UI — http://localhost:3000/docs
+│       ├── orders/             # Order CRUD + CSV import
+│       ├── schedule/           # Schedule preview & apply
+│       ├── system/             # Health, simulation clock, auto-scheduler config
+│       ├── users/              # Invitation / user management
+│       └── visualization/      # Timeline data API
+├── modules/                    # Business logic layer
+│   ├── auth/                   # JWT tokens, RBAC, sessions, invitations
+│   ├── mail/                   # Azure Email + SMTP fallback adapter
+│   ├── order/                  # Order service, conflict-issue service
+│   ├── schedule/               # Auto-scheduler, core engine, simulation
+│   ├── users/                  # User listing service
+│   └── visualization/          # Timeline / read-model service
 ├── infra/
-│   └── db/                 # DB access layer (repositories)
-├── lib/
-│   └── prisma.ts           # Prisma client singleton
+│   ├── db/                     # Prisma repository layer
+│   └── redis/                  # Schedule store, preview cache, distributed lock
+├── components/                 # Shared React components
+├── lib/                        # Prisma client singleton, date utils, Redis client
+├── __tests__/                  # Vitest unit & integration tests (>80 % coverage)
 ├── prisma/
 │   ├── schema.prisma
-│   ├── seed.ts             # Dev seed data
+│   ├── seed.ts                 # Idempotent dev seed
 │   └── migrations/
-├── api_spec.yml            # OpenAPI 3.0 spec (source of truth)
+├── api_spec.yml                # OpenAPI 3.0 spec (source of truth)
 ├── Dockerfile
 └── docker-compose.yml
 ```
+
+---
 
 ## Local Setup
 
@@ -64,7 +93,9 @@ AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING="endpoint=...;accesskey=..."
 AZURE_COMMUNICATION_EMAIL_SENDER_ADDRESS="DoNotReply@example.com"
 ```
 
-雲端 Redis 若啟用 Redis Cluster，需設定 `REDIS_CLUSTER="true"`。如需指定多個 cluster startup nodes，可用逗號分隔的 `REDIS_CLUSTER_NODES` 覆蓋 `REDIS_URL`。
+> **SMTP fallback** — set `SMTP_FALLBACK_ENABLED=true` and configure `SMTP_FALLBACK_HOST / PORT / USER / PASSWORD` to use SMTP instead of Azure Email.
+
+> **Redis Cluster** — set `REDIS_CLUSTER=true` and optionally `REDIS_CLUSTER_NODES` (comma-separated) for multi-node setups.
 
 ### 2. 啟動資料庫與 Redis
 
@@ -72,35 +103,23 @@ AZURE_COMMUNICATION_EMAIL_SENDER_ADDRESS="DoNotReply@example.com"
 docker compose up -d
 ```
 
-### 3. 執行 Migration
+### 3. 執行 Migration + 產生 Prisma client + Seed
 
 ```bash
-pnpm db:migrate
+pnpm db:migrate      # apply migrations (local dev)
+pnpm db:generate     # generate Prisma client
+pnpm db:seed         # seed test data (idempotent)
 ```
 
-### 4. 產生 Prisma client
+Seed 會建立以下測試帳號（密碼皆為 `Password123!`）：
 
-```bash
-pnpm db:generate
-```
+| Group | SUPERADMIN | Factories    | ADMIN            | SALES                 |
+| ----- | ---------- | ------------ | ---------------- | --------------------- |
+| A     | `sa-A`     | A1 / A2 / A3 | `admin-A1/A2/A3` | `sales-1` ~ `sales-3` |
+| B     | `sa-B`     | B1 / B2 / B3 | `admin-B1/B2/B3` | `sales-4` ~ `sales-6` |
+| C     | `sa-C`     | C1 / C2 / C3 | `admin-C1/C2/C3` | `sales-7` ~ `sales-9` |
 
-### 5. Seed 測試資料
-
-```bash
-pnpm db:seed
-```
-
-Seed 會建立以下測試資料（idempotent，可重複執行）：
-
-```
-Type A：SUPERADMIN(sa-A)、Factory A1/A2/A3、ADMIN(admin-A1/A2/A3)、SALES(sales-A)
-Type B：SUPERADMIN(sa-B)、Factory B1/B2/B3、ADMIN(admin-B1/B2/B3)、SALES(sales-B)
-Type C：SUPERADMIN(sa-C)、Factory C1/C2/C3、ADMIN(admin-C1/C2/C3)、SALES(sales-C)
-```
-
-Seed 帳號使用 `username` 登入，開發用預設密碼皆為 `Password123!`。
-
-### 6. 啟動開發伺服器
+### 4. 啟動開發伺服器
 
 ```bash
 pnpm dev
@@ -112,39 +131,134 @@ pnpm dev
 
 公開註冊已停用。使用者透過 SUPERADMIN 邀請建立：
 
-1. `SUPERADMIN` 在 `/users` 頁面邀請使用者（填入 `email`、`role`、`group`）。
+1. `SUPERADMIN` 在 `/users` 頁面邀請（填入 `email`、`role`、`group`）。
 2. 系統寄送 Azure Email，內含 180 秒有效的 `/set-password?token=...` 連結。
 3. 受邀者設定 `username` 與密碼後即可登入。
-4. `POST /api/auth/login` 使用 `username` 或 `email` / `password` 登入，取得 auth cookies。
+4. `POST /api/auth/login` 以 `username` 或 `email` + `password` 登入，取得 auth cookies。
 5. `POST /api/auth/refresh` 以 refresh token rotation 換發新 token。
-6. `POST /api/auth/logout` 撤銷 refresh token。
+6. `POST /api/auth/logout` 撤銷 session。
 
 ---
 
 ## API 文件
 
-開啟 **[http://localhost:3000/docs](http://localhost:3000/docs)**
+開啟 **[http://localhost:3000/docs](http://localhost:3000/docs)**（Swagger UI）。
 
-1. 到 **[http://localhost:3000/login](http://localhost:3000/login)** 登入。
-2. 複製 login response 內的 `accessToken` cookie。
-3. 在 docs 頁右上角 **Authorize** 輸入 `Bearer <accessToken>`。
-4. 展開任一 endpoint → **Try it out** → **Execute**。
+1. 到 `/login` 登入，取得 `accessToken`。
+2. 在 docs 頁右上角 **Authorize** 輸入 `Bearer <accessToken>`。
+3. 展開任一 endpoint → **Try it out** → **Execute**。
 
 OpenAPI spec：[`api_spec.yml`](./api_spec.yml)
 
 ---
 
+## Testing
+
+```bash
+pnpm test               # run all tests (Vitest)
+pnpm test:coverage      # run with coverage report (lcov + text)
+```
+
+Test suite: **>80% line coverage**, 300+ test cases across unit, mock-based service, and integration layers.
+
+| Layer              | What's tested                                                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Unit               | Pure functions: auth tokens, RBAC, scope, username validation, date utils                                                            |
+| Service (mocked)   | Auth service, order service, conflict-issue service, visualization, auto-scheduler, mail service                                     |
+| Components (jsdom) | React components: SalesOrdersSection, AdminPendingSection, DashboardSummary, ConflictIssueSection, OrderCsvDropZone, edit-cell chips |
+| Integration        | Schedule engine, Redis lock, DB repositories (requires running DB)                                                                   |
+
+CI runs the full suite on every PR targeting `main` (PostgreSQL 17 + Redis 7 service containers).
+
+---
+
+## Code Quality
+
+We maintain quality through multiple layers of automated checks, each catching a different class of problem.
+
+### 1. Pre-commit gate — ESLint + Prettier (Husky)
+
+Every `git commit` triggers a Husky hook that runs ESLint and Prettier before the commit is allowed to land locally. This means:
+
+- **Accessibility violations** (missing keyboard handlers, non-semantic interactive elements) are caught before code is even pushed.
+- **TypeScript type errors** surface immediately, not just in CI.
+- **Formatting** is enforced uniformly — no style debates in PRs.
+
+Config: [`eslint.config.mjs`](./eslint.config.mjs) extends `eslint-config-next/core-web-vitals` + `typescript`, which includes the `jsx-a11y` and `@typescript-eslint` rule sets.
+
+### 2. Pull Request gate — GitHub Actions CI (lint → test → build)
+
+Every PR targeting `main` must pass the full pipeline:
+
+```
+pnpm lint  →  pnpm vitest run --coverage  →  pnpm build  →  docker build
+```
+
+The job runs against **PostgreSQL 17** and **Redis 7** service containers so integration tests hit a real DB and real Redis, not mocks. A PR cannot be merged if any step fails.
+
+### 3. TypeScript strict mode
+
+`tsconfig.json` enables `strict: true`, which activates `strictNullChecks`, `noImplicitAny`, and the full suite of strict checks. Build failures from TypeScript are blocking — Next.js won't produce a production bundle if there are type errors.
+
+### 4. Test coverage — Vitest + v8
+
+```bash
+pnpm test:coverage   # generates coverage/lcov.info
+```
+
+- **>83% combined line + branch coverage** across ~300 test cases.
+- Coverage is measured by `@vitest/coverage-v8` (V8 native instrumentation — no Babel transforms, accurate branch tracking).
+- The lcov report is uploaded as a CI artifact and consumed by SonarCloud for the coverage badge.
+- Tests run in isolation: unit tests use mocks; integration tests (schedule engine, Redis lock, DB repositories) use real services spun up by the CI job.
+
+### 5. SonarCloud — continuous static analysis
+
+SonarCloud scans every push to `main` and `dev` and every PR via the CI pipeline. It checks:
+
+| Category            | What it catches                                                                       | Current rating |
+| ------------------- | ------------------------------------------------------------------------------------- | -------------- |
+| **Security**        | Injection risks, hardcoded secrets, missing SRI, unsafe regex (ReDoS)                 | A              |
+| **Reliability**     | Accessibility bugs (S1082), incorrect sort comparators (S2871), nested function depth | A              |
+| **Maintainability** | Cognitive complexity, dead code, void-operator misuse, architectural tangles          | A              |
+| **Coverage**        | Line + branch coverage delta on new code vs baseline                                  | >83%           |
+| **Duplications**    | Copy-paste blocks flagged for extraction                                              | <4%            |
+
+**Why the ratings are strong:**
+
+- The circular dependency between `modules/schedule/validation-utils.ts` and `strategy.ts` was resolved by importing `SchedulingConfig` directly from `config.ts`.
+- All `void fn()` floating-promise patterns were replaced with explicit calls, removing 18 S3735 HIGH-impact issues.
+- Bearer token parsing was rewritten without regex (no ReDoS risk).
+- Swagger UI CDN resources are pinned to a specific version with SHA-384 Subresource Integrity hashes.
+- Migration SQL files are excluded from analysis (`prisma/migrations/**`) since intentional schema-level DELETEs without WHERE are expected.
+
+SonarCloud badges at the top of this file reflect the latest `main` branch analysis.
+
+---
+
 ## Scripts
 
-| 指令               | 說明                               |
-| ------------------ | ---------------------------------- |
-| `pnpm dev`         | 啟動 Next.js dev server            |
-| `pnpm build`       | 建置 production                    |
-| `pnpm lint`        | 執行 ESLint                        |
-| `pnpm test`        | 執行 Vitest                        |
-| `pnpm format`      | 格式化程式碼（Prettier）           |
-| `pnpm db:migrate`  | 執行 Prisma migration（local dev） |
-| `pnpm db:deploy`   | 套用 migration（CI/production）    |
-| `pnpm db:generate` | 產生 Prisma client                 |
-| `pnpm db:seed`     | Seed 測試資料進 DB                 |
-| `pnpm db:studio`   | 開啟 Prisma Studio                 |
+| 指令                    | 說明                               |
+| ----------------------- | ---------------------------------- |
+| `pnpm dev`              | 啟動 Next.js dev server            |
+| `pnpm build`            | 建置 production                    |
+| `pnpm lint`             | 執行 ESLint                        |
+| `pnpm test`             | 執行 Vitest                        |
+| `pnpm test:coverage`    | 執行 Vitest + 產生 coverage report |
+| `pnpm format`           | 格式化程式碼（Prettier）           |
+| `pnpm db:migrate`       | 執行 Prisma migration（local dev） |
+| `pnpm db:deploy`        | 套用 migration（CI / production）  |
+| `pnpm db:generate`      | 產生 Prisma client                 |
+| `pnpm db:seed`          | Seed 測試資料進 DB                 |
+| `pnpm db:studio`        | 開啟 Prisma Studio                 |
+| `pnpm azure:env:update` | 更新 Azure Container App 環境變數  |
+
+---
+
+## Deployment
+
+The app is containerised with Docker. A GitHub Actions workflow builds and pushes the image; a separate `deploy-container-app.yml` workflow deploys to **Azure Container Apps**.
+
+```bash
+docker build -t wafer-scheduling-next .
+docker compose up          # local full-stack (Next.js + PostgreSQL + Redis)
+```

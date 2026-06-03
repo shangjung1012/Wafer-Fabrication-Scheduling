@@ -485,6 +485,45 @@ describe("invitation-service", () => {
     expect(sendMail).toHaveBeenCalledTimes(2);
   });
 
+  it("throws USER_NOT_FOUND when resending for a non-existent user", async () => {
+    const { db } = createDb();
+    await expect(
+      resendUserInvitation(ctx(), db as never, "does-not-exist"),
+    ).rejects.toMatchObject({ status: 404, code: "USER_NOT_FOUND" });
+  });
+
+  it("throws USER_ALREADY_ACTIVE when resending for a user who already set a password", async () => {
+    const { db, users } = createDb();
+    await createUserInvitation(ctx(), db as never, {
+      email: "admin-a1@mail.shangjung.com",
+      role: "ADMIN",
+      group: "A",
+    });
+    const user = users.find((u) => u.email === "admin-a1@mail.shangjung.com");
+    // Simulate user having set a password
+    if (user) user.password = "hashed";
+
+    await expect(
+      resendUserInvitation(ctx(), db as never, String(user?.id)),
+    ).rejects.toMatchObject({ status: 409, code: "USER_ALREADY_ACTIVE" });
+  });
+
+  it("verifyInvitation returns the invitation preview for a valid token", async () => {
+    const { db } = createDb();
+    const now = new Date();
+    await createUserInvitation(
+      ctx(),
+      db as never,
+      { email: "sales@example.com", role: "SALES", group: "A" },
+      now,
+    );
+    const token = lastInvitationToken();
+    const preview = await verifyInvitation(db as never, token, now);
+    expect(preview.email).toBe("sales@example.com");
+    expect(preview.role).toBe("SALES");
+    expect(preview.expiresAt).toBeInstanceOf(Date);
+  });
+
   it("keeps the previous invitation active when resend email delivery fails", async () => {
     const { db, invitations, users } = createDb();
     await createUserInvitation(ctx(), db as never, {
