@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  CsrfError,
-  requireAuth,
-  UnauthorizedError,
-} from "@/modules/auth/require-auth";
+import { requireAuth } from "@/modules/auth/require-auth";
 import { z } from "zod";
 import { applyScheduleTransactionWithIssues } from "@/modules/order/schedule-orchestrator";
 import {
@@ -13,8 +9,8 @@ import {
 import { getPreview } from "@/infra/redis/schedule-store";
 import { getTime } from "@/lib/get-time";
 import { prisma } from "@/lib/prisma";
-import { ForbiddenError } from "@/modules/auth/rbac";
 import { assertCanManageScheduleType } from "@/modules/schedule/access-control";
+import { handleScheduleError } from "@/app/api/schedule/_shared";
 
 function revivePreviewDates(raw: Record<string, unknown>): {
   config: SchedulingConfig;
@@ -120,38 +116,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ message: "Schedule applied successfully" });
   } catch (error: unknown) {
-    if (
-      error instanceof Error &&
-      (error.message?.includes("already running") ||
-        error.message?.includes("environment has changed"))
-    ) {
-      return NextResponse.json(
-        { code: "CONFLICT", message: error.message },
-        { status: 409 },
-      );
-    }
-    if (error instanceof UnauthorizedError) {
-      return NextResponse.json(
-        { code: "UNAUTHORIZED", message: error.message },
-        { status: 401 },
-      );
-    }
-    if (error instanceof CsrfError) {
-      return NextResponse.json(
-        { code: error.code, message: error.message },
-        { status: error.status },
-      );
-    }
-    if (error instanceof ForbiddenError) {
-      return NextResponse.json(
-        { code: error.code, message: error.message },
-        { status: error.status },
-      );
-    }
-    console.error("Error applying schedule:", error);
-    return NextResponse.json(
-      { code: "INTERNAL_SERVER_ERROR", message: "Failed to apply schedule" },
-      { status: 500 },
-    );
+    return handleScheduleError(error, "apply schedule");
   }
 }

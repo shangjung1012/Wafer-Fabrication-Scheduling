@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  CsrfError,
-  requireAuth,
-  UnauthorizedError,
-} from "@/modules/auth/require-auth";
+import { requireAuth } from "@/modules/auth/require-auth";
 import { z } from "zod";
 import { previewSchedule } from "@/modules/schedule/preview";
 import { type SchedulingConfig } from "@/modules/schedule/strategy";
@@ -12,10 +8,12 @@ import crypto from "crypto";
 import { OrderStatus } from "@/lib/generated/prisma";
 import { getTime } from "@/lib/get-time";
 import { prisma } from "@/lib/prisma";
-import { ForbiddenError } from "@/modules/auth/rbac";
 import { assertCanManageScheduleType } from "@/modules/schedule/access-control";
 import { OrderTypeSchema } from "@/modules/order/order-validation";
-import { SchedulingConfigSchema } from "@/app/api/schedule/_shared";
+import {
+  SchedulingConfigSchema,
+  handleScheduleError,
+} from "@/app/api/schedule/_shared";
 
 const PreviewScheduleSchema = z.object({
   type: OrderTypeSchema,
@@ -97,28 +95,6 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      return NextResponse.json(
-        { code: "UNAUTHORIZED", message: error.message },
-        { status: 401 },
-      );
-    }
-    if (error instanceof CsrfError) {
-      return NextResponse.json(
-        { code: error.code, message: error.message },
-        { status: error.status },
-      );
-    }
-    if (error instanceof ForbiddenError) {
-      return NextResponse.json(
-        { code: error.code, message: error.message },
-        { status: error.status },
-      );
-    }
-    console.error("Error generating preview:", error);
-    return NextResponse.json(
-      { code: "INTERNAL_SERVER_ERROR", message: "Failed to generate preview" },
-      { status: 500 },
-    );
+    return handleScheduleError(error, "generate preview");
   }
 }

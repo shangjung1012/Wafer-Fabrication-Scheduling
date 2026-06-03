@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { NextResponse } from "next/server";
+import { CsrfError, UnauthorizedError } from "@/modules/auth/require-auth";
+import { ForbiddenError } from "@/modules/auth/rbac";
 import { OrderTypeSchema } from "@/modules/order/order-validation";
 
 export const SchedulingConfigSchema = z
@@ -25,3 +28,43 @@ export const SchedulingConfigSchema = z
   });
 
 export const ScheduleTypeSchema = z.object({ type: OrderTypeSchema });
+
+/** Shared error handler for schedule API routes (run / preview / apply). */
+export function handleScheduleError(
+  error: unknown,
+  context: string,
+): NextResponse {
+  if (
+    error instanceof Error &&
+    (error.message?.includes("already running") ||
+      error.message?.includes("environment has changed"))
+  ) {
+    return NextResponse.json(
+      { code: "CONFLICT", message: error.message },
+      { status: 409 },
+    );
+  }
+  if (error instanceof UnauthorizedError) {
+    return NextResponse.json(
+      { code: "UNAUTHORIZED", message: error.message },
+      { status: 401 },
+    );
+  }
+  if (error instanceof CsrfError) {
+    return NextResponse.json(
+      { code: error.code, message: error.message },
+      { status: error.status },
+    );
+  }
+  if (error instanceof ForbiddenError) {
+    return NextResponse.json(
+      { code: error.code, message: error.message },
+      { status: error.status },
+    );
+  }
+  console.error(`Error in ${context}:`, error);
+  return NextResponse.json(
+    { code: "INTERNAL_SERVER_ERROR", message: `Failed to ${context}` },
+    { status: 500 },
+  );
+}
