@@ -57,7 +57,7 @@ wafer-fabrication-scheduling/
 │   └── redis/                  # Schedule store, preview cache, distributed lock
 ├── components/                 # Shared React components
 ├── lib/                        # Prisma client singleton, date utils, Redis client
-├── __tests__/                  # Vitest unit & integration tests (>80 % coverage)
+├── __tests__/                  # Vitest unit & integration tests (>83 % coverage)
 ├── prisma/
 │   ├── schema.prisma
 │   ├── seed.ts                 # Idempotent dev seed
@@ -159,7 +159,7 @@ pnpm test               # run all tests (Vitest)
 pnpm test:coverage      # run with coverage report (lcov + text)
 ```
 
-Test suite: **>80% line coverage**, 300+ test cases across unit, mock-based service, and integration layers.
+Test suite: **>83% combined line + branch coverage**, 320+ test cases across unit, mock-based service, and integration layers.
 
 | Layer              | What's tested                                                                                                                        |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
