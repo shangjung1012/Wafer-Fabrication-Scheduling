@@ -71,6 +71,7 @@ type SeedAssignment = {
   orderId: string;
   factoryId: string;
   productionDate: Date;
+  completionDate: Date;
   assignedQuantity: number;
   status: AssignmentStatus;
 };
@@ -178,11 +179,14 @@ function generateOrdersAndAssignments() {
     });
 
     if (factoryId && productionDate && asgnStatus) {
+      const completionDate = new Date(productionDate);
+      completionDate.setUTCDate(completionDate.getUTCDate() + 1);
       assignments.push({
         id: `asgn-${String(asgnCounter++).padStart(3, "0")}`,
         orderId: oid,
         factoryId,
         productionDate,
+        completionDate,
         assignedQuantity: quantity,
         status: asgnStatus,
       });
@@ -388,81 +392,50 @@ async function seedFactories(factories: SeedFactory[]) {
 }
 
 async function seedOrders(orders: SeedOrder[]) {
-  console.log(`  Upserting ${orders.length} orders…`);
-  for (const o of orders) {
-    await prisma.order.upsert({
-      where: { id: o.id },
-      create: {
-        id: o.id,
-        name: o.name,
-        type: o.type,
-        quantity: o.quantity,
-        dueDate: o.dueDate,
-        applicant: { connect: { id: o.applicantId } },
-        status: o.status,
-        isFixed: o.isFixed,
-        isPrioritized: o.isPrioritized,
-      },
-      update: {
-        name: o.name,
-        type: o.type,
-        quantity: o.quantity,
-        dueDate: o.dueDate,
-        applicant: { connect: { id: o.applicantId } },
-        status: o.status,
-        isFixed: o.isFixed,
-        isPrioritized: o.isPrioritized,
-      },
-    });
-  }
+  console.log(`  Creating ${orders.length} orders…`);
+  await prisma.order.createMany({
+    data: orders.map((o) => ({
+      id: o.id,
+      name: o.name,
+      type: o.type,
+      quantity: o.quantity,
+      dueDate: o.dueDate,
+      applicantId: o.applicantId,
+      status: o.status,
+      isFixed: o.isFixed ?? false,
+      isPrioritized: o.isPrioritized ?? false,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 async function seedAssignments(assignments: SeedAssignment[]) {
-  console.log(`  Upserting ${assignments.length} assignments…`);
-  for (const a of assignments) {
-    const dummyCompletionDate = new Date(a.productionDate);
-    dummyCompletionDate.setUTCDate(dummyCompletionDate.getUTCDate() + 1);
-
-    await prisma.orderAssignment.upsert({
-      where: { id: a.id },
-      create: {
-        id: a.id,
-        order: { connect: { id: a.orderId } },
-        factory: { connect: { id: a.factoryId } },
-        productionDate: a.productionDate,
-        completionDate: dummyCompletionDate,
-        assignedQuantity: a.assignedQuantity,
-        status: a.status,
-      },
-      update: {
-        order: { connect: { id: a.orderId } },
-        factory: { connect: { id: a.factoryId } },
-        productionDate: a.productionDate,
-        completionDate: dummyCompletionDate,
-        assignedQuantity: a.assignedQuantity,
-        status: a.status,
-      },
-    });
-  }
+  console.log(`  Creating ${assignments.length} assignments…`);
+  await prisma.orderAssignment.createMany({
+    data: assignments.map((a) => ({
+      id: a.id,
+      orderId: a.orderId,
+      factoryId: a.factoryId,
+      productionDate: a.productionDate,
+      completionDate: a.completionDate,
+      assignedQuantity: a.assignedQuantity,
+      status: a.status,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 async function seedDailyCapacities(capacities: SeedDailyCapacity[]) {
-  console.log(`  Upserting ${capacities.length} daily capacity records…`);
-  for (const c of capacities) {
-    await prisma.dailyCapacity.upsert({
-      where: { factoryId_date: { factoryId: c.factoryId, date: c.date } },
-      create: {
-        factory: { connect: { id: c.factoryId } },
-        date: c.date,
-        maxCapacity: c.maxCapacity,
-        curCapacity: c.curCapacity,
-      },
-      update: {
-        maxCapacity: c.maxCapacity,
-        curCapacity: c.curCapacity,
-      },
-    });
-  }
+  console.log(`  Creating ${capacities.length} daily capacity records…`);
+  await prisma.dailyCapacity.createMany({
+    data: capacities.map((c) => ({
+      factoryId: c.factoryId,
+      date: c.date,
+      maxCapacity: c.maxCapacity,
+      curCapacity: c.curCapacity,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 async function seedSystemAndConfigs() {
