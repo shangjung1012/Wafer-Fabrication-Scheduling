@@ -156,7 +156,17 @@ function errorJson(status: number, data: unknown) {
   } as Response;
 }
 
-function mockApi(issue = makeIssue()) {
+function mockApi(
+  issue = makeIssue(),
+  options: {
+    issueResponse?: Response;
+    patchResponse?: Response;
+    suggestionsResponse?: Response;
+    commentsResponse?: Response;
+    throwOnIssue?: boolean;
+    throwOnSuggestions?: boolean;
+  } = {},
+) {
   const calls: Array<{ path: string; init?: RequestInit }> = [];
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -164,22 +174,26 @@ function mockApi(issue = makeIssue()) {
       calls.push({ path, init });
 
       if (path === "/api/conflict-issues/42") {
-        return okJson(issue);
+        if (options.throwOnIssue) throw new Error("issue request failed");
+        if (init?.method === "PATCH") {
+          return options.patchResponse ?? okJson(issue);
+        }
+        return options.issueResponse ?? okJson(issue);
       }
       if (path === "/api/conflict-issues/42/suggestions") {
-        return okJson(suggestions);
+        if (options.throwOnSuggestions) {
+          throw new Error("suggestions request failed");
+        }
+        return options.suggestionsResponse ?? okJson(suggestions);
       }
       if (path === "/api/conflict-issues/42/comments") {
-        return okJson({ id: "comment-3" });
+        return options.commentsResponse ?? okJson({ id: "comment-3" });
       }
       if (path === "/api/conflict-issues/42/comments/comment-1/accept") {
         return okJson({ ok: true });
       }
       if (path === "/api/conflict-issues/42/comments/comment-1/reject") {
         return errorJson(409, { error: "Proposal is stale." });
-      }
-      if (path === "/api/conflict-issues/42") {
-        return okJson(issue);
       }
       return errorJson(404, { error: "not found" });
     },
@@ -231,6 +245,52 @@ describe("IssueDetailPanel", () => {
     expect(
       await screen.findByText(/Suggestions are based on current capacity only/),
     ).toBeTruthy();
+  });
+
+  it("shows load failures for missing and failed issues", async () => {
+    mockApi(makeIssue(), {
+      issueResponse: errorJson(404, { error: "missing" }),
+    });
+
+    render(<IssueDetailPanel issueNumber={42} />);
+    expect(await screen.findByText("Issue not found.")).toBeTruthy();
+
+    cleanup();
+    mockApi(makeIssue(), {
+      issueResponse: errorJson(500, { error: "database down" }),
+    });
+    render(<IssueDetailPanel issueNumber={42} />);
+    expect(await screen.findByText("Failed to load issue.")).toBeTruthy();
+
+    cleanup();
+    mockApi(makeIssue(), { throwOnIssue: true });
+    render(<IssueDetailPanel issueNumber={42} />);
+    expect(await screen.findByText("Network error.")).toBeTruthy();
+  });
+
+  it("shows suggestion errors and omits earliest-fit details when none exist", async () => {
+    mockApi(makeIssue(), {
+      suggestionsResponse: errorJson(503, { error: "busy" }),
+    });
+
+    render(<IssueDetailPanel issueNumber={42} />);
+    await screen.findByText(/Capacity shortage/);
+    expect(await screen.findByText("Failed to load suggestions.")).toBeTruthy();
+
+    cleanup();
+    mockApi(makeIssue(), {
+      suggestionsResponse: okJson({
+        ...suggestions,
+        scenarios: {
+          ...suggestions.scenarios,
+          earliestFitForOriginalQty: null,
+        },
+      }),
+    });
+    render(<IssueDetailPanel issueNumber={42} />);
+    await screen.findByText(/Capacity shortage/);
+    expect(await screen.findByText(/Max schedulable/)).toBeTruthy();
+    expect(screen.queryByText("Keep original quantity")).toBeNull();
   });
 
   it("posts a plain comment and reloads the issue", async () => {
@@ -291,6 +351,60 @@ describe("IssueDetailPanel", () => {
     });
   });
 
+  it("validates and posts reduce-quantity proposals", async () => {
+    const { calls } = mockApi();
+
+    render(<IssueDetailPanel issueNumber={42} />);
+    await screen.findByText(/Capacity shortage/);
+
+    fireEvent.change(screen.getByPlaceholderText(/Leave a comment/), {
+      target: { value: "Reduce to the capacity cap." },
+    });
+    fireEvent.click(screen.getByText(/Add structured proposal/));
+    fireEvent.click(screen.getByText("Comment"));
+    expect(screen.getByText("Please enter a valid quantity.")).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("New quantity"), {
+      target: { value: "55" },
+    });
+    fireEvent.click(screen.getByText("Comment"));
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (call) =>
+            call.path === "/api/conflict-issues/42/comments" &&
+            String(call.init?.body).includes("REDUCE_QUANTITY") &&
+            String(call.init?.body).includes('"newQuantity":55'),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("posts cancel proposals", async () => {
+    const { calls } = mockApi();
+
+    render(<IssueDetailPanel issueNumber={42} />);
+    await screen.findByText(/Capacity shortage/);
+
+    fireEvent.change(screen.getByPlaceholderText(/Leave a comment/), {
+      target: { value: "Customer approved cancellation." },
+    });
+    fireEvent.click(screen.getByText(/Add structured proposal/));
+    fireEvent.click(screen.getByLabelText("Cancel order"));
+    fireEvent.click(screen.getByText("Comment"));
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (call) =>
+            call.path === "/api/conflict-issues/42/comments" &&
+            String(call.init?.body).includes('"kind":"CANCEL"'),
+        ),
+      ).toBe(true);
+    });
+  });
+
   it("handles proposal accept failures and refreshes suggestions", async () => {
     const { calls } = mockApi();
 
@@ -346,5 +460,20 @@ describe("IssueDetailPanel", () => {
         ),
       ).toBe(true);
     });
+  });
+
+  it("surfaces admin cancel-order failures", async () => {
+    mocks.session = { user: { id: "admin-2", role: "ADMIN" } };
+    mockApi(makeIssue(), {
+      patchResponse: errorJson(409, { error: "Order was already completed." }),
+    });
+
+    render(<IssueDetailPanel issueNumber={42} />);
+    await screen.findByText(/Capacity shortage/);
+
+    fireEvent.click(screen.getByText("Cancel order"));
+    expect(
+      await screen.findByText("Order was already completed."),
+    ).toBeTruthy();
   });
 });
