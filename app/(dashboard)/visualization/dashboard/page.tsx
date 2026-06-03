@@ -474,7 +474,7 @@ export default function DashboardPage() {
   const dateColumns = useMemo(() => {
     const today = timelineData?.today ?? format(new Date(), "yyyy-MM-dd");
     return Array.from({ length: 7 }, (_, index) =>
-      format(addDays(parseISO(today), index - 2), "yyyy-MM-dd"),
+      format(addDays(parseISO(today), index), "yyyy-MM-dd"),
     );
   }, [timelineData]);
 
@@ -694,7 +694,7 @@ export default function DashboardPage() {
       dateColumns={dateColumns}
       dateRangeLabel={
         timelineData
-          ? `${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), -2), "yyyy-MM-dd")} ~ ${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), 4), "yyyy-MM-dd")}`
+          ? `${format(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), "yyyy-MM-dd")} ~ ${format(addDays(parseISO(timelineData.today ?? format(new Date(), "yyyy-MM-dd")), 6), "yyyy-MM-dd")}`
           : ""
       }
     />
