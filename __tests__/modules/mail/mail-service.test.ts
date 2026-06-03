@@ -233,4 +233,110 @@ describe("mail-service", () => {
       },
     });
   });
+
+  it("falls back to default port when SMTP_FALLBACK_PORT is not a positive integer", async () => {
+    process.env.SMTP_FALLBACK_ENABLED = "true";
+    process.env.SMTP_FALLBACK_HOST = "smtp.example.com";
+    process.env.SMTP_FALLBACK_PORT = "not-a-number";
+    process.env.SMTP_FALLBACK_USER = "user@example.com";
+    process.env.SMTP_FALLBACK_PASSWORD = "pass";
+    process.env.SMTP_FALLBACK_FROM_ADDRESS = "noreply@example.com";
+
+    await sendMail({
+      to: [{ address: "to@example.com" }],
+      subject: "Test",
+      plainText: "Hello",
+    });
+
+    expect(createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({ port: 465 }),
+    );
+  });
+
+  it("falls back to default port when SMTP_FALLBACK_PORT is negative", async () => {
+    process.env.SMTP_FALLBACK_ENABLED = "true";
+    process.env.SMTP_FALLBACK_HOST = "smtp.example.com";
+    process.env.SMTP_FALLBACK_PORT = "-1";
+    process.env.SMTP_FALLBACK_USER = "user@example.com";
+    process.env.SMTP_FALLBACK_PASSWORD = "pass";
+    process.env.SMTP_FALLBACK_FROM_ADDRESS = "noreply@example.com";
+
+    await sendMail({
+      to: [{ address: "to@example.com" }],
+      subject: "Test",
+      plainText: "Hello",
+    });
+
+    expect(createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({ port: 465 }),
+    );
+  });
+
+  it("includes replyTo in Azure send when provided", async () => {
+    beginSend.mockResolvedValueOnce({
+      getResult: vi.fn().mockReturnValue({ id: "op-2", status: "Accepted" }),
+    });
+
+    await sendMail({
+      to: [{ address: "to@example.com" }],
+      cc: [{ address: "cc@example.com" }],
+      bcc: [{ address: "bcc@example.com" }],
+      replyTo: [{ address: "reply@example.com" }],
+      subject: "Azure Full",
+      plainText: "body",
+    });
+
+    expect(beginSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyTo: [{ address: "reply@example.com" }],
+        recipients: expect.objectContaining({
+          cc: [{ address: "cc@example.com" }],
+          bcc: [{ address: "bcc@example.com" }],
+        }),
+      }),
+    );
+  });
+
+  it("caches the smtp transporter across calls", async () => {
+    process.env.SMTP_FALLBACK_ENABLED = "true";
+    process.env.SMTP_FALLBACK_HOST = "smtp.example.com";
+    process.env.SMTP_FALLBACK_PORT = "587";
+    process.env.SMTP_FALLBACK_USER = "user@example.com";
+    process.env.SMTP_FALLBACK_PASSWORD = "pass";
+    process.env.SMTP_FALLBACK_FROM_ADDRESS = "noreply@example.com";
+
+    await sendMail({
+      to: [{ address: "to@example.com" }],
+      subject: "First",
+      plainText: "Hello",
+    });
+    await sendMail({
+      to: [{ address: "to@example.com" }],
+      subject: "Second",
+      plainText: "Hello again",
+    });
+
+    // createTransport only called once (transporter is cached)
+    expect(createTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-throws emailClient init failure on subsequent calls", async () => {
+    delete process.env.AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING;
+
+    await expect(
+      sendMail({
+        to: [{ address: "to@example.com" }],
+        subject: "First fail",
+        plainText: "Hello",
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      sendMail({
+        to: [{ address: "to@example.com" }],
+        subject: "Second fail",
+        plainText: "Hello",
+      }),
+    ).rejects.toThrow(MailConfigurationError);
+  });
 });

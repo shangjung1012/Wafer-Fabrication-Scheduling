@@ -235,4 +235,71 @@ describe("requireAuth", () => {
       status: 401,
     });
   });
+
+  it("allows safe GET requests with cookie token without CSRF origin check", async () => {
+    const token = await issueAccessToken({
+      id: "user-1",
+      role: "ADMIN",
+      username: "admin-A1",
+      sessionId: "session-1",
+    });
+    const request = new Request("http://localhost:3000/api/users", {
+      method: "GET",
+      headers: {
+        Cookie: `access_token=${token}`,
+        Origin: "https://evil.example",
+      },
+    });
+
+    await expect(requireAuth(request)).resolves.toMatchObject({
+      user: { id: "user-1" },
+    });
+  });
+
+  it("throws CsrfError when APP_BASE_URL is missing for cookie auth", async () => {
+    const savedUrl = process.env.APP_BASE_URL;
+    delete process.env.APP_BASE_URL;
+
+    const token = await issueAccessToken({
+      id: "user-1",
+      role: "ADMIN",
+      username: "admin-A1",
+      sessionId: "session-1",
+    });
+    const request = new Request("http://localhost:3000/api/users", {
+      method: "POST",
+      headers: {
+        Cookie: `access_token=${token}`,
+        Origin: "http://localhost:3000",
+      },
+    });
+
+    await expect(requireAuth(request)).rejects.toMatchObject({
+      code: "CSRF_FORBIDDEN",
+      status: 403,
+    });
+
+    process.env.APP_BASE_URL = savedUrl;
+  });
+
+  it("rejects cookie auth with invalid referer URL", async () => {
+    const token = await issueAccessToken({
+      id: "user-1",
+      role: "ADMIN",
+      username: "admin-A1",
+      sessionId: "session-1",
+    });
+    const request = new Request("http://localhost:3000/api/users", {
+      method: "POST",
+      headers: {
+        Cookie: `access_token=${token}`,
+        Referer: "not-a-valid-url",
+      },
+    });
+
+    await expect(requireAuth(request)).rejects.toMatchObject({
+      code: "CSRF_FORBIDDEN",
+      status: 403,
+    });
+  });
 });

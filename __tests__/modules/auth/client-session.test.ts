@@ -191,3 +191,61 @@ describe("logoutClientAuthSession", () => {
     expect(loadClientAuthSession()).toBeNull();
   });
 });
+
+describe("post-logout login path — storage quota errors", () => {
+  beforeEach(() => {
+    installLocalStorage();
+  });
+
+  it("silently ignores storage quota errors in setPostLogoutLoginPath", () => {
+    const throwingStorage = {
+      get length() {
+        return 0;
+      },
+      clear: () => {},
+      getItem: () => null,
+      key: () => null,
+      removeItem: () => {},
+      setItem: () => {
+        throw new DOMException("QuotaExceededError");
+      },
+    } as Storage;
+
+    Object.defineProperty(window, "sessionStorage", {
+      value: throwingStorage,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, "sessionStorage", {
+      value: throwingStorage,
+      configurable: true,
+    });
+
+    expect(() => setPostLogoutLoginPath("/login")).not.toThrow();
+  });
+
+  it("returns /login when sessionStorage.getItem throws", () => {
+    const throwingStorage = {
+      get length() {
+        return 0;
+      },
+      clear: () => {},
+      getItem: () => {
+        throw new DOMException("SecurityError");
+      },
+      key: () => null,
+      removeItem: () => {},
+      setItem: () => {},
+    } as Storage;
+
+    Object.defineProperty(window, "sessionStorage", {
+      value: throwingStorage,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, "sessionStorage", {
+      value: throwingStorage,
+      configurable: true,
+    });
+
+    expect(getPostLogoutLoginPath()).toBe("/login");
+  });
+});
