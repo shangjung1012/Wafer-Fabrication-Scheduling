@@ -35,6 +35,46 @@ export type ListUsersInput = {
   role?: UserRole;
 };
 
+type FactoryAssignmentDb = Pick<PrismaClient, "factory" | "user">;
+
+export async function syncAdminFactoryAssignments(
+  db: FactoryAssignmentDb,
+  userId: string,
+  role: UserRole,
+  group: string | null | undefined,
+): Promise<void> {
+  if (role !== "ADMIN") {
+    await db.user.update({
+      where: { id: userId },
+      data: { managedFactories: { set: [] } },
+      select: { id: true },
+    });
+    return;
+  }
+
+  if (!group) {
+    throw new ForbiddenError("group is required for ADMIN role.");
+  }
+
+  const factories = await db.factory.findMany({
+    where: { productionType: group },
+    select: { id: true },
+  });
+  if (factories.length === 0) {
+    throw new NotFoundError(
+      `No factories found for production group '${group}'.`,
+    );
+  }
+
+  await db.user.update({
+    where: { id: userId },
+    data: {
+      managedFactories: { set: factories.map(({ id }) => ({ id })) },
+    },
+    select: { id: true },
+  });
+}
+
 export async function listUsers(
   ctx: RequestContext,
   db: PrismaClient,
@@ -89,14 +129,22 @@ export async function createUserService(
     } satisfies CreateUserInput);
   }
 
+  if (input.role === "ADMIN" && !input.group) {
+    throw new ForbiddenError("group is required for ADMIN role.");
+  }
+
   // SUPERADMIN: global scope, group from input
-  return createUser(db, {
+  const result = await createUser(db, {
     username: input.username,
     email: input.email,
     role: input.role,
     group: input.group ?? null,
     password: input.password ? await hashPassword(input.password) : null,
   } satisfies CreateUserInput);
+  if (input.role === "ADMIN") {
+    await syncAdminFactoryAssignments(db, result.id, input.role, input.group);
+  }
+  return result;
 }
 
 export type UpdateUserServiceInput = {
@@ -128,6 +176,22 @@ export async function updateUserService(
   } satisfies UpdateUserInput);
   if (!result) {
     throw new NotFoundError("User not found.");
+  }
+
+  const roleOrGroupChanged =
+    input.role !== undefined || input.group !== undefined;
+  const effectiveRole = input.role ?? target.role;
+  const effectiveGroup = input.group !== undefined ? input.group : target.group;
+  if (
+    roleOrGroupChanged &&
+    (target.role === "ADMIN" || effectiveRole === "ADMIN")
+  ) {
+    await syncAdminFactoryAssignments(
+      db,
+      targetId,
+      effectiveRole,
+      effectiveGroup,
+    );
   }
   return result;
 }
