@@ -2226,6 +2226,7 @@ export default function SchedulePage() {
 
   // Edit-mode state
   const [editMode, setEditMode] = useState(false);
+  const editModeVersionsRef = useRef<Record<string, number> | null>(null);
   // Map<assignmentId, AssignmentMove>
   const [pendingMoves, setPendingMoves] = useState<Map<string, AssignmentMove>>(
     () => new Map(),
@@ -2522,6 +2523,13 @@ export default function SchedulePage() {
   // Edit-mode handlers
   const handleEnterEditMode = () => {
     setEditMode(true);
+    editModeVersionsRef.current = {
+      ...(data?.adminContext?.scheduleVersions ?? {}),
+    };
+    console.log(
+      "[OCC] enter edit mode, snapshot versions:",
+      editModeVersionsRef.current,
+    );
     setPendingMoves(new Map());
     setPendingIsFixedByOrderId(new Map());
     setPendingIsPrioritizedByOrderId(new Map());
@@ -2537,6 +2545,7 @@ export default function SchedulePage() {
 
   const handleDiscardEdits = () => {
     setEditMode(false);
+    editModeVersionsRef.current = null;
     setPendingMoves(new Map());
     setPendingIsFixedByOrderId(new Map());
     setPendingIsPrioritizedByOrderId(new Map());
@@ -2690,10 +2699,12 @@ export default function SchedulePage() {
         data.factories.map((f) => [f.id, f.productionType]),
       );
 
-      // Mutable copy of versions — bumped locally after each successful write
-      // so sequential PUTs within the same Save don't false-positive on OCC.
+      // Use the version snapshot captured when entering edit mode so that
+      // auto-refresh cannot silently update the OCC baseline.
       const liveVersions: Record<string, number> = {
-        ...(data.adminContext?.scheduleVersions ?? {}),
+        ...(editModeVersionsRef.current ??
+          data.adminContext?.scheduleVersions ??
+          {}),
       };
       const getVersionForOrder = (orderId: string) => {
         const item = data.timeline.find((t) => t.orderId === orderId);
@@ -2772,6 +2783,12 @@ export default function SchedulePage() {
             quantity: place.quantity,
           })),
         ];
+        console.log(
+          "[OCC] save: liveVersions =",
+          liveVersions,
+          "| ref =",
+          editModeVersionsRef.current,
+        );
         const res = await fetch("/api/assignments/bulk", {
           method: "PATCH",
           credentials: "same-origin",
@@ -2880,6 +2897,7 @@ export default function SchedulePage() {
       setSaveStatus("success");
       setSaveErrorMsg(movePartialWarning);
       setEditMode(false);
+      editModeVersionsRef.current = null;
       setPendingMoves(new Map());
       setPendingIsFixedByOrderId(new Map());
       setPendingIsPrioritizedByOrderId(new Map());
