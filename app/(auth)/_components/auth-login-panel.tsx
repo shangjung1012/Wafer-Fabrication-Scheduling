@@ -188,7 +188,7 @@ export function AuthLoginPanel({
         minHeight: "100vh",
         background: "#f8fafc",
         color: "#111827",
-        padding: "32px 20px",
+        padding: "clamp(16px, 5vw, 32px) clamp(12px, 4vw, 20px)",
       }}
     >
       <div style={{ maxWidth: 1120, margin: "0 auto" }}>
@@ -198,6 +198,7 @@ export function AuthLoginPanel({
             justifyContent: "space-between",
             gap: 16,
             alignItems: "flex-start",
+            flexWrap: "wrap",
             marginBottom: 24,
           }}
         >
@@ -397,7 +398,7 @@ export function AuthLoginPanel({
                 <dl
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "120px minmax(0, 1fr)",
+                    gridTemplateColumns: "minmax(88px, 120px) minmax(0, 1fr)",
                     gap: "8px 14px",
                     margin: 0,
                     fontSize: 13,

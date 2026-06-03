@@ -658,12 +658,21 @@ export default function PermissionsPage() {
                     Filter and manage existing accounts.
                   </p>
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    minWidth: 0,
+                  }}
+                >
                   <input
                     placeholder="Search email or username"
                     value={textFilter}
                     onChange={(e) => setTextFilter(e.target.value)}
                     style={{
+                      width: "min(100%, 240px)",
                       padding: "6px 8px",
                       border: "1px solid #cbd5e1",
                       borderRadius: 6,
@@ -1035,6 +1044,7 @@ const userListPanelStyle: React.CSSProperties = {
 const userListScrollWrapStyle: React.CSSProperties = {
   flex: 1,
   minHeight: 0,
+  maxWidth: "100%",
   overflowX: "auto",
   overflowY: "auto",
   WebkitOverflowScrolling: "touch",
@@ -1104,13 +1114,14 @@ const modalOverlayStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: 24,
+  padding: "clamp(12px, 4vw, 24px)",
   background: "rgba(15, 23, 42, 0.42)",
 };
 
 const modalPanelStyle: React.CSSProperties = {
   width: "min(460px, 100%)",
   display: "flex",
+  flexWrap: "wrap",
   gap: 12,
   border: "1px solid #fecaca",
   borderRadius: 8,
