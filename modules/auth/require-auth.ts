@@ -17,8 +17,9 @@ function parseBearerToken(request: Request): string | null {
     request.headers.get("Authorization");
   if (!raw) return null;
 
-  const match = /^Bearer\s+(.+)$/i.exec(raw);
-  return match?.[1]?.trim() || null;
+  if (!raw.toLowerCase().startsWith("bearer ")) return null;
+  const token = raw.slice("bearer ".length).trim();
+  return token || null;
 }
 
 function parseAccessToken(request: Request): ParsedAccessToken | null {
