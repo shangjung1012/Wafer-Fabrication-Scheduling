@@ -1,3 +1,13 @@
+export function addUtcDays(date: Date, days: number): Date {
+  return new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate() + days,
+    ),
+  );
+}
+
 export function toUtcDateOnly(date: Date): Date {
   return new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),

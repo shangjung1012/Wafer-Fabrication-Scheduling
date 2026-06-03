@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { isBeforeDateOnly, toUtcDateOnly } from "@/lib/date-utils";
+import { addUtcDays, isBeforeDateOnly, toUtcDateOnly } from "@/lib/date-utils";
 
 describe("date utils", () => {
   it("normalizes dates to UTC midnight", () => {
     const value = toUtcDateOnly(new Date("2026-06-03T15:45:30.000Z"));
 
     expect(value.toISOString()).toBe("2026-06-03T00:00:00.000Z");
+  });
+
+  it("adds days to a UTC date", () => {
+    const base = new Date("2026-06-03T00:00:00.000Z");
+    expect(addUtcDays(base, 3).toISOString()).toBe("2026-06-06T00:00:00.000Z");
+    expect(addUtcDays(base, -1).toISOString()).toBe("2026-06-02T00:00:00.000Z");
   });
 
   it("compares dates by UTC date only", () => {
