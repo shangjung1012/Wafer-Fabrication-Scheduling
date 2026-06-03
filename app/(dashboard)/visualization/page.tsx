@@ -37,7 +37,10 @@ import type {
   SchedulePreviewResponse,
   DailyCapacityInfo,
 } from "@/modules/visualization/types";
-import { logoutClientAuthSession } from "@/modules/auth/client-session";
+import {
+  getPostLogoutLoginPath,
+  logoutClientAuthSession,
+} from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 import { OrderCsvDropZone } from "@/components/orders/OrderCsvDropZone";
 import { importOrdersFromCsv } from "@/components/orders/order-csv";
@@ -2315,7 +2318,7 @@ export default function SchedulePage() {
   // Fetch timeline data
   useEffect(() => {
     if (session === null) {
-      router.replace("/login");
+      router.replace(getPostLogoutLoginPath());
       return;
     }
     if (session === undefined) return;
@@ -3067,7 +3070,7 @@ export default function SchedulePage() {
 
   const handleLogout = async () => {
     await logoutClientAuthSession();
-    router.replace("/login");
+    router.replace(getPostLogoutLoginPath());
   };
 
   // Effective timeline/capacities/conflicts/factories/diffs:

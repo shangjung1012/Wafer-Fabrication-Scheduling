@@ -2,7 +2,10 @@
 
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { logoutClientAuthSession } from "@/modules/auth/client-session";
+import {
+  getPostLogoutLoginPath,
+  logoutClientAuthSession,
+} from "@/modules/auth/client-session";
 import { useClientAuthSession } from "@/modules/auth/use-client-auth-session";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { IssueDetailPanel } from "@/components/conflict-issues/IssueDetailPanel";
@@ -172,7 +175,7 @@ function ConflictIssuesPageContent() {
   }, [router]);
 
   useEffect(() => {
-    if (session === null) router.replace("/login");
+    if (session === null) router.replace(getPostLogoutLoginPath());
   }, [router, session]);
 
   const [activeTab, setActiveTab] = useState<"open" | "closed">("open");
@@ -242,7 +245,7 @@ function ConflictIssuesPageContent() {
 
   const handleLogout = useCallback(async () => {
     await logoutClientAuthSession();
-    router.replace("/login");
+    router.replace(getPostLogoutLoginPath());
   }, [router]);
 
   if (session === undefined) return <div style={pageShellStyle}>Loading…</div>;

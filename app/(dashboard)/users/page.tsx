@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import {
+  getPostLogoutLoginPath,
   logoutClientAuthSession,
   type ClientAuthSession,
 } from "@/modules/auth/client-session";
@@ -136,7 +137,7 @@ export default function UsersPage() {
   useEffect(() => {
     if (session === undefined) return;
     if (session === null) {
-      router.replace("/login");
+      router.replace(getPostLogoutLoginPath());
       return;
     }
     const timer = window.setTimeout(() => {
@@ -148,7 +149,7 @@ export default function UsersPage() {
   const handleLogout = async () => {
     setLoading("logout");
     await logoutClientAuthSession();
-    router.replace("/login");
+    router.replace(getPostLogoutLoginPath());
   };
 
   const handleInvite = async (event: React.FormEvent<HTMLFormElement>) => {
