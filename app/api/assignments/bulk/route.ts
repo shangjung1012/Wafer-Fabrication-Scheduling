@@ -52,12 +52,17 @@ export async function PATCH(request: Request) {
       );
     }
 
+    console.log(
+      "[OCC-ROUTE] expectedVersions received:",
+      parsed.data.expectedVersions,
+    );
     const result = await applyAssignmentMoves(
       prisma,
       parsed.data.moves,
       ctx.user.id,
       parsed.data.expectedVersions,
     );
+    console.log("[OCC-ROUTE] save succeeded, result:", result);
     return NextResponse.json(result);
   } catch (error) {
     if (

@@ -48,6 +48,7 @@ vi.mock("@/infra/redis/schedule-store", () => ({
   withScheduleLock: vi.fn(async (type, cb) => {
     return cb();
   }),
+  getScheduleVersion: vi.fn().mockResolvedValue(0),
   incrementScheduleVersion: vi.fn(),
 }));
 
