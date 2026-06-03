@@ -225,3 +225,74 @@ describe("staleOtherProposals", () => {
     expect(batch).toHaveLength(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// findOpenIssueByOrderId
+// ---------------------------------------------------------------------------
+describe("findOpenIssueByOrderId", () => {
+  it("queries with OPEN and IN_DISCUSSION statuses and returns first match", async () => {
+    const { findOpenIssueByOrderId } =
+      await import("@/infra/db/conflict-issue-repository");
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "ISSUE1",
+      status: ConflictIssueStatus.OPEN,
+    });
+    const db = { conflictIssue: { findFirst } } as unknown as PrismaClient;
+    const result = await findOpenIssueByOrderId(db, "O1");
+    expect(result).toEqual({ id: "ISSUE1", status: ConflictIssueStatus.OPEN });
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ orderId: "O1" }),
+      }),
+    );
+  });
+
+  it("returns null when no open issue exists", async () => {
+    const { findOpenIssueByOrderId } =
+      await import("@/infra/db/conflict-issue-repository");
+    const db = {
+      conflictIssue: { findFirst: vi.fn().mockResolvedValue(null) },
+    } as unknown as PrismaClient;
+    expect(await findOpenIssueByOrderId(db, "O1")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findOpenIssuesByOrderIds
+// ---------------------------------------------------------------------------
+describe("findOpenIssuesByOrderIds", () => {
+  it("returns an empty Map for empty orderIds array (no DB query)", async () => {
+    const { findOpenIssuesByOrderIds } =
+      await import("@/infra/db/conflict-issue-repository");
+    const findMany = vi.fn();
+    const db = { conflictIssue: { findMany } } as unknown as PrismaClient;
+    const result = await findOpenIssuesByOrderIds(db, []);
+    expect(result.size).toBe(0);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("maps found issues to their orderId and sets null for orders without issues", async () => {
+    const { findOpenIssuesByOrderIds } =
+      await import("@/infra/db/conflict-issue-repository");
+    const db = {
+      conflictIssue: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            {
+              id: "I1",
+              status: ConflictIssueStatus.OPEN,
+              orderId: "O1",
+              createdAt: new Date(),
+            },
+          ]),
+      },
+    } as unknown as PrismaClient;
+    const result = await findOpenIssuesByOrderIds(db, ["O1", "O2"]);
+    expect(result.get("O1")).toEqual({
+      id: "I1",
+      status: ConflictIssueStatus.OPEN,
+    });
+    expect(result.get("O2")).toBeNull();
+  });
+});
