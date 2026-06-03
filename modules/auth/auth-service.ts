@@ -173,11 +173,9 @@ async function issueAuthTokens(
 }
 
 export async function register(
-  db: PrismaClient,
-  input: RegisterInput,
+  _db: PrismaClient,
+  _input: RegisterInput,
 ): Promise<SanitizedUser> {
-  void db;
-  void input;
   throw new SelfRegistrationDisabledError();
 }
 
