@@ -65,7 +65,19 @@ export function DraggableAssignmentChip({
   if (isLockedByStatus) {
     return (
       <div
+        role="button"
+        tabIndex={onClickItem ? 0 : -1}
         onClick={onClickItem ? () => onClickItem(item) : undefined}
+        onKeyDown={
+          onClickItem
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onClickItem(item);
+                }
+              }
+            : undefined
+        }
         className={`text-[9px] leading-tight rounded px-1 py-0.5 select-none border ${onClickItem ? "cursor-pointer" : "cursor-not-allowed"} ${assignmentChipToneClasses(item.status, false)}`}
         title={`${item.orderName} · qty ${item.assignedQuantity} · ${item.status} (locked)`}
       >
@@ -98,7 +110,19 @@ export function DraggableAssignmentChip({
       ref={setNodeRef}
       style={style}
       {...(dragDisabled ? {} : { ...listeners, ...attributes })}
+      role={onClickItem ? "button" : undefined}
+      tabIndex={onClickItem && !isDragging ? 0 : -1}
       onClick={onClickItem && !isDragging ? () => onClickItem(item) : undefined}
+      onKeyDown={
+        onClickItem && !isDragging
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClickItem(item);
+              }
+            }
+          : undefined
+      }
       className={`text-[9px] leading-tight rounded px-1 py-0.5 select-none border ${cursorClass} ${tone}`}
       title={
         isFixed
@@ -126,6 +150,7 @@ export function DraggableAssignmentChip({
               className="flex items-center gap-0.5"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
             >
               <input
                 type="checkbox"
@@ -145,6 +170,7 @@ export function DraggableAssignmentChip({
               className="flex items-center gap-0.5"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
             >
               <input
                 type="checkbox"

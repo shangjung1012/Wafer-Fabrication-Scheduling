@@ -52,7 +52,7 @@ export async function withScheduleLock<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   const types = Array.isArray(typeOrTypes)
-    ? Array.from(new Set(typeOrTypes)).sort()
+    ? Array.from(new Set(typeOrTypes)).sort((a, b) => a.localeCompare(b))
     : [typeOrTypes];
   const redis = getRedis();
   const acquiredLocks: Array<{ lockKey: string; ownerToken: string }> = [];
