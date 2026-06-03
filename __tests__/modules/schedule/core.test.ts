@@ -49,7 +49,8 @@ vi.mock("@/infra/redis/schedule-store", () => ({
     return cb();
   }),
   getScheduleVersion: vi.fn().mockResolvedValue(0),
-  incrementScheduleVersion: vi.fn(),
+  incrementScheduleVersion: vi.fn().mockResolvedValue(1),
+  deletePreview: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/infra/db/conflict-issue-repository", async () => {
@@ -402,6 +403,109 @@ describe("Schedule Engine - Core", () => {
       expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
         "Type A",
       );
+    });
+
+    it("should succeed when expectedVersion matches and delete preview afterwards", async () => {
+      const scheduleStore = await import("@/infra/redis/schedule-store");
+      vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(5);
+
+      const mockStrategyResult = {
+        processedOrders: [
+          { id: "O1", status: OrderStatus.SCHEDULED, isFixed: false },
+        ],
+        newAssignments: [],
+        updatedCapacities: [],
+        newCapacities: [],
+      };
+
+      const dummyConfig: SchedulingConfig = {
+        startDate: new Date(),
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GLOBAL_OPTIMIZE",
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+
+      vi.mocked(capacityRepo.bulkUpdateDailyCapacities).mockResolvedValue(
+        new Set(),
+      );
+
+      await applyScheduleTransaction(
+        "Type A",
+        dummyConfig,
+        mockStrategyResult as unknown as StrategyResult,
+        "system-user",
+        5,
+        "preview-xyz",
+      );
+
+      expect(scheduleStore.incrementScheduleVersion).toHaveBeenCalledWith(
+        "Type A",
+      );
+      expect(scheduleStore.deletePreview).toHaveBeenCalledWith("preview-xyz");
+    });
+
+    it("should throw when expectedVersion does not match current version", async () => {
+      const scheduleStore = await import("@/infra/redis/schedule-store");
+      vi.mocked(scheduleStore.getScheduleVersion).mockResolvedValue(3);
+
+      const mockStrategyResult = {
+        processedOrders: [],
+        newAssignments: [],
+        updatedCapacities: [],
+        newCapacities: [],
+      };
+
+      const dummyConfig: SchedulingConfig = {
+        startDate: new Date(),
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GLOBAL_OPTIMIZE",
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+
+      await expect(
+        applyScheduleTransaction(
+          "Type A",
+          dummyConfig,
+          mockStrategyResult as unknown as StrategyResult,
+          "system-user",
+          99,
+          "preview-xyz",
+        ),
+      ).rejects.toThrow("Schedule environment has changed");
+    });
+  });
+
+  describe("prepareSchedulingData startDate normalization", () => {
+    it("should normalize a future startDate to UTC midnight when it is already after minimumStartDate", async () => {
+      const fixedDate = new Date("2026-06-01T00:00:00.000Z");
+      const farFuture = new Date("2026-07-15T12:34:56.000Z");
+
+      vi.mocked(orderRepo.findOrdersForScheduling).mockResolvedValue([]);
+      vi.mocked(factoryRepo.findFactoriesWithCapacities).mockResolvedValue([]);
+
+      const config: SchedulingConfig = {
+        startDate: farFuture,
+        frozenDays: 0,
+        productionDays: 1,
+        bufferDays: 0,
+        reschedulePolicy: "GLOBAL_OPTIMIZE",
+        algorithm: "GREEDY_BEST_FIT",
+        splittable: true,
+      };
+
+      await prepareSchedulingData("Type A", config, fixedDate);
+
+      // startDate should be normalized to UTC midnight
+      expect(config.startDate.getUTCHours()).toBe(0);
+      expect(config.startDate.getUTCMinutes()).toBe(0);
+      expect(config.startDate.getUTCSeconds()).toBe(0);
+      expect(config.startDate.toISOString()).toBe("2026-07-15T00:00:00.000Z");
     });
   });
 });
