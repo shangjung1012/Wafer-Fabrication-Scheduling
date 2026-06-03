@@ -140,7 +140,7 @@ export default function UsersPage() {
       return;
     }
     const timer = window.setTimeout(() => {
-      void loadUsers();
+      loadUsers();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadUsers, router, session]);
@@ -381,7 +381,7 @@ export default function UsersPage() {
               onChange={(e) => {
                 const val = e.target.value as Role | "";
                 setRoleFilter(val);
-                void loadUsers(val);
+                loadUsers(val);
               }}
               style={{
                 padding: "5px 8px",
