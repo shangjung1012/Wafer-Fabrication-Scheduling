@@ -24,6 +24,8 @@ vi.mock("@dnd-kit/utilities", () => ({
 import {
   DraggableAssignmentChip,
   DroppableCell,
+  DraggableSplitChip,
+  DraggablePendingOrderCard,
 } from "@/app/(dashboard)/visualization/_components/edit-cell";
 import type { TimelineItem } from "@/modules/visualization/types";
 
@@ -202,5 +204,171 @@ describe("DroppableCell", () => {
     });
     const div = container.firstElementChild as HTMLElement;
     expect(div.title).toBe("No capacity");
+  });
+});
+
+describe("DraggableAssignmentChip — additional branch coverage", () => {
+  it("applies moved (purple) tone for SCHEDULED chip with isMoved=true", () => {
+    flushSync(() => {
+      root.render(<DraggableAssignmentChip item={makeItem()} isMoved={true} />);
+    });
+    const chip = container.firstElementChild as HTMLElement;
+    expect(chip.className).toContain("purple");
+  });
+
+  it("renders chip for FAILED/unknown status with rose tone", () => {
+    flushSync(() => {
+      root.render(
+        <DraggableAssignmentChip
+          item={makeItem({ status: "FAILED" as "SCHEDULED" })}
+          isMoved={false}
+        />,
+      );
+    });
+    const chip = container.firstElementChild as HTMLElement;
+    expect(chip.className).toContain("rose");
+  });
+
+  it("renders COMPLETED chip with grayscale tone", () => {
+    flushSync(() => {
+      root.render(
+        <DraggableAssignmentChip
+          item={makeItem({ status: "COMPLETED" })}
+          isMoved={false}
+        />,
+      );
+    });
+    const chip = container.firstElementChild as HTMLElement;
+    expect(chip.className).toContain("grayscale");
+  });
+
+  it("calls onClickItem on Space key for locked chip", () => {
+    const onClickItem = vi.fn();
+    flushSync(() => {
+      root.render(
+        <DraggableAssignmentChip
+          item={makeItem({ status: "COMPLETED" })}
+          isMoved={false}
+          onClickItem={onClickItem}
+        />,
+      );
+    });
+    const chip = container.querySelector("[role=button]") as HTMLElement;
+    flushSync(() => {
+      chip.dispatchEvent(
+        new KeyboardEvent("keydown", { key: " ", bubbles: true }),
+      );
+    });
+    expect(onClickItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onClickItem on click for non-locked SCHEDULED chip", () => {
+    const onClickItem = vi.fn();
+    flushSync(() => {
+      root.render(
+        <DraggableAssignmentChip
+          item={makeItem()}
+          isMoved={false}
+          onClickItem={onClickItem}
+        />,
+      );
+    });
+    const chip = container.querySelector("[role=button]") as HTMLElement;
+    flushSync(() => {
+      chip.click();
+    });
+    expect(onClickItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onClickItem on Enter key for non-locked chip", () => {
+    const onClickItem = vi.fn();
+    flushSync(() => {
+      root.render(
+        <DraggableAssignmentChip
+          item={makeItem()}
+          isMoved={false}
+          onClickItem={onClickItem}
+        />,
+      );
+    });
+    const chip = container.querySelector("[role=button]") as HTMLElement;
+    flushSync(() => {
+      chip.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    });
+    expect(onClickItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onClickItem on Space key for non-locked chip", () => {
+    const onClickItem = vi.fn();
+    flushSync(() => {
+      root.render(
+        <DraggableAssignmentChip
+          item={makeItem()}
+          isMoved={false}
+          onClickItem={onClickItem}
+        />,
+      );
+    });
+    const chip = container.querySelector("[role=button]") as HTMLElement;
+    flushSync(() => {
+      chip.dispatchEvent(
+        new KeyboardEvent("keydown", { key: " ", bubbles: true }),
+      );
+    });
+    expect(onClickItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders chip title with 'locked (fixed)' when isFixed is true", () => {
+    flushSync(() => {
+      root.render(
+        <DraggableAssignmentChip
+          item={makeItem({ isFixed: true })}
+          isMoved={false}
+        />,
+      );
+    });
+    const chip = container.firstElementChild as HTMLElement;
+    expect(chip.title).toContain("locked (fixed)");
+  });
+
+  it("renders Crown icon for prioritized non-locked chip", () => {
+    flushSync(() => {
+      root.render(
+        <DraggableAssignmentChip
+          item={makeItem({ isPrioritized: true })}
+          isMoved={false}
+        />,
+      );
+    });
+    const svgs = container.querySelectorAll("svg");
+    expect(svgs.length).toBeGreaterThan(0);
+  });
+});
+
+describe("DraggableSplitChip", () => {
+  it("renders children", () => {
+    flushSync(() => {
+      root.render(
+        <DraggableSplitChip splitId="split-1">
+          <span>Split Content</span>
+        </DraggableSplitChip>,
+      );
+    });
+    expect(container.textContent).toContain("Split Content");
+  });
+});
+
+describe("DraggablePendingOrderCard", () => {
+  it("renders children", () => {
+    flushSync(() => {
+      root.render(
+        <DraggablePendingOrderCard orderId="order-1">
+          <span>Order Content</span>
+        </DraggablePendingOrderCard>,
+      );
+    });
+    expect(container.textContent).toContain("Order Content");
   });
 });
